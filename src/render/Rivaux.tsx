@@ -2,7 +2,8 @@
 import { type ReactElement } from 'react'
 import { COUPS, ELEMENTS } from '../logic/donnees.ts'
 import { aLe, CHEF, espionner, fortune, peutEspionner, peutPiller, peutSaboter, piller, saboter, voit, type Joueur } from '../logic/moteur.ts'
-import { classement, joueur, titre } from '../logic/partie.ts'
+import { classement, devoilee, joueur, titre } from '../logic/partie.ts'
+import { AIDE } from '../ui/devoilement.ts'
 import { NOM_ELEMENT } from '../ui/noms.ts'
 import { duree, nombre } from '../ui/format.ts'
 import type { PageProps } from './props.ts'
@@ -34,17 +35,20 @@ export function Rivaux({ partie, agir }: PageProps): ReactElement {
           </div>
         ))}
       </section>
-      <section>
-        <h2>Coups bas</h2>
-        {!aLe(j, 'repaire') && !aLe(j, 'officine') && !aLe(j, 'tour') && (
-          <p className="sourd">Bâtissez un Repaire, une Officine ou une Tour pour agir sur les autres.</p>
-        )}
-        {m.joueurs
-          .filter((r) => r !== j)
-          .map((r) => (
-            <Rival key={r.id} partie={partie} agir={agir} r={r} />
-          ))}
-      </section>
+      {devoilee(partie, 'coupsBas') && (
+        <section>
+          <h2>Coups bas</h2>
+          <p className="sourd petit">{AIDE.coupsBas}</p>
+          {!aLe(j, 'repaire') && !aLe(j, 'officine') && !aLe(j, 'tour') && (
+            <p className="sourd">Bâtissez un Repaire, une Officine ou une Tour (dans « Bâtir ») pour agir sur les autres.</p>
+          )}
+          {m.joueurs
+            .filter((r) => r !== j)
+            .map((r) => (
+              <Rival key={r.id} partie={partie} agir={agir} r={r} />
+            ))}
+        </section>
+      )}
       <section>
         <h2>Gazette des Alambics</h2>
         {m.gazette.length === 0 && <p className="sourd">Rien à signaler pour le moment.</p>}

@@ -158,6 +158,13 @@ export function nouveauMonde(noms: string[], graine = 1): Monde {
   }
 }
 
+// ---------------------------------------------------------------- LA TAPE
+
+/** Le tout premier geste du jeu : soigner un passant, une pièce. Il reste possible toute la saison. */
+export function tapoter(j: Joueur): void {
+  j.or += 1
+}
+
 // ---------------------------------------------------------------- LE COMPTOIR
 
 /** Le prix auquel le comptoir ACHÈTE (ce que touche le joueur qui vend). */

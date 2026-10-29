@@ -26,7 +26,7 @@ export function duree(h: number): string {
 
 /** L'heure du jeu : « Jour 2 · 14 h 30 », la saison commençant un matin à 8 h. */
 export function horloge(t: number): string {
-  const jour = Math.floor(t / 24) + 1
+  const jour = Math.floor((t + 8) / 24) + 1
   const h = (t % 24) + 8
   const heures = Math.floor(h) % 24
   const minutes = Math.floor((h - Math.floor(h)) * 60)

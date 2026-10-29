@@ -4,8 +4,8 @@
  * avance par pas, les bots passent aux heures prévues. Rien ici ne lit
  * l'horloge : c'est `ui/` qui dit quelle heure il est.
  */
-import { ELEMENTS, SAISON_H } from './donnees.ts'
-import { avancer, nouveauMonde, type Joueur, type Monde } from './moteur.ts'
+import { BATIMENTS, ELEMENTS, SAISON_H, TOUTES } from './donnees.ts'
+import { avancer, emplacements, nouveauMonde, occupes, rang, stockVide, type Joueur, type Monde } from './moteur.ts'
 import { visiter, type EtatBot, type Strategie } from './bots.ts'
 import { graineDe, rngDe } from './rng.ts'
 
@@ -25,25 +25,91 @@ const HEURES_DE_VISITE = [0, 4.5, 10, 14.5]
 /** Le pas de la production. */
 export const PAS = 0.25
 
+/**
+ * LE DÉVOILEMENT (Keko, premier test : « noyé sous la complexité ») : le jeu
+ * commence par un seul bouton, et chaque notion n'apparaît que lorsque le
+ * joueur en a l'usage. Une étape dévoilée ne se cache plus.
+ */
+export const ETAPES = [
+  'batir',
+  'elements',
+  'vendre',
+  'transformation',
+  'entrepot',
+  'ameliorer',
+  'agrandir',
+  'maitrise',
+  'avance',
+  'comptoir',
+  'rivaux',
+  'coupsBas',
+  'oeuvre',
+] as const
+export type Etape = (typeof ETAPES)[number]
+
 export interface Partie {
-  version: 1
+  version: 2
   graine: number
   monde: Monde
   /** L'état de chaque bot (index du joueur − 1). */
   etats: EtatBot[]
   /** Par bot, l'instant de sa dernière visite jouée. */
   dernieresVisites: number[]
+  /** Les étapes déjà dévoilées, dans l'ordre où elles le furent. */
+  devoile: Etape[]
 }
 
 export function nouvellePartie(graine: number, nomDuJoueur: string): Partie {
   const monde = nouveauMonde([nomDuJoueur, ...BOTS.map((b) => b.nom)], graine)
+  // LE JOUEUR PART DE RIEN : sa première pièce, il la gagne en tapant. Les bots sont des alchimistes établis.
+  const humain = monde.joueurs[0]!
+  humain.or = 0
+  humain.stock = stockVide()
   return {
-    version: 1,
+    version: 2,
     graine,
     monde,
     etats: BOTS.map(() => ({ pleinesVu: 0 })),
     dernieresVisites: BOTS.map(() => -1),
+    devoile: [],
   }
+}
+
+/** Ce que l'état du monde justifie de montrer, étape par étape. */
+export function conditions(p: Partie): Record<Etape, boolean> {
+  const m = p.monde
+  const j = joueur(p)
+  const batiments = j.batiments.length
+  const ateliers = j.batiments.filter((b) => BATIMENTS[b.nom].type === 'transformation').length
+  const tenues = TOUTES.filter((r) => j.stock[r] >= 1).length
+  const maitre = ELEMENTS.some((e) => rang(j, e) === 'maitre')
+  return {
+    batir: j.or >= 60 || batiments >= 1,
+    elements: batiments >= 1,
+    vendre: TOUTES.some((r) => j.stock[r] >= 10),
+    transformation: batiments >= 2,
+    entrepot: tenues >= 3,
+    ameliorer: ateliers >= 1,
+    agrandir: occupes(j) >= emplacements(j) - 1,
+    maitrise: ateliers >= 1,
+    avance: ELEMENTS.some((e) => j.points[e] >= 4),
+    comptoir: ateliers >= 1 || j.journal.orVentesComptoir >= 600,
+    rivaux: m.t >= 24 || j.journal.attaquesRecues >= 1,
+    coupsBas: m.t >= 48 || j.journal.attaquesRecues >= 1 || maitre,
+    oeuvre: maitre,
+  }
+}
+
+/** Ajoute les étapes nouvellement justifiées et les rend, dans l'ordre de `ETAPES`. */
+export function devoiler(p: Partie): Etape[] {
+  const c = conditions(p)
+  const nouvelles = ETAPES.filter((e) => c[e] && !p.devoile.includes(e))
+  p.devoile.push(...nouvelles)
+  return nouvelles
+}
+
+export function devoilee(p: Partie, e: Etape): boolean {
+  return p.devoile.includes(e)
 }
 
 export function joueur(p: Partie): Joueur {
@@ -107,8 +173,9 @@ export function serialiser(p: Partie): string {
 export function deserialiser(texte: string): Partie | null {
   try {
     const p = JSON.parse(texte) as Partie
-    if (p === null || typeof p !== 'object' || p.version !== 1) return null
+    if (p === null || typeof p !== 'object' || p.version !== 2) return null
     if (!Array.isArray(p.monde?.joueurs) || p.monde.joueurs.length !== BOTS.length + 1) return null
+    if (!Array.isArray(p.devoile)) return null
     return p
   } catch {
     return null
