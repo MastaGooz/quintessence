@@ -2,8 +2,7 @@
 import { type ReactElement } from 'react'
 import { COUPS, ELEMENTS } from '../logic/donnees.ts'
 import { aLe, CHEF, espionner, fortune, peutEspionner, peutPiller, peutSaboter, piller, saboter, voit, type Joueur } from '../logic/moteur.ts'
-import { classement, devoilee, joueur, titre } from '../logic/partie.ts'
-import { AIDE } from '../ui/devoilement.ts'
+import { atteint, classement, joueur, titre } from '../logic/partie.ts'
 import { NOM_ELEMENT } from '../ui/noms.ts'
 import { duree, nombre } from '../ui/format.ts'
 import type { PageProps } from './props.ts'
@@ -35,10 +34,9 @@ export function Rivaux({ partie, agir }: PageProps): ReactElement {
           </div>
         ))}
       </section>
-      {devoilee(partie, 'coupsBas') && (
+      {atteint(partie, 'coupsBas') && (
         <section>
           <h2>Coups bas</h2>
-          <p className="sourd petit">{AIDE.coupsBas}</p>
           {!aLe(j, 'repaire') && !aLe(j, 'officine') && !aLe(j, 'tour') && (
             <p className="sourd">Bâtissez un Repaire, une Officine ou une Tour (dans « Bâtir ») pour agir sur les autres.</p>
           )}

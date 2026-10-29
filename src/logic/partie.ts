@@ -4,8 +4,8 @@
  * avance par pas, les bots passent aux heures prévues. Rien ici ne lit
  * l'horloge : c'est `ui/` qui dit quelle heure il est.
  */
-import { BATIMENTS, ELEMENTS, SAISON_H, TOUTES } from './donnees.ts'
-import { avancer, emplacements, nouveauMonde, occupes, rang, stockVide, type Joueur, type Monde } from './moteur.ts'
+import { ELEMENTS, SAISON_H, type NomBatiment, type Ressource } from './donnees.ts'
+import { avancer, nouveauMonde, stockVide, type Joueur, type Monde } from './moteur.ts'
 import { visiter, type EtatBot, type Strategie } from './bots.ts'
 import { graineDe, rngDe } from './rng.ts'
 
@@ -26,37 +26,68 @@ const HEURES_DE_VISITE = [0, 4.5, 10, 14.5]
 export const PAS = 0.25
 
 /**
- * LE DÉVOILEMENT (Keko, premier test : « noyé sous la complexité ») : le jeu
- * commence par un seul bouton, et chaque notion n'apparaît que lorsque le
- * joueur en a l'usage. Une étape dévoilée ne se cache plus.
+ * LE TUTORIEL (Keko : « un tuto pas à pas pour tous les éléments un par un ») :
+ * une chaîne d'étapes, chacune ouvre UNE chose — une mine, un atelier, une
+ * page, un savoir — et dit quoi faire. Une étape d'action s'achève d'elle-même
+ * quand c'est fait ; une étape de savoir attend que le joueur dise « compris »,
+ * et n'est présentée que lorsque c'est le moment. Ce qu'une étape ouvre reste
+ * ouvert. Les textes sont dans `ui/devoilement.ts`.
  */
-export const ETAPES = [
-  'batir',
-  'elements',
-  'vendre',
-  'transformation',
-  'entrepot',
-  'ameliorer',
-  'agrandir',
-  'maitrise',
-  'avance',
-  'comptoir',
-  'rivaux',
-  'coupsBas',
-  'oeuvre',
-] as const
-export type Etape = (typeof ETAPES)[number]
+export type Page = 'labo' | 'stock' | 'marche' | 'rivaux' | 'oeuvre'
+
+export interface EtapeTuto {
+  id: string
+  batiments?: NomBatiment[]
+  pages?: Page[]
+  /** Une étape de savoir : elle s'achève quand le joueur dit « compris ». */
+  concept?: boolean
+  /** Une étape de savoir n'est présentée que lorsque c'est le moment. */
+  prete?: (p: Partie) => boolean
+  /** Une étape d'action s'achève d'elle-même. */
+  faite?: (p: Partie) => boolean
+}
+
+const a = (p: Partie, nom: NomBatiment): boolean => joueur(p).batiments.some((b) => b.nom === nom)
+const stock = (p: Partie, r: Ressource): number => joueur(p).stock[r]
+const points = (p: Partie, n: number): boolean => ELEMENTS.some((e) => joueur(p).points[e] >= n)
+
+export const TUTO: EtapeTuto[] = [
+  { id: 'tape', faite: (p) => joueur(p).or >= 60 || joueur(p).batiments.length >= 1 },
+  { id: 'argiliere', batiments: ['argiliere'], faite: (p) => a(p, 'argiliere') },
+  { id: 'vendre', faite: (p) => joueur(p).journal.orVentesComptoir > 0 },
+  { id: 'mineFer', batiments: ['mineFer'], faite: (p) => a(p, 'mineFer') || stock(p, 'minerai') >= 20 },
+  { id: 'mineCharbon', batiments: ['mineCharbon'], faite: (p) => a(p, 'mineCharbon') || stock(p, 'charbon') >= 20 },
+  { id: 'fourneau', batiments: ['fourneau'], faite: (p) => a(p, 'fourneau') },
+  { id: 'forge', batiments: ['forge'], faite: (p) => a(p, 'forge') },
+  { id: 'maitrise', concept: true },
+  { id: 'comptoir', pages: ['marche'], faite: (p) => stock(p, 'verre') >= 10 || joueur(p).extensions >= 1 },
+  { id: 'extension', batiments: ['extension'], faite: (p) => joueur(p).extensions >= 1 },
+  { id: 'verrerie', batiments: ['verrerie'], faite: (p) => a(p, 'verrerie') },
+  { id: 'sabliere', batiments: ['sabliere'], faite: (p) => a(p, 'sabliere') || stock(p, 'sable') >= 40 },
+  { id: 'entrepot', concept: true, pages: ['stock'], batiments: ['entrepot'] },
+  { id: 'jardin', batiments: ['jardin'], faite: (p) => a(p, 'jardin') || stock(p, 'herbes') >= 20 },
+  { id: 'saline', batiments: ['saline'], faite: (p) => a(p, 'saline') || stock(p, 'sel') >= 20 },
+  { id: 'alambic', batiments: ['alambic'], faite: (p) => a(p, 'alambic') },
+  { id: 'ameliorer', faite: (p) => joueur(p).batiments.some((b) => b.niveau >= 2) },
+  { id: 'soufriere', batiments: ['soufriere'], faite: (p) => a(p, 'soufriere') || stock(p, 'soufre') >= 20 },
+  { id: 'geode', batiments: ['geode'], faite: (p) => a(p, 'geode') || stock(p, 'cristal') >= 20 },
+  { id: 'avance', concept: true, batiments: ['autel', 'creuset', 'cornue', 'atelierRunes'], prete: (p) => points(p, 4) },
+  { id: 'maitre', concept: true, batiments: ['athanor', 'grandCreuset', 'fontaine', 'observatoire', 'four'], pages: ['oeuvre'], prete: (p) => points(p, 6) },
+  { id: 'rivaux', concept: true, pages: ['rivaux'], prete: (p) => p.monde.t >= 24 || joueur(p).journal.attaquesRecues >= 1 },
+  { id: 'coupsBas', concept: true, batiments: ['repaire', 'officine', 'cabinet', 'tour', 'gardien', 'cercle'], prete: (p) => p.monde.t >= 48 || joueur(p).journal.attaquesRecues >= 1 },
+  { id: 'fin', concept: true },
+]
 
 export interface Partie {
-  version: 2
+  version: 3
   graine: number
   monde: Monde
   /** L'état de chaque bot (index du joueur − 1). */
   etats: EtatBot[]
   /** Par bot, l'instant de sa dernière visite jouée. */
   dernieresVisites: number[]
-  /** Les étapes déjà dévoilées, dans l'ordre où elles le furent. */
-  devoile: Etape[]
+  /** L'index de l'étape du tutoriel en cours ; `TUTO.length` quand il est fini. */
+  tuto: number
 }
 
 export function nouvellePartie(graine: number, nomDuJoueur: string): Partie {
@@ -66,50 +97,13 @@ export function nouvellePartie(graine: number, nomDuJoueur: string): Partie {
   humain.or = 0
   humain.stock = stockVide()
   return {
-    version: 2,
+    version: 3,
     graine,
     monde,
     etats: BOTS.map(() => ({ pleinesVu: 0 })),
     dernieresVisites: BOTS.map(() => -1),
-    devoile: [],
+    tuto: 0,
   }
-}
-
-/** Ce que l'état du monde justifie de montrer, étape par étape. */
-export function conditions(p: Partie): Record<Etape, boolean> {
-  const m = p.monde
-  const j = joueur(p)
-  const batiments = j.batiments.length
-  const ateliers = j.batiments.filter((b) => BATIMENTS[b.nom].type === 'transformation').length
-  const tenues = TOUTES.filter((r) => j.stock[r] >= 1).length
-  const maitre = ELEMENTS.some((e) => rang(j, e) === 'maitre')
-  return {
-    batir: j.or >= 60 || batiments >= 1,
-    elements: batiments >= 1,
-    vendre: TOUTES.some((r) => j.stock[r] >= 10),
-    transformation: batiments >= 2,
-    entrepot: tenues >= 3,
-    ameliorer: ateliers >= 1,
-    agrandir: occupes(j) >= emplacements(j) - 1,
-    maitrise: ateliers >= 1,
-    avance: ELEMENTS.some((e) => j.points[e] >= 4),
-    comptoir: ateliers >= 1 || j.journal.orVentesComptoir >= 600,
-    rivaux: m.t >= 24 || j.journal.attaquesRecues >= 1,
-    coupsBas: m.t >= 48 || j.journal.attaquesRecues >= 1 || maitre,
-    oeuvre: maitre,
-  }
-}
-
-/** Ajoute les étapes nouvellement justifiées et les rend, dans l'ordre de `ETAPES`. */
-export function devoiler(p: Partie): Etape[] {
-  const c = conditions(p)
-  const nouvelles = ETAPES.filter((e) => c[e] && !p.devoile.includes(e))
-  p.devoile.push(...nouvelles)
-  return nouvelles
-}
-
-export function devoilee(p: Partie, e: Etape): boolean {
-  return p.devoile.includes(e)
 }
 
 export function joueur(p: Partie): Joueur {
@@ -118,6 +112,49 @@ export function joueur(p: Partie): Joueur {
 
 export function finie(p: Partie): boolean {
   return p.monde.t >= SAISON_H - 1e-9
+}
+
+/** L'étape en cours, ou null quand le tutoriel est fini. */
+export function etapeCourante(p: Partie): EtapeTuto | null {
+  return TUTO[p.tuto] ?? null
+}
+
+/** L'étape en cours est-elle à montrer maintenant ? Une étape de savoir attend son moment. */
+export function etapePresentee(p: Partie): EtapeTuto | null {
+  const e = etapeCourante(p)
+  if (e === null) return null
+  return e.prete === undefined || e.prete(p) ? e : null
+}
+
+/** Passe les étapes d'action accomplies ; rend leurs identifiants. */
+export function avancerTuto(p: Partie): string[] {
+  const passees: string[] = []
+  for (;;) {
+    const e = TUTO[p.tuto]
+    if (e === undefined || e.concept || e.faite === undefined || !e.faite(p)) return passees
+    passees.push(e.id)
+    p.tuto += 1
+  }
+}
+
+/** Le joueur a dit « compris » à une étape de savoir. */
+export function comprendre(p: Partie): void {
+  const e = TUTO[p.tuto]
+  if (e !== undefined && e.concept) p.tuto += 1
+}
+
+/** Cette étape est-elle atteinte (en cours ou passée) ? Ce qu'elle ouvre est alors ouvert. */
+export function atteint(p: Partie, id: string): boolean {
+  const i = TUTO.findIndex((e) => e.id === id)
+  return i >= 0 && i <= p.tuto
+}
+
+export function batimentOuvert(p: Partie, nom: NomBatiment): boolean {
+  return TUTO.some((e, i) => i <= p.tuto && (e.batiments ?? []).includes(nom))
+}
+
+export function pageOuverte(p: Partie, page: Page): boolean {
+  return page === 'labo' || TUTO.some((e, i) => i <= p.tuto && (e.pages ?? []).includes(page))
 }
 
 /** Les visites d'un bot un jour donné : les mêmes à chaque lecture, pour la même partie. */
@@ -173,9 +210,9 @@ export function serialiser(p: Partie): string {
 export function deserialiser(texte: string): Partie | null {
   try {
     const p = JSON.parse(texte) as Partie
-    if (p === null || typeof p !== 'object' || p.version !== 2) return null
+    if (p === null || typeof p !== 'object' || p.version !== 3) return null
     if (!Array.isArray(p.monde?.joueurs) || p.monde.joueurs.length !== BOTS.length + 1) return null
-    if (!Array.isArray(p.devoile)) return null
+    if (typeof p.tuto !== 'number') return null
     return p
   } catch {
     return null

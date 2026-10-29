@@ -618,3 +618,38 @@ select {
   font-weight: 700;
   border-color: transparent;
 }
+
+/* LA CARTE DU TUTORIEL : l'étape en cours, toujours sous la tape. */
+.tuto {
+  margin: 0.4rem 0 1rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: 0.8rem;
+  background: #3b2a12;
+  border: 1px solid var(--or);
+}
+
+.tuto-numero {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.tuto-titre {
+  margin: 0.1rem 0 0.2rem;
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--or);
+}
+
+.tuto-texte {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.tuto .bouton-principal {
+  margin-top: 0.6rem;
+  width: 100%;
+}
