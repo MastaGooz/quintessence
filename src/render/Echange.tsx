@@ -9,6 +9,8 @@ import { acheter, acheterAuxJoueurs, capacite, estimerAchat, estimerVente, offri
 import { joueur } from '../logic/partie.ts'
 import { NOM_RESSOURCE } from '../ui/noms.ts'
 import { nombre } from '../ui/format.ts'
+import { vibrer } from '../ui/haptique.ts'
+import { effetDepense, effetVente } from './effets.ts'
 import { Feuille } from './Feuille.tsx'
 import { PastilleRessource } from './Icone.tsx'
 import type { PageProps } from './props.ts'
@@ -45,10 +47,28 @@ export function Echange({ partie, agir, r, onFermer }: PageProps & { r: Ressourc
         </button>
       </div>
       <div className="boutons">
-        <button type="button" className="bouton-principal" disabled={aVendre < 1} onClick={() => agir(() => vendre(m, j, r, aVendre))}>
+        <button
+          type="button"
+          className="bouton-principal"
+          disabled={aVendre < 1}
+          onClick={(e) => {
+            effetVente(e.currentTarget.getBoundingClientRect(), vente)
+            vibrer(12)
+            agir(() => vendre(m, j, r, aVendre))
+          }}
+        >
           Vendre {nombre(aVendre)} → +{nombre(vente)} or
         </button>
-        <button type="button" className="bouton-principal" disabled={q > maxAchat} onClick={() => agir(() => acheter(m, j, r, q))}>
+        <button
+          type="button"
+          className="bouton-principal"
+          disabled={q > maxAchat}
+          onClick={(e) => {
+            effetDepense(e.currentTarget.getBoundingClientRect(), achat)
+            vibrer(12)
+            agir(() => acheter(m, j, r, q))
+          }}
+        >
           Acheter {nombre(q)} → −{nombre(achat)} or
         </button>
       </div>
@@ -61,7 +81,14 @@ export function Echange({ partie, agir, r, onFermer }: PageProps & { r: Ressourc
               <span>
                 {m.joueurs[o.vendeur]?.nom} · {nombre(o.quantite)} à <b>{nombre(o.prix)} or</b> l'unité
               </span>
-              <button type="button" disabled={j.or < o.prix || j.stock[r] >= cap} onClick={() => agir(() => acheterAuxJoueurs(m, j, r, 1))}>
+              <button
+                type="button"
+                disabled={j.or < o.prix || j.stock[r] >= cap}
+                onClick={(e) => {
+                  effetDepense(e.currentTarget.getBoundingClientRect(), o.prix)
+                  agir(() => acheterAuxJoueurs(m, j, r, 1))
+                }}
+              >
                 Acheter 1
               </button>
             </div>

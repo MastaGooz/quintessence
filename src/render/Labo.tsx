@@ -4,7 +4,7 @@
  * démolir), une tape sur la place vide ouvre ce qu'on peut bâtir — et cette
  * liste grandit d'un bâtiment par étape du tutoriel.
  */
-import { useState, type ReactElement } from 'react'
+import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { BATIMENTS, ELEMENTS, LABO, TOUTES, type NomBatiment, type Quantites, type Ressource } from '../logic/donnees.ts'
 import {
   ameliorer, bilanHoraire, capacite, construire, coutAmelioration, coutConstruction, demolir, emplacements, entreeManquante,
@@ -13,11 +13,21 @@ import {
 import { atteint, batimentOuvert, joueur, PAS } from '../logic/partie.ts'
 import { EFFET_BATIMENT, NOM_BATIMENT, NOM_COULEUR, NOM_ELEMENT, NOM_RESSOURCE } from '../ui/noms.ts'
 import { duree, nombre, nombreFin } from '../ui/format.ts'
+import { vibrer } from '../ui/haptique.ts'
+import { sonBatir, sonTape } from '../ui/sons.ts'
+import { Compteur } from './Compteur.tsx'
 import { Cout, Quantites as Quantite } from './Cout.tsx'
+import { eclater, effetDebit, effetDepense, effetVente, flotter, mouvementReduit } from './effets.ts'
 import { Feuille } from './Feuille.tsx'
 import { IconeBatiment, PastilleRessource } from './Icone.tsx'
 import { Tuto } from './Tuto.tsx'
 import type { PageProps } from './props.ts'
+
+/** La tape s'écrase puis rebondit, à chaque doigt posé. */
+const ECRASER: Keyframe[] = [{ transform: 'scale(0.93)' }, { transform: 'scale(1.03)', offset: 0.6 }, { transform: 'scale(1)' }]
+
+/** Deux tapes à moins de ce délai forment une série : le son monte, le « +1 » grossit. */
+const SERIE_MS = 450
 
 /** Les familles de la liste « Bâtir » ; une famille sans bâtiment ouvert ne se montre pas. */
 const FAMILLES: { titre: string; noms: NomBatiment[] }[] = [
@@ -44,10 +54,58 @@ export function Labo({ partie, agir }: PageProps): ReactElement {
   const places = emplacements(j)
   const libres = places - occupes(j)
   const rienBati = j.batiments.length === 0 && !j.four
+
+  // LA SÉRIE DE TAPES : combien d'affilée, et quand la dernière.
+  const serie = useRef({ n: 0, t: 0 })
+  const taper = (x: number, y: number, bouton: HTMLElement): void => {
+    const maintenant = performance.now()
+    serie.current = { n: maintenant - serie.current.t < SERIE_MS ? serie.current.n + 1 : 0, t: maintenant }
+    const n = serie.current.n
+    agir(() => tapoter(j))
+    sonTape(n)
+    vibrer(8)
+    if (!mouvementReduit()) bouton.animate(ECRASER, { duration: 170, easing: 'ease-out' })
+    flotter(x, y, '+1', 'flottant-or', Math.min(1.7, 1 + n * 0.05))
+    if (n > 0 && n % 10 === 9) eclater(x, y, 14)
+    else if (Math.random() < 0.3) eclater(x, y, 3)
+  }
+
+  // LE BÂTIMENT NEUF : le dernier de la grille apparaît en grand quand il vient d'être bâti.
+  const compte = useRef(j.batiments.length)
+  const [neuve, setNeuve] = useState<number | null>(null)
+  useEffect(() => {
+    const avant = compte.current
+    compte.current = j.batiments.length
+    if (j.batiments.length <= avant) return
+    setNeuve(j.batiments.length - 1)
+    const image = requestAnimationFrame(() => {
+      const r = document.querySelector('.case-neuve')?.getBoundingClientRect()
+      if (r !== undefined) eclater(r.left + r.width / 2, r.top + r.height / 2, 14)
+    })
+    const t = window.setTimeout(() => setNeuve(null), 900)
+    return () => {
+      cancelAnimationFrame(image)
+      window.clearTimeout(t)
+    }
+  }, [j.batiments.length])
+
   return (
     <div className={`page${rienBati ? ' page-debut' : ''}`}>
-      {/* LA TAPE : le premier geste du jeu, et il reste possible. */}
-      <button type="button" className={`tape${rienBati ? ' tape-grande' : ''}`} onClick={() => agir(() => tapoter(j))}>
+      {/* LA TAPE : le premier geste du jeu, et il reste possible. Elle agit au doigt posé, pas au relâchement. */}
+      <button
+        type="button"
+        className={`tape${rienBati ? ' tape-grande' : ''}`}
+        onPointerDown={(e) => {
+          if (e.button === 0) taper(e.clientX, e.clientY, e.currentTarget)
+        }}
+        onClick={(e) => {
+          // Le clavier n'a pas de doigt : il arrive par `click` seul (detail 0), au centre du bouton.
+          if (e.detail === 0) {
+            const r = e.currentTarget.getBoundingClientRect()
+            taper(r.left + r.width / 2, r.top + r.height / 2, e.currentTarget)
+          }
+        }}
+      >
         Soigner un passant
         <small>+1 or</small>
       </button>
@@ -76,7 +134,7 @@ export function Labo({ partie, agir }: PageProps): ReactElement {
               const manque = entreeManquante(m, j, b, PAS)
               const sabote = m.t < b.arretJusqua
               return (
-                <button key={i} type="button" className={`case${manque !== null || sabote ? ' case-arret' : ''}`} onClick={() => setOuvert(b)}>
+                <button key={i} type="button" className={`case${manque !== null || sabote ? ' case-arret' : ''}${i === neuve ? ' case-neuve' : ''}`} onClick={() => setOuvert(b)}>
                   <IconeBatiment nom={b.nom} />
                   <span className="case-nom">{NOM_BATIMENT[b.nom]}</span>
                   {atteint(partie, 'ameliorer') && <span className="case-niveau">niv. {b.niveau}</span>}
@@ -154,10 +212,20 @@ function Reserves({ partie, agir }: PageProps): ReactElement {
               {Math.abs(net[r]) > 1e-9 ? `${net[r] > 0 ? '+' : ''}${nombreFin(net[r])}/h` : ''}
             </span>
             <span className={`ligne-stock${plein ? ' manque' : ''}`} title={plein ? 'Entrepôt plein' : undefined}>
-              {nombre(stock)}
+              <Compteur valeur={stock} />
             </span>
             {atteint(partie, 'vendre') && (
-              <button type="button" className="bouton-vendre" disabled={stock < 1} onClick={() => agir(() => vendre(m, j, r, stock))}>
+              <button
+                type="button"
+                className="bouton-vendre"
+                disabled={stock < 1}
+                onClick={(e) => {
+                  const gain = estimerVente(m, r, stock)
+                  effetVente(e.currentTarget.getBoundingClientRect(), gain)
+                  vibrer(12)
+                  agir(() => vendre(m, j, r, stock))
+                }}
+              >
                 Vendre → {nombre(estimerVente(m, r, stock))} or
               </button>
             )}
@@ -204,11 +272,16 @@ function DetailBatiment({ partie, agir, b, onFermer }: PageProps & { b: Batiment
             type="button"
             className="bouton-principal"
             disabled={!peutPayer(j, amelioration.or, amelioration.cout)}
-            onClick={() =>
+            onClick={(e) => {
+              const r = e.currentTarget.getBoundingClientRect()
+              effetDepense(r, amelioration.or)
+              eclater(r.left + r.width / 2, r.top + r.height / 2, 10)
+              sonBatir()
+              vibrer([20, 30, 40])
               agir(() => {
                 ameliorer(m, j, b)
               })
-            }
+            }}
           >
             Améliorer
           </button>
@@ -277,11 +350,16 @@ function Construire({ partie, agir, onFermer }: PageProps & { onFermer: () => vo
         <button
           type="button"
           disabled={!possible || !payable}
-          onClick={() =>
+          onClick={() => {
+            // On bâtit, la feuille se ferme, et le bâtiment neuf apparaît dans la grille.
+            effetDebit(or)
+            sonBatir()
+            vibrer([20, 30, 40])
             agir(() => {
               construire(m, j, nom)
             })
-          }
+            onFermer()
+          }}
         >
           Bâtir
         </button>

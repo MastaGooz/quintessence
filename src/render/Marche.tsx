@@ -6,6 +6,7 @@ import { joueur } from '../logic/partie.ts'
 import { NOM_RESSOURCE } from '../ui/noms.ts'
 import { duree, nombre } from '../ui/format.ts'
 import { Echange } from './Echange.tsx'
+import { effetDepense } from './effets.ts'
 import { PastilleRessource } from './Icone.tsx'
 import type { PageProps } from './props.ts'
 
@@ -53,7 +54,14 @@ export function Marche({ partie, agir }: PageProps): ReactElement {
             <span>
               <PastilleRessource r={o.ressource} /> {NOM_RESSOURCE[o.ressource]} · {m.joueurs[o.vendeur]?.nom} · {nombre(o.quantite)} à <b>{nombre(o.prix)} or</b>
             </span>
-            <button type="button" disabled={j.or < o.prix || j.stock[o.ressource] >= capacite(j)} onClick={() => agir(() => acheterAuxJoueurs(m, j, o.ressource, 1))}>
+            <button
+              type="button"
+              disabled={j.or < o.prix || j.stock[o.ressource] >= capacite(j)}
+              onClick={(e) => {
+                effetDepense(e.currentTarget.getBoundingClientRect(), o.prix)
+                agir(() => acheterAuxJoueurs(m, j, o.ressource, 1))
+              }}
+            >
               Acheter 1
             </button>
           </div>

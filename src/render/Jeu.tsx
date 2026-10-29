@@ -11,6 +11,9 @@ import { fortune } from '../logic/moteur.ts'
 import { atteint, avancerTuto, classement, finie, joueur, nouvellePartie, pageOuverte, rattraper, titre, type Page, type Partie } from '../logic/partie.ts'
 import { ecrireSauvegarde, effacerSauvegarde, lireSauvegarde } from '../ui/stockage.ts'
 import { duree, horloge, nombre } from '../ui/format.ts'
+import { basculerSon, sonActif, sonClic } from '../ui/sons.ts'
+import { Compteur } from './Compteur.tsx'
+import { declarerCibleOr, monterCouche } from './effets.ts'
 import { Labo } from './Labo.tsx'
 import { Marche } from './Marche.tsx'
 import { Oeuvre } from './Oeuvre.tsx'
@@ -46,7 +49,14 @@ function Accueil({ onCommencer }: { onCommencer: (nom: string) => void }): React
         Votre nom
         <input type="text" value={nom} maxLength={16} placeholder="Nicolas" onChange={(e) => setNom(e.target.value)} />
       </label>
-      <button type="button" className="bouton-principal" onClick={() => onCommencer(nom.trim() === '' ? 'Vous' : nom.trim())}>
+      <button
+        type="button"
+        className="bouton-principal respire"
+        onClick={() => {
+          sonClic()
+          onCommencer(nom.trim() === '' ? 'Vous' : nom.trim())
+        }}
+      >
         Commencer
       </button>
       <p className="sourd petit">Build {__DATE_DU_BUILD__}</p>
@@ -112,9 +122,13 @@ function Table({ partie, reelAuDepart, onRecommencer }: { partie: Partie; reelAu
   const pageVue = pageOuverte(partie, page) ? page : 'labo'
   return (
     <div className="jeu">
+      <div className="effets" ref={monterCouche} aria-hidden />
       <header className="entete">
         <span className="entete-or">
-          <b>{nombre(j.or)}</b> or
+          <b ref={declarerCibleOr}>
+            <Compteur valeur={j.or} cle="or" />
+          </b>{' '}
+          or
         </span>
         <span className="entete-heure">
           {atteint(partie, 'argiliere') && horloge(m.t)}
@@ -132,6 +146,17 @@ function Table({ partie, reelAuDepart, onRecommencer }: { partie: Partie; reelAu
             +4 h
           </button>
         )}
+        <button
+          type="button"
+          className="entete-son"
+          aria-label={sonActif() ? 'Couper le son' : 'Rendre le son'}
+          onClick={() => {
+            if (basculerSon()) sonClic()
+            repeindre()
+          }}
+        >
+          <IconeSon actif={sonActif()} />
+        </button>
       </header>
       <main className="corps">
         {finie(partie) ? (
@@ -158,6 +183,16 @@ function Table({ partie, reelAuDepart, onRecommencer }: { partie: Partie; reelAu
         </nav>
       )}
     </div>
+  )
+}
+
+/** Un haut-parleur, barré quand le son est coupé. */
+function IconeSon({ actif }: { actif: boolean }): ReactElement {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M4 9v6h3l5 4V5L7 9Z" />
+      {actif ? <path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11" /> : <path d="M16 9l5 6M21 9l-5 6" />}
+    </svg>
   )
 }
 
