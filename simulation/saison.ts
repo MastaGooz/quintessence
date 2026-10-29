@@ -3,9 +3,9 @@
  * mesure ce que les chiffres de l'arbre tech produisent avant de les servir à
  * des amis. `node simulation/saison.ts [graine] [--csv]`.
  */
-import { COULEURS, ELEMENTS, RESSOURCES, SAISON_H, TOUTES, type Ressource } from './donnees.ts'
-import { avancer, fortune, nouveauMonde, prixVente, rang, type Joueur, type Monde } from './moteur.ts'
-import { visiter, type EtatBot, type Strategie } from './bots.ts'
+import { COULEURS, ELEMENTS, RESSOURCES, SAISON_H, TOUTES, type Ressource } from '../src/logic/donnees.ts'
+import { avancer, fortune, nouveauMonde, prixVente, rang, type Joueur, type Monde } from '../src/logic/moteur.ts'
+import { visiter, type EtatBot, type Strategie } from '../src/logic/bots.ts'
 import { mkdirSync, writeFileSync } from 'node:fs'
 
 /** `QUINTESSENCE_SANS_FOURNEAU=1` : les non-Feu achètent leurs braises au lieu de bâtir un fourneau (l'expérience qui a montré l'avantage du Feu). */

@@ -77,7 +77,7 @@ export interface FicheBatiment {
   unique?: boolean
 }
 
-export const BATIMENTS = {
+const FICHES = {
   // NIVEAU 1 : L'EXTRACTION
   mineCharbon: { type: 'extraction', element: 'feu', or: 60, cout: { argile: 10 }, produit: { charbon: 15 } },
   soufriere: { type: 'extraction', element: 'feu', or: 60, cout: { argile: 10 }, produit: { soufre: 15 } },
@@ -110,11 +110,15 @@ export const BATIMENTS = {
   repaire: { type: 'attaque', or: 100, cout: { fer: 30, verre: 10 } },
   officine: { type: 'attaque', or: 100, cout: { essence: 20, verre: 10 } },
   cabinet: { type: 'attaque', or: 100, cout: { verre: 20, essence: 10 } },
+  tour: { type: 'attaque', or: 80, cout: { verre: 20, cristal: 10 } },
   gardien: { type: 'defense', or: 150, cout: { fer: 30, argile: 20, runes: 5 } },
   cercle: { type: 'defense', or: 150, cout: { essence: 20, sel: 10, runes: 5 } },
 } as const satisfies Record<string, FicheBatiment>
 
-export type NomBatiment = keyof typeof BATIMENTS
+export type NomBatiment = keyof typeof FICHES
+
+/** Les fiches, lues par leur nom : le type commun, pas le littéral de chaque ligne. */
+export const BATIMENTS: Record<NomBatiment, FicheBatiment> = FICHES
 
 /** Le chef-d'œuvre et le bâtiment de niveau 3 de chaque élément. */
 export const BATIMENT_CHEF: Record<Element, NomBatiment> = { feu: 'athanor', terre: 'grandCreuset', eau: 'fontaine', air: 'observatoire' }
@@ -167,6 +171,7 @@ export const COUPS = {
   pillage: { part: 0.2, partGardee: 0.1, braises: 20, rechargeH: 6, protectionH: 4, parJourEtCible: 2 },
   sabotage: { dureeH: 2, mercure: 5, rechargeH: 8 },
   rumeur: { or: 30, dureeH: 1, rechargeH: 12 },
+  espion: { cristal: 10, rechargeH: 2, dureeH: 24 },
   /** Chance qu'une attaque soit découverte (la gazette). */
   decouverte: 0.3,
 } as const

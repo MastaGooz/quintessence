@@ -7,6 +7,7 @@ import {
   AVANCE, BATIMENTS, CHEF, COMPTOIR, COULEURS, COUPS, DEPART, ELEMENTS, LABO, MAITRISE, RESSOURCES, TOUTES,
   type Element, type NomBatiment, type Quantites, type Ressource,
 } from './donnees.ts'
+import { graineDe, rngDe } from './rng.ts'
 
 export type Stock = Record<Ressource, number>
 
@@ -67,7 +68,9 @@ export interface Joueur {
   couleur: number
   cuisson: { fin: number } | null
   protegeJusqua: number
-  recharges: Partial<Record<'pillage' | 'sabotage' | 'rumeur', number>>
+  recharges: Partial<Record<'pillage' | 'sabotage' | 'rumeur' | 'espion', number>>
+  /** Les joueurs qu'on a espionnés : jusqu'à quand on voit leur laboratoire. */
+  vues: Record<number, number>
   attaquesRecues: number[]
   cercleJour: number
   journal: Journal
@@ -80,6 +83,9 @@ export interface Comptoir {
 
 export interface Monde {
   t: number
+  /** La graine du monde, et le compte des tirages faits : le hasard est rejouable. */
+  graine: number
+  des: number
   joueurs: Joueur[]
   comptoir: Comptoir
   offres: Offre[]
@@ -112,6 +118,7 @@ export function nouveauJoueur(id: number, nom: string): Joueur {
     cuisson: null,
     protegeJusqua: 0,
     recharges: {},
+    vues: {},
     attaquesRecues: [],
     cercleJour: -1,
     journal: {
@@ -135,11 +142,13 @@ export function nouveauJoueur(id: number, nom: string): Joueur {
   }
 }
 
-export function nouveauMonde(noms: string[]): Monde {
+export function nouveauMonde(noms: string[], graine = 1): Monde {
   const stock = stockVide()
   for (const r of TOUTES) stock[r] = RESSOURCES[r].stockNormal
   return {
     t: 0,
+    graine,
+    des: 0,
     joueurs: noms.map((n, i) => nouveauJoueur(i, n)),
     comptoir: { stock, rumeur: null },
     offres: [],
@@ -205,6 +214,42 @@ export function acheter(m: Monde, j: Joueur, r: Ressource, n: number): number {
   return obtenu
 }
 
+/** Ce que rapporterait la vente de `n` au comptoir, par tranches, sans rien changer. */
+export function estimerVente(m: Monde, r: Ressource, n: number): number {
+  const f = RESSOURCES[r]
+  let s = Math.max(1, m.comptoir.stock[r])
+  let reste = n
+  let total = 0
+  while (reste > 1e-9) {
+    const q = Math.min(TRANCHE, reste)
+    let p = f.prix * Math.pow(f.stockNormal / s, COMPTOIR.exposant)
+    p = Math.min(f.prix * COMPTOIR.prixMax, Math.max(f.prix * COMPTOIR.prixMin, p))
+    if (m.comptoir.rumeur !== null && m.comptoir.rumeur.ressource === r && m.t < m.comptoir.rumeur.fin) p *= COMPTOIR.rumeur
+    total += q * p
+    s += q
+    reste -= q
+  }
+  return total
+}
+
+/** Ce que coûterait l'achat de `n` au comptoir, par tranches, sans rien changer. */
+export function estimerAchat(m: Monde, r: Ressource, n: number): number {
+  const f = RESSOURCES[r]
+  let s = Math.max(1, m.comptoir.stock[r])
+  let reste = n
+  let total = 0
+  while (reste > 1e-9) {
+    const q = Math.min(TRANCHE, reste)
+    let p = f.prix * Math.pow(f.stockNormal / Math.max(1, s), COMPTOIR.exposant)
+    p = Math.min(f.prix * COMPTOIR.prixMax, Math.max(f.prix * COMPTOIR.prixMin, p))
+    if (m.comptoir.rumeur !== null && m.comptoir.rumeur.ressource === r && m.t < m.comptoir.rumeur.fin) p *= COMPTOIR.rumeur
+    total += q * p * COMPTOIR.ecartAchat
+    s = Math.max(0, s - q)
+    reste -= q
+  }
+  return total
+}
+
 /** Ce que coûterait au comptoir, maintenant, l'achat de ces quantités (approché au prix courant). */
 export function prixDe(m: Monde, q: Quantites): number {
   let total = 0
@@ -240,7 +285,7 @@ export function rendement(j: Joueur, e: Element): number {
 
 export function multiplicateur(j: Joueur, b: Batiment): number {
   const f = BATIMENTS[b.nom]
-  return LABO.niveaux[b.niveau - 1] * (f.element === undefined ? 1 : rendement(j, f.element))
+  return (LABO.niveaux[b.niveau - 1] ?? 1) * (f.element === undefined ? 1 : rendement(j, f.element))
 }
 
 function gagnerPoints(m: Monde, j: Joueur, e: Element, n: number): void {
@@ -329,6 +374,14 @@ export function construire(m: Monde, j: Joueur, nom: NomBatiment): boolean {
   return true
 }
 
+/** Rend l'emplacement, pas les matériaux ; les points de maîtrise restent. */
+export function demolir(j: Joueur, b: Batiment): boolean {
+  const i = j.batiments.indexOf(b)
+  if (i < 0) return false
+  j.batiments.splice(i, 1)
+  return true
+}
+
 export function ameliorer(m: Monde, j: Joueur, b: Batiment): boolean {
   if (b.niveau >= 3) return false
   const f = BATIMENTS[b.nom]
@@ -351,6 +404,16 @@ function disponibles(j: Joueur, besoin: Quantites): boolean {
 function manquant(j: Joueur, besoin: Quantites): Ressource | null {
   for (const [r, q] of Object.entries(besoin)) if (j.stock[r as Ressource] < (q ?? 0) - 1e-9) return r as Ressource
   return null
+}
+
+/** L'entrée qui manque à ce bâtiment pour tourner un pas, ou null s'il tourne. */
+export function entreeManquante(m: Monde, j: Joueur, b: Batiment, dt: number): Ressource | null {
+  if (m.t < b.arretJusqua) return null
+  const f = BATIMENTS[b.nom]
+  if (f.consomme === undefined) return null
+  const mult = multiplicateur(j, b)
+  const part = f.type === 'chef' ? (mult * dt) / (f.cycleH ?? 4) : mult * dt
+  return manquant(j, fois(f.consomme, part))
 }
 
 function arreter(j: Joueur, besoin: Quantites, dt: number): void {
@@ -428,6 +491,22 @@ export function avancer(m: Monde, dt: number): void {
 
 // ---------------------------------------------------------------- LES COUPS BAS
 
+/** Un tirage dans [0, 1[, le n-ième du monde : la même partie rejoue les mêmes. */
+function tirer(m: Monde): number {
+  m.des += 1
+  return rngDe(graineDe(m.graine, m.des))()
+}
+
+/** « Jour 2, 14 h » : la saison commence un matin à 8 h. */
+function quand(t: number): string {
+  return `Jour ${Math.floor(t / 24) + 1}, ${Math.floor((t % 24) + 8) % 24} h`
+}
+
+/** L'auteur d'un coup, tel que la gazette le nomme : découvert une fois sur trois. */
+function auteur(m: Monde, a: Joueur): string {
+  return tirer(m) < COUPS.decouverte ? a.nom : 'un inconnu'
+}
+
 export function aLe(j: Joueur, nom: NomBatiment): boolean {
   return j.batiments.some((b) => b.nom === nom)
 }
@@ -469,7 +548,7 @@ export function piller(m: Monde, a: Joueur, cible: Joueur): boolean {
   a.recharges.pillage = m.t + COUPS.pillage.rechargeH
   a.journal.attaquesFaites += 1
   cible.journal.attaquesRecues += 1
-  m.gazette.push(`${m.t.toFixed(1)} h : ${a.nom} pille ${cible.nom} (${valeur.toFixed(0)} or de butin)`)
+  m.gazette.push(`${quand(m.t)} : ${auteur(m, a)} pille ${cible.nom} (${valeur.toFixed(0)} or de butin)`)
   return true
 }
 
@@ -494,21 +573,38 @@ export function saboter(m: Monde, a: Joueur, cible: Joueur): boolean {
   cible.attaquesRecues.push(m.t)
   if (aLe(cible, 'cercle') && cible.cercleJour !== jourDe(m.t)) {
     cible.cercleJour = jourDe(m.t)
-    m.gazette.push(`${m.t.toFixed(1)} h : le cercle de ${cible.nom} annule un sabotage`)
+    m.gazette.push(`${quand(m.t)} : le cercle de ${cible.nom} annule un sabotage`)
     return true
   }
   if (cible.cuisson !== null) {
     cible.cuisson.fin += COUPS.sabotage.dureeH
-    m.gazette.push(`${m.t.toFixed(1)} h : ${a.nom} sabote le four de ${cible.nom}`)
+    m.gazette.push(`${quand(m.t)} : ${auteur(m, a)} sabote le four de ${cible.nom}`)
     return true
   }
   const ordre = (b: Batiment): number => (BATIMENTS[b.nom].type === 'chef' ? 0 : BATIMENTS[b.nom].avance ? 1 : 2)
   const b = [...cible.batiments].sort((x, y) => ordre(x) - ordre(y))[0]
   if (b !== undefined) {
     b.arretJusqua = m.t + COUPS.sabotage.dureeH
-    m.gazette.push(`${m.t.toFixed(1)} h : ${a.nom} sabote ${b.nom} chez ${cible.nom}`)
+    m.gazette.push(`${quand(m.t)} : ${auteur(m, a)} sabote un atelier chez ${cible.nom}`)
   }
   return true
+}
+
+export function peutEspionner(m: Monde, a: Joueur, cible: Joueur): boolean {
+  return a !== cible && aLe(a, 'tour') && (a.recharges.espion ?? 0) <= m.t && a.stock.cristal >= COUPS.espion.cristal
+}
+
+/** Montre le laboratoire de la cible pendant un jour. Jamais découvert : regarder n'est pas un crime. */
+export function espionner(m: Monde, a: Joueur, cible: Joueur): boolean {
+  if (!peutEspionner(m, a, cible)) return false
+  a.stock.cristal -= COUPS.espion.cristal
+  a.recharges.espion = m.t + COUPS.espion.rechargeH
+  a.vues[cible.id] = m.t + COUPS.espion.dureeH
+  return true
+}
+
+export function voit(m: Monde, a: Joueur, cible: Joueur): boolean {
+  return a === cible || (a.vues[cible.id] ?? 0) > m.t
 }
 
 export function lancerRumeur(m: Monde, a: Joueur, r: Ressource): boolean {
@@ -517,7 +613,7 @@ export function lancerRumeur(m: Monde, a: Joueur, r: Ressource): boolean {
   a.recharges.rumeur = m.t + COUPS.rumeur.rechargeH
   m.comptoir.rumeur = { ressource: r, fin: m.t + COUPS.rumeur.dureeH }
   a.journal.attaquesFaites += 1
-  m.gazette.push(`${m.t.toFixed(1)} h : une rumeur fait chuter ${r}`)
+  m.gazette.push(`${quand(m.t)} : une rumeur fait chuter le ${r}`)
   return true
 }
 
