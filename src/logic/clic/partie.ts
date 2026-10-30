@@ -24,8 +24,8 @@ export const BOTS: (Strategie & { visites: number })[] = [
 export const PAS = 0.25
 
 export interface Partie {
-  /** 2 : les modules et les anneaux (une sauvegarde de la version 1 est abandonnée). */
-  version: 2
+  /** 3 : le puzzle (les modules emboîtés, les niveaux) ; une sauvegarde plus ancienne est abandonnée. */
+  version: 3
   graine: number
   monde: Monde
   /** Par bot, l'instant de sa dernière visite jouée. */
@@ -33,7 +33,7 @@ export interface Partie {
 }
 
 export function nouvellePartie(graine: number, nomDuJoueur: string): Partie {
-  return { version: 2, graine, monde: nouveauMonde([nomDuJoueur, ...BOTS.map((b) => b.nom)]), dernieresVisites: BOTS.map(() => -1) }
+  return { version: 3, graine, monde: nouveauMonde([nomDuJoueur, ...BOTS.map((b) => b.nom)]), dernieresVisites: BOTS.map(() => -1) }
 }
 
 export function joueur(p: Partie): Joueur {
@@ -89,7 +89,7 @@ export function serialiser(p: Partie): string {
 export function deserialiser(texte: string): Partie | null {
   try {
     const p = JSON.parse(texte) as Partie
-    if (p === null || typeof p !== 'object' || p.version !== 2) return null
+    if (p === null || typeof p !== 'object' || p.version !== 3) return null
     if (!Array.isArray(p.monde?.joueurs) || p.monde.joueurs.length !== BOTS.length + 1) return null
     if (!Array.isArray(p.dernieresVisites)) return null
     return p

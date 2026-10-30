@@ -45,7 +45,9 @@ function Accueil({ onCommencer }: { onCommencer: (nom: string) => void }): React
     <div className="accueil">
       <h1>Quintessence</h1>
       <p className="sourd petit">Prototype du système abstrait, sans habillage.</p>
-      <p>Un seul nombre. Tapez la base pour produire, vendez pour gagner de l’or, achetez des modules et branchez-les sur la base : ils tapent pour vous.</p>
+      <p>
+        Un seul nombre. Tapez la base pour produire, vendez pour gagner de l’or, achetez des modules et emboîtez-les sur la base, puis les uns sur les autres : ils tapent pour vous. Tapez un module pour l’améliorer.
+      </p>
       <label>
         Votre nom
         <input type="text" value={nom} maxLength={16} placeholder="Nicolas" onChange={(e) => setNom(e.target.value)} />

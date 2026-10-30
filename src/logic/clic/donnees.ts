@@ -38,21 +38,25 @@ export const UNITES: readonly Unite[] = [
   { id: 'h', cout: 3.3e8, debit: 2200 },
 ]
 
-/** Chaque exemplaire d'une unité coûte ce multiple du précédent. */
-export const CROISSANCE = 1.15
-
-/** À chacun de ces nombres d'exemplaires, l'unité double sa production. */
-export const PALIERS: readonly number[] = [10, 25, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
+/**
+ * UN MODULE DE PLUS coûte ce multiple du précédent DU MÊME TYPE. Haut
+ * exprès : la progression passe par les niveaux (Keko, 30/10 : « plutôt que
+ * rajouter des modules, on pourrait cliquer sur les modules existants et les
+ * améliorer individuellement »), et on ne veut pas des foules de pièces.
+ */
+export const ACHAT = { croissance: 2.5 }
 
 /**
- * LES AMÉLIORATIONS d'une unité : trois niveaux, chacun double l'unité ;
- * le niveau se débloque à `des` exemplaires et coûte `fois` le coût de base.
+ * LES NIVEAUX d'un module : le niveau L multiplie son débit par L, et par 2
+ * tous les `palier` niveaux ; passer du niveau L au suivant coûte
+ * `premier` fois le coût de base du type, fois `croissance` par niveau déjà
+ * pris. Chiffres réglés par `simulation/clic.ts`.
  */
-export const AMELIORATIONS: readonly { des: number; fois: number }[] = [
-  { des: 1, fois: 10 },
-  { des: 10, fois: 100 },
-  { des: 50, fois: 1000 },
-]
+export const NIVEAU = {
+  premier: 0.6,
+  croissance: 1.2,
+  palier: 10,
+}
 
 /** La tape vaut cette part de la production par seconde, et au moins 1 R. */
 export const TAPE_PART = 0.01
@@ -94,19 +98,44 @@ export const PRESTIGE = {
 }
 
 /**
- * LA BASE ET SES PRISES (Keko, 30/10 : « le clicker comme base, et on achète
- * des modules qui se plug dessus »). Le monde est un plan en pixels-monde ;
- * la base est un disque au centre, les modules des carrés qu'on branche sur
- * des prises disposées en anneaux autour d'elle. Le premier anneau est
- * offert, les suivants s'achètent : la place est la limite, pas l'or seul.
- * Les coûts des anneaux sont de moi, à rejuger.
+ * LE PUZZLE (Keko, 30/10 : « une forme rectangulaire, avec un slot sur chaque
+ * côté, et chaque côté aurait une forme de puzzle qui pourrait matcher
+ * certains types de pièce », puis « enchaînement tout de suite, deux types par
+ * forme »). Le monde est un plan en pixels-monde. La base est un rectangle de
+ * trois cases sur une, creusé d'une forme sur chaque côté. Un module est une
+ * case carrée : sa bosse (la forme de son type, `type % FORMES` : A et E sont
+ * ronds, B et F carrés, C et G triangles, D et H trapèzes) s'emboîte dans un
+ * creux de la même forme, de la base ou d'un autre module ; ses trois autres
+ * côtés sont des creux (`PROFILS`), où d'autres modules s'emboîtent à leur
+ * tour. Les modules s'enchaînent donc en arbre depuis la base, et seuls ceux
+ * qui lui sont reliés produisent. Tout est en cases d'une taille : les côtés
+ * de la base sont des multiples impairs de la case, pour que tout s'aligne.
  */
-export const BASE = { rayon: 200 }
-export const MODULE = { taille: 100 }
-export const ANNEAUX: readonly { prises: number; cout: number; distance: number }[] = [
-  { prises: 8, cout: 0, distance: 270 },
-  { prises: 12, cout: 1000, distance: 400 },
-  { prises: 16, cout: 100000, distance: 530 },
-  { prises: 20, cout: 1e7, distance: 660 },
-  { prises: 24, cout: 1e9, distance: 790 },
+export const FORMES = 4
+export const PIECE = {
+  taille: 150,
+  /** La bosse et le creux : leur largeur le long du bord, et ce qu'ils dépassent ou s'enfoncent. */
+  encoche: { largeur: 56, profondeur: 30 },
+}
+export const BASE = {
+  largeur: 450,
+  hauteur: 150,
+  /** La forme creusée sur chaque côté : haut, droite, bas, gauche. */
+  formes: [0, 1, 2, 3] as readonly number[],
+}
+/**
+ * Les creux d'un module, par côté local quand sa bosse est en bas : [face,
+ * droite, gauche]. Chaque module ouvre les trois autres formes que la sienne ;
+ * les deux types d'une même forme les ouvrent en miroir, pour qu'échanger
+ * l'un contre l'autre change la géométrie. De moi, à rejuger.
+ */
+export const PROFILS: readonly (readonly [number, number, number])[] = [
+  [2, 3, 1], // A, rond : en face un triangle, à droite un trapèze, à gauche un carré
+  [3, 0, 2], // B, carré
+  [0, 1, 3], // C, triangle
+  [1, 2, 0], // D, trapèze
+  [2, 1, 3], // E, rond : le miroir de A
+  [3, 2, 0], // F, carré
+  [0, 3, 1], // G, triangle
+  [1, 0, 2], // H, trapèze
 ]

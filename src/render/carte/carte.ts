@@ -23,12 +23,13 @@ export interface Point {
 }
 
 export interface Interactions {
-  /** Un doigt posé puis relevé sans glisser sur un élément cliquable (ou dedans) ; (sx, sy) à l'écran. */
-  onClic?: (cible: HTMLElement, sx: number, sy: number) => void
+  /** Un doigt posé puis relevé sans glisser : sur un élément cliquable (ou dedans), ou dans le vide (`cible` null) ; (sx, sy) à l'écran. */
+  onClic?: (cible: HTMLElement | null, sx: number, sy: number) => void
   /** Un doigt posé sur un élément saisissable : rendre vrai pour le saisir. `p` en pixels-monde. */
   onSaisir?: (cible: HTMLElement, p: Point) => boolean
   onTrainer?: (p: Point) => void
-  onLacher?: (p: Point) => void
+  /** Le doigt se relève ; `bouge` dit s'il a glissé depuis la saisie (sinon, c'était une tape sur l'élément). */
+  onLacher?: (p: Point, bouge: boolean) => void
   /** Un second doigt pendant une saisie : la saisie s'annule (l'élément revient d'où il vient) et les deux doigts pincent. */
   onAnnuler?: () => void
 }
@@ -36,8 +37,8 @@ export interface Interactions {
 export interface Carte {
   /** Ramène la vue au zoom normal, centrée sur l'origine, en glissant. */
   centrer(): void
-  /** Dit ce que le zoom normal doit faire tenir à l'écran : un rayon autour de l'origine, et `bas` pixels-monde de plus sous lui. */
-  cadrer(rayon: number, bas?: number): void
+  /** Dit ce que le zoom normal doit faire tenir à l'écran : un rayon autour de l'origine, et `bas` pixels-monde de plus sous lui ; le zoom normal ne descend pas sous `zoomMin`. */
+  cadrer(rayon: number, bas?: number, zoomMin?: number): void
   versMonde(sx: number, sy: number): Point
   versEcran(wx: number, wy: number): Point
   detruire(): void
@@ -74,7 +75,14 @@ function mouvementReduit(): boolean {
   }
 }
 
-export function monterCarte(el: HTMLElement, c: HTMLCanvasElement, m: HTMLElement, zoomVu: HTMLElement | null, cadrage: { rayon: number; bas: number }, inter: Interactions): Carte {
+export interface Cadrage {
+  rayon: number
+  bas: number
+  /** Le zoom normal ne descend pas sous ça, quitte à ne pas tout faire tenir : ce qu'on tape doit rester assez gros. */
+  zoomMin?: number
+}
+
+export function monterCarte(el: HTMLElement, c: HTMLCanvasElement, m: HTMLElement, zoomVu: HTMLElement | null, cadrage: Cadrage, inter: Interactions): Carte {
   const ctx = c.getContext('2d')
   let largeur = 1
   let hauteur = 1
@@ -94,7 +102,7 @@ export function monterCarte(el: HTMLElement, c: HTMLCanvasElement, m: HTMLElemen
     c.style.height = `${hauteur}px`
     ctx?.setTransform(dpr, 0, 0, dpr, 0, 0)
     // Le zoom normal fait tenir le rayon cadré en largeur, et le rayon plus ce qu'il y a dessous en hauteur.
-    normal = Math.min((largeur * PART_ECRAN) / (2 * cadre.rayon), (hauteur * PART_ECRAN) / (2 * cadre.rayon + cadre.bas))
+    normal = Math.max(cadre.zoomMin ?? 0, Math.min((largeur * PART_ECRAN) / (2 * cadre.rayon), (hauteur * PART_ECRAN) / (2 * cadre.rayon + cadre.bas)))
   }
 
   /** Place le monde et repeint le quadrillage pour la vue courante. */
@@ -102,6 +110,8 @@ export function monterCarte(el: HTMLElement, c: HTMLCanvasElement, m: HTMLElemen
     image = 0
     const { x, y, z } = vue
     m.style.transform = `translate(${largeur / 2 - x * z}px, ${hauteur / 2 - y * z}px) scale(${z})`
+    // Le zoom en variable CSS : ce qui doit garder sa taille à l'écran (une bulle) se met à l'échelle inverse.
+    m.style.setProperty('--zoom', z.toFixed(4))
     if (zoomVu !== null) zoomVu.textContent = `×${(z / normal).toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`
     if (ctx === null) return
     ctx.clearRect(0, 0, largeur, hauteur)
@@ -157,13 +167,15 @@ export function monterCarte(el: HTMLElement, c: HTMLCanvasElement, m: HTMLElemen
   const doigts = new Map<number, Point>()
   let geste: { depart: Point; bouge: boolean; cible: HTMLElement | null } | null = null
   let saisi = false
+  let saisie = { depart: { x: 0, y: 0 }, bouge: false }
   const relacher = (): void => geste?.cible?.classList.remove('enfonce')
   const rect = (): DOMRect => el.getBoundingClientRect()
 
   const bas = (e: PointerEvent): void => {
     if (e.pointerType === 'mouse' && e.button !== 0) return
     const t = e.target as Element
-    if (t.closest('.carte-hud') !== null) return
+    // Les commandes et ce qui se dit hors carte (`data-hud`) gardent leurs clics ordinaires.
+    if (t.closest('.carte-hud, [data-hud]') !== null) return
     if (saisi) {
       // Un second doigt pendant une saisie : on voulait pincer, pas emporter. La saisie s'annule, les deux doigts pincent.
       saisi = false
@@ -178,6 +190,7 @@ export function monterCarte(el: HTMLElement, c: HTMLCanvasElement, m: HTMLElemen
       const saisissable = t.closest<HTMLElement>('[data-saisissable]')
       if (saisissable !== null && inter.onSaisir?.(saisissable, versMonde(sx, sy)) === true) {
         saisi = true
+        saisie = { depart: { x: sx, y: sy }, bouge: false }
         el.setPointerCapture(e.pointerId)
         doigts.set(e.pointerId, { x: sx, y: sy })
         return
@@ -202,6 +215,7 @@ export function monterCarte(el: HTMLElement, c: HTMLCanvasElement, m: HTMLElemen
     const apres = { x: e.clientX - r.left, y: e.clientY - r.top }
     doigts.set(e.pointerId, apres)
     if (saisi) {
+      if (!saisie.bouge && Math.hypot(apres.x - saisie.depart.x, apres.y - saisie.depart.y) > SEUIL_GLISSE) saisie.bouge = true
       inter.onTrainer?.(versMonde(apres.x, apres.y))
       return
     }
@@ -235,13 +249,13 @@ export function monterCarte(el: HTMLElement, c: HTMLCanvasElement, m: HTMLElemen
     if (saisi) {
       if (doigts.size === 0) {
         saisi = false
-        inter.onLacher?.(versMonde(p.x, p.y))
+        inter.onLacher?.(versMonde(p.x, p.y), saisie.bouge)
       }
       return
     }
     if (doigts.size === 0) {
       el.classList.remove('carte-glisse')
-      if (geste !== null && !geste.bouge && geste.cible !== null && e.type === 'pointerup') inter.onClic?.(geste.cible, e.clientX, e.clientY)
+      if (geste !== null && !geste.bouge && e.type === 'pointerup') inter.onClic?.(geste.cible, e.clientX, e.clientY)
       relacher()
       geste = null
     } else if (geste !== null) geste.bouge = true // Après un pincement, le doigt qui reste glisse.
@@ -295,10 +309,10 @@ export function monterCarte(el: HTMLElement, c: HTMLCanvasElement, m: HTMLElemen
 
   return {
     centrer,
-    cadrer(rayonNeuf, basNeuf = 0) {
+    cadrer(rayonNeuf, basNeuf = 0, zoomMin) {
       const avant = vueNormale()
       const etaitNormale = Math.abs(vue.z - avant.z) < 1e-6 && Math.abs(vue.x - avant.x) < 1 && Math.abs(vue.y - avant.y) < 1
-      cadre = { rayon: rayonNeuf, bas: basNeuf }
+      cadre = { rayon: rayonNeuf, bas: basNeuf, zoomMin }
       mesurer()
       if (etaitNormale) centrer()
       else demander()

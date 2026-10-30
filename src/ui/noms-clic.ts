@@ -8,12 +8,14 @@ import { UNITES } from '../logic/clic/donnees.ts'
 /** La ressource qu'on produit et qu'on vend. */
 export const NOM_R = 'R'
 
-/** La base : le bouton de clic au centre, sur lequel les modules se branchent. */
+/** La base : le bouton de clic au centre, sur lequel les modules s'emboîtent. */
 export const NOM_BASE = 'la base'
 
 export const NOM_MODULE: readonly string[] = UNITES.map((u) => `Module ${u.id.toUpperCase()}`)
 export const LETTRE_MODULE: readonly string[] = UNITES.map((u) => u.id.toUpperCase())
 
-export const NOM_ANNEAU = 'Agrandir la base'
+/** Les quatre formes des découpes du puzzle, dans l'ordre des côtés de la base (haut, droite, bas, gauche). */
+export const NOMS_FORMES: readonly string[] = ['rond', 'carré', 'triangle', 'trapèze']
+
 export const NOM_AUTO = 'Comptoir automatique'
 export const NOM_PRESTIGE = 'Prestige'

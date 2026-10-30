@@ -4,8 +4,8 @@
  * amis : l'ordre de grandeur gagné par jour, le prix du marché, les prestiges.
  * `node simulation/clic.ts [graine] [--suivre=Nom] [--csv]`.
  */
-import { PRESTIGE, SAISON_H, UNITES } from '../src/logic/clic/donnees.ts'
-import { avancer, debit, nouveauMonde, prixCourant, type Joueur, type Monde } from '../src/logic/clic/moteur.ts'
+import { ACHAT, NIVEAU, PRESTIGE, SAISON_H, UNITES } from '../src/logic/clic/donnees.ts'
+import { avancer, debit, nouveauMonde, prixCourant, relies, type Joueur, type Monde } from '../src/logic/clic/moteur.ts'
 import { visiter } from '../src/logic/clic/bots.ts'
 import { BOTS, PAS } from '../src/logic/clic/partie.ts'
 import { graineDe, rngDe } from '../src/logic/rng.ts'
@@ -21,6 +21,10 @@ const echelleDebit = Number(process.env.QC_DEBIT ?? '1')
 for (const u of UNITES) (u as { debit: number }).debit *= echelleDebit
 if (process.env.QC_BASE !== undefined) (PRESTIGE as { base: number }).base = Number(process.env.QC_BASE)
 if (process.env.QC_PAR !== undefined) (PRESTIGE as { parPoint: number }).parPoint = Number(process.env.QC_PAR)
+// `QC_PREMIER=0.5` le premier niveau en part du coût de base ; `QC_NIV=1.25` la croissance d'un niveau ; `QC_PIECE=3` celle d'un module de plus.
+if (process.env.QC_PREMIER !== undefined) (NIVEAU as { premier: number }).premier = Number(process.env.QC_PREMIER)
+if (process.env.QC_NIV !== undefined) (NIVEAU as { croissance: number }).croissance = Number(process.env.QC_NIV)
+if (process.env.QC_PIECE !== undefined) (ACHAT as { croissance: number }).croissance = Number(process.env.QC_PIECE)
 
 /** Le premier joueur joue comme un humain assidu : quatre visites, cent tapes. */
 const JOUEURS = [{ nom: 'Keko', tapes: 100, seuilPrestige: 2, visites: 4 }, ...BOTS]
@@ -36,9 +40,14 @@ function abrege(n: number): string {
   return `${n.toFixed(n < 10 ? 2 : n < 100 ? 1 : 0)} ${u[k]}`
 }
 
+/** Les modules reliés par unité, avec leurs niveaux : « A12.8 » = deux A, aux niveaux 12 et 8. */
 function resume(j: Joueur): string {
-  const u = UNITES.map((_, i) => `${j.unites[i]}${(j.niveaux[i] ?? 0) > 0 ? `+${j.niveaux[i]}` : ''}`).join('/')
-  return `R ${abrege(j.r)} or ${abrege(j.or)} | ${abrege(debit(j))}/s | [${u}]${j.auto ? ' auto' : ''} | anneaux ${j.anneaux} | pts ${j.points} (×${j.prestiges}) | total ${abrege(j.total)}`
+  const r = relies(j)
+  const u = UNITES.map((x, i) => {
+    const niveaux = j.modules.filter((mo) => mo.type === i && r.has(mo.id)).map((mo) => mo.niveau).sort((a, b) => b - a)
+    return niveaux.length === 0 ? '' : `${x.id.toUpperCase()}${niveaux.join('.')}`
+  }).filter((x) => x !== '').join(' ')
+  return `R ${abrege(j.r)} or ${abrege(j.or)} | ${abrege(debit(j))}/s | ${r.size} modules [${u}]${j.auto ? ' auto' : ''} | pts ${j.points} (×${j.prestiges}) | total ${abrege(j.total)}`
 }
 
 export function jouerSaison(): Monde {

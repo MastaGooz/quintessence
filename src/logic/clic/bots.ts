@@ -2,15 +2,15 @@
  * LES BOTS du système abstrait : des joueurs simulés qui passent quelques fois
  * par jour. À chaque visite : prestige si ça vaut le coup, quelques dizaines
  * de tapes, vente de ce qu'ils ont en main, puis achats gloutons — l'option
- * qui rapporte le plus de production par or dépensé, tant qu'il reste de l'or.
- * Un module acheté est branché sur la première prise libre ; base pleine, le
- * bot achète l'anneau suivant ou jette son module le plus faible pour faire
- * la place. Ils ne font rien qu'un vrai joueur ne pourrait faire.
+ * qui rapporte le plus de production par or dépensé, tant qu'il reste de l'or :
+ * un module de plus, emboîté sur le creux libre de sa forme le plus près de la
+ * base, ou un niveau de plus sur un module relié. Ils ne font rien qu'un vrai
+ * joueur ne pourrait faire.
  */
 import { AUTO_COUT, PRESTIGE, UNITES } from './donnees.ts'
 import {
-  acheterAmelioration, acheterAnneau, acheterAuto, acheterModule, brancher, coutAmelioration, coutAnneau, coutUnite, debit, debitModule,
-  jeter, multiplicateurPrestige, pointsSi, prestiger, prisesLibres, taper, vendre, visible, type Joueur, type Module, type Monde,
+  acheterModule, acheterAuto, ameliorer, brancher, coutModule, coutNiveau, debit, debitAuNiveau, debitModule, formeDuType,
+  multiplicateurPrestige, pointsSi, prestiger, prisesLibres, relies, taper, vendre, visible, type Joueur, type Monde,
 } from './moteur.ts'
 
 export interface Strategie {
@@ -28,59 +28,29 @@ interface Option {
   faire: () => boolean
 }
 
-/** Achète un module et le branche sur la première prise libre. */
-function acheterEtBrancher(j: Joueur, i: number): boolean {
-  const prise = prisesLibres(j)[0]
-  if (prise === undefined) return false
-  const mo = acheterModule(j, i)
-  return mo !== null && brancher(j, mo, prise)
-}
-
-function copie(j: Joueur): Joueur {
-  return { ...j, unites: [...j.unites], niveaux: [...j.niveaux] }
-}
-
 function options(j: Joueur): Option[] {
   const liste: Option[] = []
-  const d = debit(j)
-  const libres = prisesLibres(j).length
-  const anneau = coutAnneau(j)
-  // Le module branché le plus faible : celui qu'on jetterait pour faire de la place.
-  let faible: Module | undefined
-  for (const mo of j.modules) if (mo.prise !== null && (faible === undefined || debitModule(j, mo.type) < debitModule(j, faible.type))) faible = mo
+  // Un module de plus, sur le creux libre de sa forme le plus près de la base : l'arbre reste ramassé.
+  const prises = prisesLibres(j).sort((a, b) => Math.hypot(a.place.x, a.place.y) - Math.hypot(b.place.x, b.place.y))
   for (let i = 0; i < UNITES.length; i++) {
     if (!visible(j, i)) continue
-    const c = coutUnite(j, i)
-    const essai = copie(j)
-    essai.unites[i] = (essai.unites[i] ?? 0) + 1
-    const gain = debit(essai) - d
-    if (libres > 0) liste.push({ cout: c, gain, faire: () => acheterEtBrancher(j, i) })
-    else {
-      if (anneau !== null) liste.push({ cout: c + anneau, gain, faire: () => acheterAnneau(j) && acheterEtBrancher(j, i) })
-      if (faible !== undefined && faible.type !== i) {
-        const e2 = copie(j)
-        e2.unites[i] = (e2.unites[i] ?? 0) + 1
-        e2.unites[faible.type] = (e2.unites[faible.type] ?? 0) - 1
-        const g2 = debit(e2) - d
-        const aJeter = faible
-        if (g2 > 0) {
-          liste.push({
-            cout: c,
-            gain: g2,
-            faire: () => {
-              jeter(j, aJeter)
-              return acheterEtBrancher(j, i)
-            },
-          })
-        }
-      }
-    }
-    const ca = coutAmelioration(j, i)
-    if (ca !== null) {
-      const e3 = copie(j)
-      e3.niveaux[i] = (e3.niveaux[i] ?? 0) + 1
-      liste.push({ cout: ca, gain: debit(e3) - d, faire: () => acheterAmelioration(j, i) })
-    }
+    const forme = formeDuType(i)
+    const prise = prises.find((p) => p.forme === forme)
+    if (prise === undefined) continue
+    liste.push({
+      cout: coutModule(j, i),
+      gain: debitAuNiveau(j, i, 1),
+      faire: () => {
+        const mo = acheterModule(j, i)
+        return mo !== null && brancher(j, mo, prise.parent, prise.cote)
+      },
+    })
+  }
+  // Un niveau de plus sur un module relié.
+  const r = relies(j)
+  for (const mo of j.modules) {
+    if (!r.has(mo.id)) continue
+    liste.push({ cout: coutNiveau(mo), gain: debitAuNiveau(j, mo.type, mo.niveau + 1) - debitModule(j, mo), faire: () => ameliorer(j, mo) })
   }
   return liste
 }
@@ -98,7 +68,7 @@ export function visiter(m: Monde, j: Joueur, s: Strategie): void {
   // LE COMPTOIR AUTOMATIQUE dès qu'on produit assez pour qu'il compte : un R par seconde.
   if (!j.auto && debit(j) >= 1 && j.or >= AUTO_COUT * 1.5) acheterAuto(j)
   // LES ACHATS GLOUTONS : le meilleur gain par or, tant qu'on peut payer.
-  for (let n = 0; n < 200; n++) {
+  for (let n = 0; n < 400; n++) {
     const possibles = options(j).filter((o) => o.gain > 0)
     if (possibles.length === 0) break
     possibles.sort((a, b) => b.gain / b.cout - a.gain / a.cout)

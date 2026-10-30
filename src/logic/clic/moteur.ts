@@ -1,17 +1,32 @@
 /**
  * LE MOTEUR du système abstrait : pur, le temps en heures injecté, aucun
  * hasard. Tout ce qu'un joueur peut faire passe par ici (taper, vendre,
- * acheter, améliorer, prestiger) ; `avancer` fait produire et vendre le monde.
+ * acheter un module, l'emboîter, l'améliorer, prestiger) ; `avancer` fait
+ * produire et vendre le monde.
+ *
+ * LA BASE ET SES MODULES FONT UN PUZZLE (Keko, 30/10) : la base est un
+ * rectangle creusé d'une forme sur chaque côté ; un module est une case qui
+ * porte la bosse de sa forme sur un côté et des creux sur les trois autres ;
+ * il s'emboîte sur un creux de sa forme, de la base ou d'un module déjà
+ * emboîté, et les modules s'enchaînent ainsi en arbre. Seuls les modules
+ * reliés à la base produisent. Un module s'améliore niveau par niveau.
  */
-import { AMELIORATIONS, ANNEAUX, AUTO_COUT, CROISSANCE, MARCHE, PALIERS, PRESTIGE, TAPE_PART, UNITES } from './donnees.ts'
+import { ACHAT, AUTO_COUT, BASE, FORMES, MARCHE, NIVEAU, PIECE, PRESTIGE, PROFILS, TAPE_PART, UNITES } from './donnees.ts'
 
-/** UN MODULE : un exemplaire d'une unité, branché sur une prise de la base ou posé quelque part sur le plan (x, y en pixels-monde). */
+/** UN MODULE : un exemplaire d'une unité, emboîté quelque part ou posé sur le plan. */
 export interface Module {
   id: number
   type: number
-  prise: number | null
+  /** Le niveau d'amélioration, à partir de 1. */
+  niveau: number
+  /** Sur quoi il est emboîté : 0 la base, sinon l'id d'un autre module ; null quand il est posé sur le plan. */
+  parent: number | null
+  /** Le côté du parent où il est emboîté : pour la base 0 haut, 1 droite, 2 bas, 3 gauche ; pour un module ses côtés à lui, 0 la face, 1 la droite, 3 la gauche (2 est sa bosse). */
+  cote: number
+  /** Posé sur le plan (sans parent) : son centre en pixels-monde et le sens où regarde sa face (0 haut, 1 droite, 2 bas, 3 gauche). Emboîté, tout cela découle du parent. */
   x: number
   y: number
+  sens: number
 }
 
 export interface Joueur {
@@ -20,16 +35,10 @@ export interface Joueur {
   /** La ressource en main, pas encore vendue. */
   r: number
   or: number
-  /** Les modules BRANCHÉS de chaque unité (par index de `UNITES`) : seuls eux produisent. */
-  unites: number[]
-  /** Les modules achetés de chaque unité, branchés ou non : c'est eux que le coût suit. */
+  /** Les modules achetés de chaque unité, emboîtés ou non : c'est eux que le coût suit. */
   achetes: number[]
   modules: Module[]
   prochainModule: number
-  /** Les anneaux de prises possédés (le premier est offert). */
-  anneaux: number
-  /** Les niveaux d'amélioration achetés par unité (0 à 3). */
-  niveaux: number[]
   /** Le comptoir automatique : la production se vend au fil de l'eau. */
   auto: boolean
   /** Les points de prestige acquis. */
@@ -70,12 +79,9 @@ export function nouveauJoueur(id: number, nom: string): Joueur {
     nom,
     r: 0,
     or: 0,
-    unites: UNITES.map(() => 0),
     achetes: UNITES.map(() => 0),
     modules: [],
     prochainModule: 1,
-    anneaux: 1,
-    niveaux: UNITES.map(() => 0),
     auto: false,
     points: 0,
     prestiges: 0,
@@ -91,48 +97,202 @@ export function nouveauMonde(noms: string[]): Monde {
 }
 
 // ---------------------------------------------------------------------------
+// LA GÉOMÉTRIE DU PUZZLE
+
+/** Un point du plan et un sens (0 haut, 1 droite, 2 bas, 3 gauche). */
+export interface Place {
+  x: number
+  y: number
+  sens: number
+}
+
+/** Une découpe sur un côté : la bosse qui s'emboîte, ou le creux qui reçoit. */
+export interface Decoupe {
+  genre: 'bosse' | 'creux'
+  forme: number
+}
+
+/** Un creux libre : à qui il appartient (0 la base), sur quel côté, sa forme, et où se placerait le module qui s'y emboîte. */
+export interface Prise {
+  parent: number
+  cote: number
+  forme: number
+  place: Place
+}
+
+export const DIRECTIONS: readonly { x: number; y: number }[] = [
+  { x: 0, y: -1 },
+  { x: 1, y: 0 },
+  { x: 0, y: 1 },
+  { x: -1, y: 0 },
+]
+
+/** La forme d'une unité : deux unités par forme (A et E, B et F…). */
+export function formeDuType(type: number): number {
+  return type % FORMES
+}
+
+/** La découpe d'un côté LOCAL d'un module (0 face, 1 droite, 2 bosse, 3 gauche). */
+export function decoupeLocale(type: number, cote: number): Decoupe {
+  if (cote === 2) return { genre: 'bosse', forme: formeDuType(type) }
+  const p = PROFILS[type] ?? [0, 0, 0]
+  return { genre: 'creux', forme: cote === 0 ? p[0] : cote === 1 ? p[1] : p[2] }
+}
+
+/** Le côté local d'un module dont la face regarde `sens`, qui regarde dans la direction `d`. */
+export function coteLocal(sens: number, d: number): number {
+  return (d - sens + 4) % 4
+}
+
+/** Où s'emboîte un module sur le côté `cote` de la base (la base regarde toujours vers le haut : ses côtés sont les directions). */
+export function placeSurLaBase(cote: number): Place {
+  const d = DIRECTIONS[cote] ?? DIRECTIONS[0]!
+  return { x: d.x * (BASE.largeur / 2 + PIECE.taille / 2), y: d.y * (BASE.hauteur / 2 + PIECE.taille / 2), sens: cote }
+}
+
+/** Où s'emboîte un module sur le côté local `cote` d'un module placé en `p`. */
+export function placeSurLeModule(p: Place, cote: number): Place {
+  const sens = (p.sens + cote) % 4
+  const d = DIRECTIONS[sens]!
+  return { x: p.x + d.x * PIECE.taille, y: p.y + d.y * PIECE.taille, sens }
+}
+
+/** Les enfants de chaque parent (0 : la base). Les modules posés n'y figurent pas comme enfants, mais leurs propres enfants, si. */
+function enfantsDe(j: Joueur): Map<number, Module[]> {
+  const enfants = new Map<number, Module[]>()
+  for (const mo of j.modules) {
+    if (mo.parent === null) continue
+    const liste = enfants.get(mo.parent)
+    if (liste === undefined) enfants.set(mo.parent, [mo])
+    else liste.push(mo)
+  }
+  return enfants
+}
+
+function poser(racine: Module, place: Place, enfants: Map<number, Module[]>, out: Map<number, Place>): void {
+  out.set(racine.id, place)
+  for (const e of enfants.get(racine.id) ?? []) poser(e, placeSurLeModule(place, e.cote), enfants, out)
+}
+
+/** Où est chaque module (son centre, le sens de sa face) : les emboîtés suivent leur parent depuis la base ; les posés sont où on les a laissés, avec ce qui est emboîté dessus. */
+export function disposition(j: Joueur): Map<number, Place> {
+  const enfants = enfantsDe(j)
+  const out = new Map<number, Place>()
+  for (const mo of enfants.get(0) ?? []) poser(mo, placeSurLaBase(mo.cote), enfants, out)
+  for (const mo of j.modules) if (mo.parent === null) poser(mo, { x: mo.x, y: mo.y, sens: mo.sens }, enfants, out)
+  return out
+}
+
+/** Les modules reliés à la base : ceux qui produisent. */
+export function relies(j: Joueur): Set<number> {
+  const enfants = enfantsDe(j)
+  const out = new Set<number>()
+  const pile = [...(enfants.get(0) ?? [])]
+  for (let mo = pile.pop(); mo !== undefined; mo = pile.pop()) {
+    out.add(mo.id)
+    for (const e of enfants.get(mo.id) ?? []) pile.push(e)
+  }
+  return out
+}
+
+/** Un module et tout ce qui est emboîté dessus, de proche en proche (lui en premier). */
+export function grappe(j: Joueur, racine: Module): Module[] {
+  const enfants = enfantsDe(j)
+  const out: Module[] = []
+  const pile = [racine]
+  for (let mo = pile.pop(); mo !== undefined; mo = pile.pop()) {
+    out.push(mo)
+    for (const e of enfants.get(mo.id) ?? []) pile.push(e)
+  }
+  return out
+}
+
+/** La disposition d'une grappe si sa racine était en `place` : pour l'essayer ailleurs avant de l'y emboîter. */
+export function disposerGrappe(j: Joueur, racine: Module, place: Place): Map<number, Place> {
+  const out = new Map<number, Place>()
+  poser(racine, place, enfantsDe(j), out)
+  return out
+}
+
+function seChevauchent(a: Place, b: Place): boolean {
+  return Math.abs(a.x - b.x) < PIECE.taille - 1 && Math.abs(a.y - b.y) < PIECE.taille - 1
+}
+
+function chevaucheLaBase(p: Place): boolean {
+  return Math.abs(p.x) < BASE.largeur / 2 + PIECE.taille / 2 - 1 && Math.abs(p.y) < BASE.hauteur / 2 + PIECE.taille / 2 - 1
+}
+
+/**
+ * Les creux libres : chaque creux de la base ou d'un module relié où rien
+ * n'est emboîté, et dont la case est libre. `sauf` : des modules qu'on tient
+ * en main — ni leurs creux, ni leurs cases ne comptent.
+ */
+export function prisesLibres(j: Joueur, sauf?: ReadonlySet<number>): Prise[] {
+  const dispo = disposition(j)
+  const reliees = relies(j)
+  const occupees: Place[] = []
+  for (const id of reliees) if (sauf?.has(id) !== true) occupees.push(dispo.get(id)!)
+  const libre = (p: Place): boolean => !chevaucheLaBase(p) && !occupees.some((o) => seChevauchent(o, p))
+  const prises = new Set<string>()
+  for (const mo of j.modules) if (mo.parent !== null && sauf?.has(mo.id) !== true) prises.add(`${mo.parent}:${mo.cote}`)
+  const out: Prise[] = []
+  for (let c = 0; c < 4; c++) {
+    if (prises.has(`0:${c}`)) continue
+    const place = placeSurLaBase(c)
+    if (libre(place)) out.push({ parent: 0, cote: c, forme: BASE.formes[c] ?? 0, place })
+  }
+  for (const mo of j.modules) {
+    if (!reliees.has(mo.id) || sauf?.has(mo.id) === true) continue
+    const p = dispo.get(mo.id)!
+    for (const c of [0, 1, 3]) {
+      if (prises.has(`${mo.id}:${c}`)) continue
+      const place = placeSurLeModule(p, c)
+      if (libre(place)) out.push({ parent: mo.id, cote: c, forme: decoupeLocale(mo.type, c).forme, place })
+    }
+  }
+  return out
+}
+
+/** Ce que l'arbre occupe : la plus grande distance du centre à un bord de case, et le bas de la case la plus basse. */
+export function etendue(j: Joueur): { rayon: number; bas: number } {
+  const dispo = disposition(j)
+  let rayon = BASE.largeur / 2
+  let bas = BASE.hauteur / 2
+  for (const id of relies(j)) {
+    const p = dispo.get(id)!
+    rayon = Math.max(rayon, Math.abs(p.x) + PIECE.taille / 2, Math.abs(p.y) + PIECE.taille / 2)
+    bas = Math.max(bas, p.y + PIECE.taille / 2)
+  }
+  return { rayon: rayon + PIECE.encoche.profondeur, bas }
+}
+
+// ---------------------------------------------------------------------------
 // LA PRODUCTION
-
-/** Les paliers franchis par une unité : autant de doublements. */
-export function paliersFranchis(n: number): number {
-  let k = 0
-  for (const p of PALIERS) if (n >= p) k++
-  return k
-}
-
-/** Le prochain palier d'une unité, ou null au-delà du dernier. */
-export function prochainPalier(n: number): number | null {
-  for (const p of PALIERS) if (n < p) return p
-  return null
-}
 
 export function multiplicateurPrestige(j: Joueur): number {
   return 1 + PRESTIGE.parPoint * j.points
 }
 
-/** Ce que multiplie une unité : ses paliers, ses améliorations, le prestige. */
-export function multiplicateurUnite(j: Joueur, i: number): number {
-  return Math.pow(2, paliersFranchis(j.unites[i] ?? 0) + (j.niveaux[i] ?? 0)) * multiplicateurPrestige(j)
+/** Ce que multiplie un niveau : le niveau lui-même, et un doublement tous les `palier` niveaux. */
+export function multiplicateurNiveau(niveau: number): number {
+  return niveau * Math.pow(2, Math.floor(niveau / NIVEAU.palier))
 }
 
-/** Ce que produit un seul module d'une unité, en R par seconde. */
-export function debitModule(j: Joueur, i: number): number {
-  const u = UNITES[i]
-  if (u === undefined) return 0
-  return u.debit * multiplicateurUnite(j, i)
+/** Ce que produirait un module d'une unité à ce niveau, en R par seconde. */
+export function debitAuNiveau(j: Joueur, type: number, niveau: number): number {
+  return (UNITES[type]?.debit ?? 0) * multiplicateurNiveau(niveau) * multiplicateurPrestige(j)
 }
 
-/** Ce que produit une unité, tous exemplaires réunis, en R par seconde. */
-export function debitUnite(j: Joueur, i: number): number {
-  const u = UNITES[i]
-  if (u === undefined) return 0
-  return u.debit * (j.unites[i] ?? 0) * multiplicateurUnite(j, i)
+/** Ce que produit un module, relié ou non (posé, il ne compte pas dans `debit`). */
+export function debitModule(j: Joueur, mo: Module): number {
+  return debitAuNiveau(j, mo.type, mo.niveau)
 }
 
-/** La production du joueur, en R par seconde. */
+/** La production du joueur, en R par seconde : les modules reliés à la base. */
 export function debit(j: Joueur): number {
+  const r = relies(j)
   let d = 0
-  for (let i = 0; i < UNITES.length; i++) d += debitUnite(j, i)
+  for (const mo of j.modules) if (r.has(mo.id)) d += debitModule(j, mo)
   return d
 }
 
@@ -153,12 +313,11 @@ export function taper(j: Joueur): number {
 // ---------------------------------------------------------------------------
 // LES ACHATS
 
-/** Le coût des `n` prochains exemplaires d'une unité (une suite géométrique). */
-export function coutUnite(j: Joueur, i: number, n = 1): number {
+/** Le coût du prochain module d'une unité. */
+export function coutModule(j: Joueur, i: number): number {
   const u = UNITES[i]
   if (u === undefined) return Infinity
-  const possedes = j.achetes[i] ?? 0
-  return Math.ceil(u.cout * Math.pow(CROISSANCE, possedes) * ((Math.pow(CROISSANCE, n) - 1) / (CROISSANCE - 1)))
+  return Math.ceil(u.cout * Math.pow(ACHAT.croissance, j.achetes[i] ?? 0))
 }
 
 /** Une unité est visible dès qu'on possède la précédente (le dévoilement survit au prestige). */
@@ -167,131 +326,94 @@ export function visible(j: Joueur, i: number): boolean {
 }
 
 export function peutAcheterModule(j: Joueur, i: number): boolean {
-  return visible(j, i) && j.or + 1e-9 >= coutUnite(j, i, 1)
+  return visible(j, i) && j.or + 1e-9 >= coutModule(j, i)
 }
 
-/** Où apparaît un module qu'on vient d'acheter : sous la base, au-delà des anneaux, en rang. */
+/** Où apparaît un module qu'on vient d'acheter : sous l'arbre, en rang. */
 export function placeDApparition(j: Joueur): { x: number; y: number } {
-  const n = j.modules.filter((mo) => mo.prise === null).length
-  const distance = (ANNEAUX[j.anneaux - 1] ?? ANNEAUX[0]!).distance + 190
+  const n = j.modules.filter((mo) => mo.parent === null).length
+  const pas = PIECE.taille + 30
   // Le premier au milieu, puis de part et d'autre.
   const colonnes = [0, 1, -1, 2, -2]
-  return { x: (colonnes[n % 5] ?? 0) * 120, y: distance + Math.floor(n / 5) * 120 }
+  return { x: (colonnes[n % 5] ?? 0) * pas, y: etendue(j).bas + PIECE.taille / 2 + 70 + Math.floor(n / 5) * pas }
 }
 
-/** Achète un module : il apparaît débranché, à glisser sur une prise. Rend le module, ou null. */
+/** Achète un module : il apparaît posé sous l'arbre, à emboîter. Rend le module, ou null. */
 export function acheterModule(j: Joueur, i: number): Module | null {
   if (!peutAcheterModule(j, i)) return null
-  j.or -= coutUnite(j, i, 1)
+  j.or -= coutModule(j, i)
   j.achetes[i] = (j.achetes[i] ?? 0) + 1
   const place = placeDApparition(j)
-  const mo: Module = { id: j.prochainModule++, type: i, prise: null, x: place.x, y: place.y }
+  const mo: Module = { id: j.prochainModule++, type: i, niveau: 1, parent: null, cote: 0, x: place.x, y: place.y, sens: 0 }
   j.modules.push(mo)
   // Posséder une unité dévoile la suivante.
   j.connues = Math.max(j.connues, Math.min(UNITES.length, i + 2))
   return mo
 }
 
-// ---------------------------------------------------------------------------
-// LES PRISES ET LES ANNEAUX
-
-/** Le nombre de prises qu'offrent les anneaux possédés. */
-export function nombreDePrises(j: Joueur): number {
-  let n = 0
-  for (let k = 0; k < j.anneaux; k++) n += ANNEAUX[k]?.prises ?? 0
-  return n
+/** Le coût du niveau suivant d'un module. */
+export function coutNiveau(mo: Module): number {
+  const u = UNITES[mo.type]
+  if (u === undefined) return Infinity
+  return Math.ceil(u.cout * NIVEAU.premier * Math.pow(NIVEAU.croissance, mo.niveau - 1))
 }
 
-/** La distance du centre de la base à son dernier anneau. */
-export function rayonDeLaBase(j: Joueur): number {
-  return (ANNEAUX[j.anneaux - 1] ?? ANNEAUX[0]!).distance
+export function peutAmeliorer(j: Joueur, mo: Module): boolean {
+  return j.or + 1e-9 >= coutNiveau(mo)
 }
 
-/** La place d'une prise : sa position autour de la base (pixels-monde), l'angle vers l'extérieur, son anneau. */
-export function positionPrise(index: number): { x: number; y: number; angle: number; anneau: number } {
-  let reste = index
-  for (let k = 0; k < ANNEAUX.length; k++) {
-    const a = ANNEAUX[k]!
-    if (reste < a.prises) {
-      // Les anneaux impairs sont décalés d'une demi-prise : les modules ne se cachent pas l'un l'autre.
-      const angle = -Math.PI / 2 + ((reste + (k % 2) * 0.5) / a.prises) * Math.PI * 2
-      return { x: Math.cos(angle) * a.distance, y: Math.sin(angle) * a.distance, angle, anneau: k }
-    }
-    reste -= a.prises
-  }
-  return { x: 0, y: 0, angle: 0, anneau: -1 }
-}
-
-export function moduleSurPrise(j: Joueur, prise: number): Module | undefined {
-  return j.modules.find((mo) => mo.prise === prise)
-}
-
-/** Les prises libres, dans l'ordre des anneaux. */
-export function prisesLibres(j: Joueur): number[] {
-  const prises = new Set<number>()
-  for (const mo of j.modules) if (mo.prise !== null) prises.add(mo.prise)
-  const libres: number[] = []
-  for (let p = 0; p < nombreDePrises(j); p++) if (!prises.has(p)) libres.push(p)
-  return libres
-}
-
-/** Branche un module sur une prise libre (il quitte sa prise d'avant, s'il en avait une). */
-export function brancher(j: Joueur, mo: Module, prise: number): boolean {
-  if (prise < 0 || prise >= nombreDePrises(j)) return false
-  const occupant = moduleSurPrise(j, prise)
-  if (occupant !== undefined && occupant !== mo) return false
-  if (mo.prise === null) j.unites[mo.type] = (j.unites[mo.type] ?? 0) + 1
-  mo.prise = prise
+/** Monte un module d'un niveau, relié ou non (posé, il garde son niveau pour plus tard). */
+export function ameliorer(j: Joueur, mo: Module): boolean {
+  if (!peutAmeliorer(j, mo)) return false
+  j.or -= coutNiveau(mo)
+  mo.niveau += 1
   return true
 }
 
-/** Débranche un module et le pose en (x, y) : il ne produit plus. */
-export function debrancher(j: Joueur, mo: Module, x: number, y: number): void {
-  if (mo.prise !== null) j.unites[mo.type] = Math.max(0, (j.unites[mo.type] ?? 0) - 1)
-  mo.prise = null
+// ---------------------------------------------------------------------------
+// L'EMBOÎTEMENT
+
+/** La grappe d'un module tiendrait-elle, sa racine en `place`, sans chevaucher la base ni un module relié qui n'en fait pas partie ? */
+export function grappeTient(j: Joueur, mo: Module, place: Place): boolean {
+  const g = new Set(grappe(j, mo).map((m) => m.id))
+  const dispo = disposition(j)
+  const r = relies(j)
+  for (const p of disposerGrappe(j, mo, place).values()) {
+    if (chevaucheLaBase(p)) return false
+    for (const id of r) if (!g.has(id) && seChevauchent(dispo.get(id)!, p)) return false
+  }
+  return true
+}
+
+/** Les creux où un module (avec sa grappe) peut aller : libres, de sa forme, et où tout tient. */
+export function prisesPour(j: Joueur, mo: Module): Prise[] {
+  const g = new Set(grappe(j, mo).map((m) => m.id))
+  const forme = formeDuType(mo.type)
+  return prisesLibres(j, g).filter((p) => p.forme === forme && !g.has(p.parent) && grappeTient(j, mo, p.place))
+}
+
+/** Emboîte un module (et ce qui est emboîté dessus) sur un creux libre de sa forme où tout tient. Rend faux sinon. */
+export function brancher(j: Joueur, mo: Module, parent: number, cote: number): boolean {
+  const prise = prisesPour(j, mo).find((p) => p.parent === parent && p.cote === cote)
+  if (prise === undefined) return false
+  mo.parent = parent
+  mo.cote = cote
+  return true
+}
+
+/** Détache un module (avec ce qui est emboîté dessus) et le pose en (x, y), sa face vers `sens` : il ne produit plus. */
+export function debrancher(mo: Module, x: number, y: number, sens: number): void {
+  mo.parent = null
   mo.x = x
   mo.y = y
+  mo.sens = sens
 }
 
-/** Retire un module pour de bon (les bots s'en servent pour remplacer un module faible). */
-export function jeter(j: Joueur, mo: Module): void {
-  debrancher(j, mo, mo.x, mo.y)
-  j.modules = j.modules.filter((x) => x !== mo)
-}
-
-/** Le coût de l'anneau suivant ; null quand on les a tous. */
-export function coutAnneau(j: Joueur): number | null {
-  return ANNEAUX[j.anneaux]?.cout ?? null
-}
-
-export function peutAcheterAnneau(j: Joueur): boolean {
-  const c = coutAnneau(j)
-  return c !== null && j.or + 1e-9 >= c
-}
-
-export function acheterAnneau(j: Joueur): boolean {
-  if (!peutAcheterAnneau(j)) return false
-  j.or -= coutAnneau(j) ?? 0
-  j.anneaux += 1
-  return true
-}
-
-/** Le coût du prochain niveau d'une unité ; null quand tout est acheté ou pas encore débloqué. */
-export function coutAmelioration(j: Joueur, i: number): number | null {
-  const u = UNITES[i]
-  const niveau = j.niveaux[i] ?? 0
-  const palier = AMELIORATIONS[niveau]
-  if (u === undefined || palier === undefined) return null
-  if ((j.unites[i] ?? 0) < palier.des) return null
-  return Math.ceil(u.cout * palier.fois)
-}
-
-export function acheterAmelioration(j: Joueur, i: number): boolean {
-  const c = coutAmelioration(j, i)
-  if (c === null || j.or + 1e-9 < c) return false
-  j.or -= c
-  j.niveaux[i] = (j.niveaux[i] ?? 0) + 1
-  return true
+/** Déplace un module posé (avec ce qui est emboîté dessus). */
+export function deplacer(mo: Module, x: number, y: number): void {
+  if (mo.parent !== null) return
+  mo.x = x
+  mo.y = y
 }
 
 export function peutAcheterAuto(j: Joueur): boolean {
@@ -371,11 +493,8 @@ export function prestiger(j: Joueur): boolean {
   j.prestiges += 1
   j.r = 0
   j.or = 0
-  j.unites = UNITES.map(() => 0)
   j.achetes = UNITES.map(() => 0)
   j.modules = []
-  j.anneaux = 1
-  j.niveaux = UNITES.map(() => 0)
   j.produitRun = 0
   return true
 }

@@ -1,36 +1,47 @@
 /**
  * LA FEUILLE DES MODULES : ce qui s'achète. Un module par achat, qui apparaît
- * sous la base et se glisse sur une prise ; les améliorations ; l'anneau de
- * prises suivant ; le comptoir automatique ; le prestige. C'est l'atelier
- * d'avant sans les quantités : chaque module est une pièce qu'on pose.
+ * sous l'arbre et se glisse sur un creux de sa forme ; le comptoir
+ * automatique ; le prestige. Les niveaux se prennent sur la carte, dans la
+ * bulle du module (Keko, 30/10 : « plutôt que rajouter des modules, cliquer
+ * sur les modules existants et les améliorer individuellement »).
  */
 import { useState, type ReactElement } from 'react'
-import { ANNEAUX, AUTO_COUT, PRESTIGE, UNITES } from '../../logic/clic/donnees.ts'
+import { AUTO_COUT, PRESTIGE, UNITES } from '../../logic/clic/donnees.ts'
 import {
-  acheterAmelioration, acheterAnneau, acheterAuto, acheterModule, coutAmelioration, coutAnneau, coutUnite, debit, debitModule,
-  multiplicateurPrestige, multiplicateurUnite, nombreDePrises, peutAcheterModule, pointsSi, prestiger, prisesLibres, prochainPalier,
-  visible, type Module,
+  acheterAuto, acheterModule, coutModule, debit, debitAuNiveau, formeDuType, multiplicateurPrestige, peutAcheterModule, pointsSi, prestiger,
+  prisesLibres, relies, visible, type Module,
 } from '../../logic/clic/moteur.ts'
 import { joueur } from '../../logic/clic/partie.ts'
 import { abrege, parSeconde } from '../../ui/format.ts'
-import { NOM_ANNEAU, NOM_AUTO, NOM_BASE, NOM_MODULE, NOM_PRESTIGE, NOM_R } from '../../ui/noms-clic.ts'
+import { NOM_AUTO, NOM_BASE, NOM_MODULE, NOM_PRESTIGE, NOM_R, NOMS_FORMES } from '../../ui/noms-clic.ts'
 import { vibrer } from '../../ui/haptique.ts'
 import { sonBatir } from '../../ui/sons.ts'
 import { eclater, effetDepense, flotter } from '../effets.ts'
 import { Feuille } from '../Feuille.tsx'
+import { boite, cheminDecoupe } from './pieces.ts'
 import type { PagePropsClic } from './props.ts'
+
+const ENCOCHE_GLYPHE = { largeur: 10, profondeur: 6 }
+const BOITE_GLYPHE = boite(14, 14, ENCOCHE_GLYPHE)
+
+/** Une petite pièce avec la bosse d'une forme : la forme se reconnaît avant d'acheter. */
+export function Glyphe({ forme }: { forme: number }): ReactElement {
+  return (
+    <svg className="glyphe-forme" viewBox={`${BOITE_GLYPHE.x} ${BOITE_GLYPHE.y} ${BOITE_GLYPHE.largeur} ${BOITE_GLYPHE.hauteur}`} aria-hidden>
+      <path d={cheminDecoupe(14, 14, [null, null, { genre: 'bosse', forme }, null], ENCOCHE_GLYPHE)} />
+    </svg>
+  )
+}
 
 export function Modules({ partie, agir, onFermer, onModule }: PagePropsClic & { onFermer: () => void; onModule: (mo: Module) => void }): ReactElement {
   const j = joueur(partie)
   const [confirmer, setConfirmer] = useState(false)
   const production = debit(j)
-  const libres = prisesLibres(j).length
-  const prises = nombreDePrises(j)
-  const anneau = coutAnneau(j)
-  const prochain = ANNEAUX[j.anneaux]
+  const reliees = relies(j)
+  const prises = prisesLibres(j)
 
   const acheter = (i: number, bouton: HTMLElement): void => {
-    const cout = coutUnite(j, i, 1)
+    const cout = coutModule(j, i)
     effetDepense(bouton.getBoundingClientRect(), cout)
     const achat: { mo: Module | null } = { mo: null }
     agir(() => {
@@ -39,69 +50,46 @@ export function Modules({ partie, agir, onFermer, onModule }: PagePropsClic & { 
     if (achat.mo !== null) onModule(achat.mo)
   }
 
-  const ameliorer = (i: number, bouton: HTMLElement): void => {
-    const cout = coutAmelioration(j, i)
-    if (cout === null) return
-    effetDepense(bouton.getBoundingClientRect(), cout)
-    agir(() => {
-      acheterAmelioration(j, i)
-    })
-    const r = bouton.getBoundingClientRect()
-    sonBatir()
-    vibrer([20, 30, 40])
-    flotter(r.left + r.width / 2, r.top - 28, '×2 !', 'flottant-or', 1.6)
-    eclater(r.left + r.width / 2, r.top, 16)
-  }
-
   const gain = pointsSi(j)
   const prestigeVisible = gain >= 1 || j.points > 0 || j.produitRun >= PRESTIGE.base / 4
   const autoVisible = !j.auto && (j.or >= AUTO_COUT / 4 || production >= 0.2)
-  const anneauVisible = anneau !== null && prochain !== undefined && (libres <= 2 || j.or >= anneau / 4)
 
   return (
     <Feuille titre="Modules" onFermer={onFermer}>
       <p className="sourd petit">
-        {libres} prise{libres > 1 ? 's' : ''} libre{libres > 1 ? 's' : ''} sur {prises}. Un module acheté apparaît sous {NOM_BASE} : glissez-le sur une prise, il tape pour vous.
+        Un module acheté apparaît sous {NOM_BASE} : glissez-le sur un creux de sa forme, sur {NOM_BASE} ou sur un autre module. Tapez un module pour l’améliorer.
       </p>
 
       {/* LES MODULES */}
       <section>
         {UNITES.map((u, i) => {
           if (!visible(j, i)) return null
-          const n = j.unites[i] ?? 0
-          const poses = j.modules.filter((mo) => mo.type === i && mo.prise === null).length
-          const cout = coutUnite(j, i, 1)
+          const forme = formeDuType(i)
+          const relies_ = j.modules.filter((mo) => mo.type === i && reliees.has(mo.id)).length
+          const poses = j.modules.filter((mo) => mo.type === i && !reliees.has(mo.id)).length
+          const creux = prises.filter((p) => p.forme === forme).length
+          const cout = coutModule(j, i)
           const payable = peutAcheterModule(j, i)
-          const palier = prochainPalier(n)
-          const mult = multiplicateurUnite(j, i) / multiplicateurPrestige(j)
-          const amelioration = coutAmelioration(j, i)
           return (
             <div key={u.id} className="unite">
               <div className="ligne ligne-sans-trait">
                 <span className="unite-texte">
                   <span>
-                    <b>{NOM_MODULE[i]}</b> {n > 0 && <span className="sourd">× {n}</span>}{' '}
-                    {poses > 0 && <span className="sourd petit">(+{poses} à brancher)</span>} {mult > 1 && <span className="gain petit">×{abrege(mult)}</span>}
+                    <Glyphe forme={forme} /> <b>{NOM_MODULE[i]}</b> {relies_ > 0 && <span className="sourd">× {relies_}</span>}{' '}
+                    {poses > 0 && (
+                      <span className="sourd petit">
+                        (+{poses} posé{poses > 1 ? 's' : ''})
+                      </span>
+                    )}
                   </span>
                   <span className="petit sourd">
-                    {parSeconde(debitModule(j, i))} chacun
-                    {palier !== null && n > 0 && ` · ×2 à ${palier} branchés`}
+                    {parSeconde(debitAuNiveau(j, i, 1))} au niveau 1 · {NOMS_FORMES[forme]}, {creux === 0 ? 'aucun creux libre' : `${creux} creux libre${creux > 1 ? 's' : ''}`}
                   </span>
                 </span>
                 <button type="button" className={payable ? 'bouton-principal' : ''} disabled={!payable} onClick={(e) => acheter(i, e.currentTarget)}>
                   {abrege(cout)} or
                 </button>
               </div>
-              {amelioration !== null && (
-                <div className="ligne ligne-sans-trait unite-amelioration">
-                  <span className="petit">
-                    Doubler {NOM_MODULE[i]} <span className="sourd">(niveau {(j.niveaux[i] ?? 0) + 1})</span>
-                  </span>
-                  <button type="button" className={j.or >= amelioration ? 'bouton-principal' : ''} disabled={j.or < amelioration} onClick={(e) => ameliorer(i, e.currentTarget)}>
-                    {abrege(amelioration)} or
-                  </button>
-                </div>
-              )}
             </div>
           )
         })}
@@ -111,35 +99,6 @@ export function Modules({ partie, agir, onFermer, onModule }: PagePropsClic & { 
           </p>
         )}
       </section>
-
-      {/* L'ANNEAU SUIVANT : des prises de plus, plus loin de la base. */}
-      {anneauVisible && anneau !== null && prochain !== undefined && (
-        <section>
-          <div className="ligne">
-            <span className="unite-texte">
-              <b>{NOM_ANNEAU}</b>
-              <span className="petit sourd">
-                Un anneau de {prochain.prises} prises de plus autour de {NOM_BASE} ({prises} → {prises + prochain.prises}).
-              </span>
-            </span>
-            <button
-              type="button"
-              className={j.or >= anneau ? 'bouton-principal' : ''}
-              disabled={j.or < anneau}
-              onClick={(e) => {
-                effetDepense(e.currentTarget.getBoundingClientRect(), anneau)
-                sonBatir()
-                vibrer([20, 30, 40])
-                agir(() => {
-                  acheterAnneau(j)
-                })
-              }}
-            >
-              {abrege(anneau)} or
-            </button>
-          </div>
-        </section>
-      )}
 
       {/* LE COMPTOIR AUTOMATIQUE */}
       {autoVisible && (
@@ -175,7 +134,7 @@ export function Modules({ partie, agir, onFermer, onModule }: PagePropsClic & { 
             <span className="unite-texte">
               <b>{NOM_PRESTIGE}</b>
               <span className="petit sourd">
-                Tout remettre à zéro (modules, anneaux, améliorations, {NOM_R}, or) contre des points permanents : chaque point ajoute ×1 à toute la production, tape comprise.
+                Tout remettre à zéro (modules et niveaux, {NOM_R}, or) contre des points permanents : chaque point ajoute ×1 à toute la production, tape comprise.
                 {j.points > 0 && ` Vous avez ${j.points} point${j.points > 1 ? 's' : ''} (production ×${abrege(multiplicateurPrestige(j))}).`}
               </span>
               <span className="petit">
@@ -197,7 +156,7 @@ export function Modules({ partie, agir, onFermer, onModule }: PagePropsClic & { 
       {confirmer && (
         <Feuille titre={NOM_PRESTIGE} onFermer={() => setConfirmer(false)}>
           <p>
-            Vous perdez vos {j.modules.length} module{j.modules.length > 1 ? 's' : ''}, vos anneaux, vos améliorations, {abrege(j.r)} {NOM_R} et {abrege(j.or)} or.
+            Vous perdez vos {j.modules.length} module{j.modules.length > 1 ? 's' : ''} et leurs niveaux, {abrege(j.r)} {NOM_R} et {abrege(j.or)} or.
           </p>
           <p>
             Vous gagnez <b className="gain">+{gain} point{gain > 1 ? 's' : ''}</b> : toute votre production passe de ×{abrege(multiplicateurPrestige(j))} à ×{abrege(multiplicateurPrestige(j) + gain)}, pour toujours. Les modules que vous connaissez restent connus.
