@@ -420,6 +420,26 @@ function partCouverte(j: Joueur, besoin: Quantites): number {
   return part > 1 - 1e-9 ? 1 : part
 }
 
+/** La part d'une production que l'entrepôt peut encore recevoir : 1 si tout rentre, 0 si une sortie est à ras bord. */
+function partRecue(j: Joueur, production: Quantites): number {
+  const cap = capacite(j)
+  let part = 1
+  for (const [r, q] of Object.entries(production)) {
+    if ((q ?? 0) <= 1e-12) continue
+    part = Math.min(part, Math.max(0, (cap - j.stock[r as Ressource]) / (q ?? 0)))
+  }
+  return part > 1 - 1e-9 ? 1 : part
+}
+
+/** La sortie de ce bâtiment que l'entrepôt ne peut plus recevoir (il est plein), ou null. */
+export function sortiePleine(j: Joueur, b: Batiment): Ressource | null {
+  const f = BATIMENTS[b.nom]
+  if (f.produit === undefined || f.type === 'chef') return null
+  const cap = capacite(j)
+  for (const [r, q] of Object.entries(f.produit)) if ((q ?? 0) > 0 && j.stock[r as Ressource] >= cap - 1e-9) return r as Ressource
+  return null
+}
+
 /** La première entrée qui manque, ou null. */
 function manquant(j: Joueur, besoin: Quantites): Ressource | null {
   for (const [r, q] of Object.entries(besoin)) if (j.stock[r as Ressource] < (q ?? 0) - 1e-9) return r as Ressource
@@ -475,14 +495,22 @@ export function avancer(m: Monde, dt: number): void {
         for (const [r, q] of Object.entries(f.produit ?? {})) perdu += ajouter(j, r as Ressource, (q ?? 0) * mult * dt)
         if (perdu > 1e-9) j.journal.heuresPleines += dt
       } else if (f.type === 'transformation') {
-        // LA PART DU PAS QUE LES ENTRÉES PERMETTENT : le reste du pas, l'atelier est arrêté.
+        // LA PART DU PAS QUE LES ENTRÉES PERMETTENT, ET QUE L'ENTREPÔT PEUT RECEVOIR : le reste du
+        // pas, l'atelier est arrêté. Un fourneau dont les braises débordent ne brûle pas son charbon
+        // pour rien (Keko : « un fourneau et du charbon, mais 0 braise » — l'entrepôt était plein).
         const besoin = fois(f.consomme ?? {}, mult * dt)
-        const part = partCouverte(j, besoin)
+        const production = fois(f.produit ?? {}, mult * dt)
+        const entrees = partCouverte(j, besoin)
+        const place = partRecue(j, production)
+        const part = Math.min(entrees, place)
         if (part > 0) {
           retirer(j, fois(besoin, part))
-          for (const [r, q] of Object.entries(f.produit ?? {})) ajouter(j, r as Ressource, (q ?? 0) * mult * dt * part)
+          for (const [r, q] of Object.entries(production)) ajouter(j, r as Ressource, (q ?? 0) * part)
         }
-        if (part < 1) arreter(j, besoin, dt * (1 - part))
+        if (part < 1) {
+          if (place < entrees) j.journal.heuresPleines += dt * (1 - part)
+          else arreter(j, besoin, dt * (1 - part))
+        }
       } else if (f.type === 'chef') {
         // LE CYCLE AVANCE AU FIL DES ENTRÉES : une part du cycle par pas, et le chef-d'œuvre sort à 1.
         const cycle = (mult * dt) / (f.cycleH ?? 4)

@@ -31,9 +31,8 @@ export function Stock({ partie, agir }: PageProps): ReactElement {
                 <span className="ligne-nom">
                   <PastilleRessource r={r} /> {NOM_RESSOURCE[r]}
                 </span>
-                <span className={`ligne-net ${net[r] < -1e-9 ? 'manque' : net[r] > 1e-9 ? 'gain' : 'sourd'}`}>
-                  {net[r] > 1e-9 ? '+' : ''}
-                  {Math.abs(net[r]) > 1e-9 ? `${nombreFin(net[r])}/h` : ''}
+                <span className={`ligne-net ${plein ? 'manque' : net[r] < -1e-9 ? 'manque' : net[r] > 1e-9 ? 'gain' : 'sourd'}`}>
+                  {plein ? 'plein' : `${net[r] > 1e-9 ? '+' : ''}${Math.abs(net[r]) > 1e-9 ? `${nombreFin(net[r])}/h` : ''}`}
                 </span>
                 <span className={`ligne-stock${plein ? ' manque' : ''}`}>{possede(j.stock[r])}</span>
                 <span className="ligne-prix sourd">{nombre(prixVente(m, r))} or</span>

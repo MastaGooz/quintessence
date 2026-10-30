@@ -8,7 +8,7 @@ import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { BATIMENTS, ELEMENTS, LABO, TOUTES, type NomBatiment, type Quantites, type Ressource } from '../logic/donnees.ts'
 import {
   ameliorer, bilanHoraire, capacite, construire, coutAmelioration, coutConstruction, demolir, emplacements, entreeManquante,
-  estimerVente, multiplicateur, occupes, peutConstruire, peutPayer, rang, tapoter, vendre, type Batiment,
+  estimerVente, multiplicateur, occupes, peutConstruire, peutPayer, rang, sortiePleine, tapoter, vendre, type Batiment,
 } from '../logic/moteur.ts'
 import { atteint, batimentOuvert, joueur } from '../logic/partie.ts'
 import { EFFET_BATIMENT, NOM_BATIMENT, NOM_COULEUR, NOM_ELEMENT, NOM_RESSOURCE } from '../ui/noms.ts'
@@ -132,9 +132,10 @@ export function Labo({ partie, agir }: PageProps): ReactElement {
             {j.batiments.map((b, i) => {
               const f = BATIMENTS[b.nom]
               const manque = entreeManquante(m, j, b)
+              const pleine = sortiePleine(j, b)
               const sabote = m.t < b.arretJusqua
               return (
-                <button key={i} type="button" className={`case${manque !== null || sabote ? ' case-arret' : ''}${i === neuve ? ' case-neuve' : ''}`} onClick={() => setOuvert(b)}>
+                <button key={i} type="button" className={`case${manque !== null || pleine !== null || sabote ? ' case-arret' : ''}${i === neuve ? ' case-neuve' : ''}`} onClick={() => setOuvert(b)}>
                   <IconeBatiment nom={b.nom} />
                   <span className="case-nom">{NOM_BATIMENT[b.nom]}</span>
                   {atteint(partie, 'ameliorer') && <span className="case-niveau">niv. {b.niveau}</span>}
@@ -143,7 +144,9 @@ export function Labo({ partie, agir }: PageProps): ReactElement {
                       ? `saboté ${duree(b.arretJusqua - m.t)}`
                       : manque !== null
                         ? `manque ${NOM_RESSOURCE[manque]}`
-                        : f.type === 'chef'
+                        : pleine !== null
+                          ? 'entrepôt plein'
+                          : f.type === 'chef'
                           ? `cycle ${Math.round(b.progres * 100)} %`
                           : f.produit !== undefined
                             ? Object.entries(f.produit)
@@ -208,8 +211,8 @@ function Reserves({ partie, agir }: PageProps): ReactElement {
             <span className="ligne-nom">
               <PastilleRessource r={r} /> {NOM_RESSOURCE[r]}
             </span>
-            <span className={`ligne-net ${net[r] < -1e-9 ? 'manque' : net[r] > 1e-9 ? 'gain' : 'sourd'}`}>
-              {Math.abs(net[r]) > 1e-9 ? `${net[r] > 0 ? '+' : ''}${nombreFin(net[r])}/h` : ''}
+            <span className={`ligne-net ${plein ? 'manque' : net[r] < -1e-9 ? 'manque' : net[r] > 1e-9 ? 'gain' : 'sourd'}`}>
+              {plein ? 'plein' : Math.abs(net[r]) > 1e-9 ? `${net[r] > 0 ? '+' : ''}${nombreFin(net[r])}/h` : ''}
             </span>
             <span className={`ligne-stock${plein ? ' manque' : ''}`} title={plein ? 'Entrepôt plein' : undefined}>
               <Compteur valeur={stock} />
