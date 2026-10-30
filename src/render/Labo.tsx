@@ -10,7 +10,7 @@ import {
   ameliorer, bilanHoraire, capacite, construire, coutAmelioration, coutConstruction, demolir, emplacements, entreeManquante,
   estimerVente, multiplicateur, occupes, peutConstruire, peutPayer, rang, tapoter, vendre, type Batiment,
 } from '../logic/moteur.ts'
-import { atteint, batimentOuvert, joueur, PAS } from '../logic/partie.ts'
+import { atteint, batimentOuvert, joueur } from '../logic/partie.ts'
 import { EFFET_BATIMENT, NOM_BATIMENT, NOM_COULEUR, NOM_ELEMENT, NOM_RESSOURCE } from '../ui/noms.ts'
 import { duree, nombre, nombreFin } from '../ui/format.ts'
 import { vibrer } from '../ui/haptique.ts'
@@ -131,7 +131,7 @@ export function Labo({ partie, agir }: PageProps): ReactElement {
           <div className="grille">
             {j.batiments.map((b, i) => {
               const f = BATIMENTS[b.nom]
-              const manque = entreeManquante(m, j, b, PAS)
+              const manque = entreeManquante(m, j, b)
               const sabote = m.t < b.arretJusqua
               return (
                 <button key={i} type="button" className={`case${manque !== null || sabote ? ' case-arret' : ''}${i === neuve ? ' case-neuve' : ''}`} onClick={() => setOuvert(b)}>

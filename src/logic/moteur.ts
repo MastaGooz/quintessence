@@ -403,8 +403,21 @@ export function ameliorer(m: Monde, j: Joueur, b: Batiment): boolean {
 
 // ---------------------------------------------------------------- LE TEMPS
 
-function disponibles(j: Joueur, besoin: Quantites): boolean {
-  return manquant(j, besoin) === null
+/**
+ * LA PART DU PAS QUE L'ENTREPÔT COUVRE : 1 si tout le besoin est là, 0 si une
+ * entrée manque tout à fait, entre les deux la fraction du pas que la plus
+ * courte permet. UN ATELIER NE S'ARRÊTE PAS TOUT OU RIEN : avec 2 charbon, le
+ * fourneau (10 par heure) tourne 12 minutes du quart d'heure, pas zéro. Keko :
+ * « j'ai du charbon et un fourneau mais ça produit 0 braise » — hors ligne le
+ * monde avance par pas de 15 min, et le pas entier exigeait 2,5 charbon.
+ */
+function partCouverte(j: Joueur, besoin: Quantites): number {
+  let part = 1
+  for (const [r, q] of Object.entries(besoin)) {
+    if ((q ?? 0) <= 1e-12) continue
+    part = Math.min(part, Math.max(0, j.stock[r as Ressource] / (q ?? 0)))
+  }
+  return part > 1 - 1e-9 ? 1 : part
 }
 
 /** La première entrée qui manque, ou null. */
@@ -413,14 +426,13 @@ function manquant(j: Joueur, besoin: Quantites): Ressource | null {
   return null
 }
 
-/** L'entrée qui manque à ce bâtiment pour tourner un pas, ou null s'il tourne. */
-export function entreeManquante(m: Monde, j: Joueur, b: Batiment, dt: number): Ressource | null {
+/** L'entrée qui manque à ce bâtiment pour tourner, ne serait-ce qu'un instant : la première à zéro. Null s'il tourne. */
+export function entreeManquante(m: Monde, j: Joueur, b: Batiment): Ressource | null {
   if (m.t < b.arretJusqua) return null
   const f = BATIMENTS[b.nom]
   if (f.consomme === undefined) return null
-  const mult = multiplicateur(j, b)
-  const part = f.type === 'chef' ? (mult * dt) / (f.cycleH ?? 4) : mult * dt
-  return manquant(j, fois(f.consomme, part))
+  for (const [r, q] of Object.entries(f.consomme)) if ((q ?? 0) > 0 && j.stock[r as Ressource] <= 1e-9) return r as Ressource
+  return null
 }
 
 function arreter(j: Joueur, besoin: Quantites, dt: number): void {
@@ -430,7 +442,8 @@ function arreter(j: Joueur, besoin: Quantites, dt: number): void {
 }
 
 function retirer(j: Joueur, besoin: Quantites): void {
-  for (const [r, q] of Object.entries(besoin)) j.stock[r as Ressource] -= q ?? 0
+  // Jamais sous zéro : la part couverte vide l'entrée au flottant près.
+  for (const [r, q] of Object.entries(besoin)) j.stock[r as Ressource] = Math.max(0, j.stock[r as Ressource] - (q ?? 0))
 }
 
 /** Ajoute dans la limite de l'entrepôt ; rend ce qui a débordé. */
@@ -462,24 +475,29 @@ export function avancer(m: Monde, dt: number): void {
         for (const [r, q] of Object.entries(f.produit ?? {})) perdu += ajouter(j, r as Ressource, (q ?? 0) * mult * dt)
         if (perdu > 1e-9) j.journal.heuresPleines += dt
       } else if (f.type === 'transformation') {
+        // LA PART DU PAS QUE LES ENTRÉES PERMETTENT : le reste du pas, l'atelier est arrêté.
         const besoin = fois(f.consomme ?? {}, mult * dt)
-        if (disponibles(j, besoin)) {
-          retirer(j, besoin)
-          for (const [r, q] of Object.entries(f.produit ?? {})) ajouter(j, r as Ressource, (q ?? 0) * mult * dt)
-        } else arreter(j, besoin, dt)
+        const part = partCouverte(j, besoin)
+        if (part > 0) {
+          retirer(j, fois(besoin, part))
+          for (const [r, q] of Object.entries(f.produit ?? {})) ajouter(j, r as Ressource, (q ?? 0) * mult * dt * part)
+        }
+        if (part < 1) arreter(j, besoin, dt * (1 - part))
       } else if (f.type === 'chef') {
         // LE CYCLE AVANCE AU FIL DES ENTRÉES : une part du cycle par pas, et le chef-d'œuvre sort à 1.
-        const part = (mult * dt) / (f.cycleH ?? 4)
-        const besoin = fois(f.consomme ?? {}, part)
-        if (disponibles(j, besoin)) {
-          retirer(j, besoin)
-          b.progres += part
+        const cycle = (mult * dt) / (f.cycleH ?? 4)
+        const besoin = fois(f.consomme ?? {}, cycle)
+        const part = partCouverte(j, besoin)
+        if (part > 0) {
+          retirer(j, fois(besoin, part))
+          b.progres += cycle * part
           if (b.progres >= 1 - 1e-9) {
             b.progres -= 1
             for (const [r, q] of Object.entries(f.produit ?? {})) ajouter(j, r as Ressource, q ?? 0)
             j.journal.chefsProduits += 1
           }
-        } else arreter(j, besoin, dt)
+        }
+        if (part < 1) arreter(j, besoin, dt * (1 - part))
       }
     }
     if (j.cuisson !== null && m.t + dt >= j.cuisson.fin - 1e-9) {
@@ -684,7 +702,7 @@ export function besoinRestant(j: Joueur): number {
 export function lancerCouleur(m: Monde, j: Joueur): boolean {
   if (!j.four || j.cuisson !== null) return false
   const besoin = besoinCouleur(j)
-  if (besoin === null || !disponibles(j, besoin)) return false
+  if (besoin === null || manquant(j, besoin) !== null) return false
   retirer(j, besoin)
   j.cuisson = { fin: m.t + COULEURS[j.couleur]!.dureeH }
   return true
