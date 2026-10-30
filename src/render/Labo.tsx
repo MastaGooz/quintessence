@@ -12,7 +12,7 @@ import {
 } from '../logic/moteur.ts'
 import { atteint, batimentOuvert, joueur } from '../logic/partie.ts'
 import { EFFET_BATIMENT, NOM_BATIMENT, NOM_COULEUR, NOM_ELEMENT, NOM_RESSOURCE } from '../ui/noms.ts'
-import { duree, nombre, nombreFin } from '../ui/format.ts'
+import { debitVisible, duree, nombre, nombreFin } from '../ui/format.ts'
 import { vibrer } from '../ui/haptique.ts'
 import { sonBatir, sonTape } from '../ui/sons.ts'
 import { Compteur } from './Compteur.tsx'
@@ -206,13 +206,14 @@ function Reserves({ partie, agir }: PageProps): ReactElement {
       {tenues.map((r) => {
         const stock = Math.floor(j.stock[r])
         const plein = j.stock[r] >= cap - 1e-9
+        const debit = debitVisible(net[r])
         return (
           <div key={r} className="ligne">
             <span className="ligne-nom">
               <PastilleRessource r={r} /> {NOM_RESSOURCE[r]}
             </span>
-            <span className={`ligne-net ${plein ? 'manque' : net[r] < -1e-9 ? 'manque' : net[r] > 1e-9 ? 'gain' : 'sourd'}`}>
-              {plein ? 'plein' : Math.abs(net[r]) > 1e-9 ? `${net[r] > 0 ? '+' : ''}${nombreFin(net[r])}/h` : ''}
+            <span className={`ligne-net ${plein ? 'manque' : debit < 0 ? 'manque' : debit > 0 ? 'gain' : 'sourd'}`}>
+              {plein ? 'plein' : debit !== 0 ? `${debit > 0 ? '+' : ''}${nombreFin(debit)}/h` : ''}
             </span>
             <span className={`ligne-stock${plein ? ' manque' : ''}`} title={plein ? 'Entrepôt plein' : undefined}>
               <Compteur valeur={stock} />

@@ -17,7 +17,14 @@ export function possede(n: number): string {
 
 /** Un nombre avec une décimale quand il est petit : « 0,5 », « 12 ». */
 export function nombreFin(n: number): string {
-  return (Math.abs(n) < 10 ? Math.round(n * 10) / 10 : Math.round(n)).toLocaleString('fr-FR')
+  const v = Math.abs(n) < 10 ? Math.round(n * 10) / 10 : Math.round(n)
+  // `Math.round(-0.5)` rend −0, qui s'écrirait « -0 » : −0,05 par heure s'affichait « −0/h ».
+  return (v === 0 ? 0 : v).toLocaleString('fr-FR')
+}
+
+/** Un débit par heure : ce qui s'écrirait « 0 » est tenu pour nul, signe compris. */
+export function debitVisible(n: number): number {
+  return Math.abs(n) < 0.05 ? 0 : n
 }
 
 /** « 3 h 15 », « 45 min », « 2 j 4 h ». */
