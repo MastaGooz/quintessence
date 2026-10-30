@@ -11,7 +11,7 @@ import { mouvementReduit, prendreLeRetard } from './effets.ts'
 const HAUT: Keyframe[] = [{ transform: 'scale(1)' }, { transform: 'scale(1.3)', color: '#ffffff', offset: 0.3 }, { transform: 'scale(1)' }]
 const BAS: Keyframe[] = [{ transform: 'scale(1)' }, { transform: 'scale(0.82)', color: 'var(--rouge)', offset: 0.3 }, { transform: 'scale(1)' }]
 
-export function Compteur({ valeur, duree = 420, cle }: { valeur: number; duree?: number; cle?: string }): ReactElement {
+export function Compteur({ valeur, duree = 420, cle, format = possede }: { valeur: number; duree?: number; cle?: string; format?: (n: number) => string }): ReactElement {
   const ref = useRef<HTMLSpanElement>(null)
   const [montre, setMontre] = useState(valeur)
   const affiche = useRef(valeur)
@@ -47,7 +47,7 @@ export function Compteur({ valeur, duree = 420, cle }: { valeur: number; duree?:
   }, [valeur, duree, cle])
   return (
     <span ref={ref} className="compteur">
-      {possede(montre)}
+      {format(montre)}
     </span>
   )
 }

@@ -862,3 +862,113 @@ select {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* LE SYSTÈME ABSTRAIT : le grand nombre, les unités, la courbe du marché. */
+.grand-nombre {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.5rem;
+  margin: 0.6rem 0 0.2rem;
+  text-align: center;
+}
+
+.grand-nombre-valeur {
+  font-size: 2.6rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.grand-nombre-unite {
+  font-size: 1.2rem;
+  font-weight: 700;
+  opacity: 0.8;
+}
+
+.grand-nombre-debit {
+  width: 100%;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.ligne-sans-trait {
+  border-bottom: 0;
+}
+
+.ligne-sans-trait h2 {
+  margin: 0.6rem 0 0.2rem;
+}
+
+.unite {
+  padding: 0.35rem 0;
+  border-bottom: 1px solid rgba(255, 246, 226, 0.1);
+}
+
+.unite .ligne {
+  padding: 0.2rem 0;
+}
+
+.unite-texte {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.unite button {
+  flex: none;
+  min-width: 6.5rem;
+  white-space: nowrap;
+}
+
+.unite-amelioration {
+  padding-left: 0.6rem;
+  opacity: 0.95;
+}
+
+.unite-amelioration button {
+  min-height: 2.2rem;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+.quantites-petites {
+  margin: 0;
+  gap: 0.25rem;
+}
+
+.quantites-petites button {
+  flex: none;
+  min-height: 2rem;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+.verrou {
+  margin-top: 0.6rem;
+  font-style: italic;
+}
+
+.marge-haute {
+  margin-top: 1.4rem;
+}
+
+.courbe {
+  display: block;
+  width: 100%;
+  height: 3.6rem;
+  margin: 0.5rem 0 0.2rem;
+}
+
+.prix-grand {
+  font-size: 1.4rem;
+  color: var(--or);
+}
+
+/* La tape du système abstrait garde son « +N R » lisible même petite. */
+.tape small {
+  letter-spacing: 0.01em;
+}

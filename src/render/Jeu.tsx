@@ -187,7 +187,7 @@ function Table({ partie, reelAuDepart, onRecommencer }: { partie: Partie; reelAu
 }
 
 /** Un haut-parleur, barré quand le son est coupé. */
-function IconeSon({ actif }: { actif: boolean }): ReactElement {
+export function IconeSon({ actif }: { actif: boolean }): ReactElement {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d="M4 9v6h3l5 4V5L7 9Z" />

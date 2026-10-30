@@ -27,6 +27,32 @@ export function debitVisible(n: number): number {
   return Math.abs(n) < 0.05 ? 0 : n
 }
 
+/**
+ * Un grand nombre abrégé : « 842 », « 12,4 k », « 3,07 M », « 1,2 G ». Sous le
+ * millier, tronqué (ce qu'on possède ne s'arrondit pas au-dessus) ; au-delà,
+ * trois chiffres qui comptent.
+ */
+export function abrege(n: number): string {
+  const signe = n < 0 ? '−' : ''
+  let v = Math.abs(n)
+  if (v < 1000) return signe + Math.floor(v + 1e-9).toLocaleString('fr-FR')
+  const suffixes = ['k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y']
+  let k = -1
+  while (v >= 999.5 && k < suffixes.length - 1) {
+    v /= 1000
+    k++
+  }
+  const decimales = v < 10 ? 2 : v < 100 ? 1 : 0
+  return `${signe}${v.toLocaleString('fr-FR', { minimumFractionDigits: decimales, maximumFractionDigits: decimales })} ${suffixes[k]}`
+}
+
+/** Un débit par seconde : « 0,35/s », « 12,4/s », « 3,07 k/s ». */
+export function parSeconde(n: number): string {
+  if (n < 10) return `${n.toLocaleString('fr-FR', { minimumFractionDigits: n < 1 ? 3 : 2, maximumFractionDigits: n < 1 ? 3 : 2 })}/s`
+  if (n < 1000) return `${n.toLocaleString('fr-FR', { maximumFractionDigits: 1 })}/s`
+  return `${abrege(n)}/s`
+}
+
 /** « 3 h 15 », « 45 min », « 2 j 4 h ». */
 export function duree(h: number): string {
   if (h < 1 / 60) return 'maintenant'
