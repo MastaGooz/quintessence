@@ -973,9 +973,20 @@ select {
   letter-spacing: 0.01em;
 }
 
-/* LA CARTE (test visuel, `?carte`) : un plan infini qu'on fait glisser et qu'on zoome, le bouton de clic au centre. */
+/* LA CARTE (Keko, 30/10) : un plan infini qu'on fait glisser et qu'on zoome, la base au centre. Elle remplit le corps de la page. */
+.jeu-carte {
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.corps-carte {
+  position: relative;
+  min-height: 0;
+  padding: 0;
+}
+
 .carte {
-  position: fixed;
+  position: absolute;
   inset: 0;
   overflow: hidden;
   touch-action: none;
@@ -1007,12 +1018,15 @@ select {
   will-change: transform;
 }
 
-.carte-bouton {
+/* LA BASE : le bouton de clic, au centre. Ses tailles sont en pixels-monde. */
+.base {
   position: absolute;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   border-radius: 50%;
   background: radial-gradient(circle at 50% 38%, var(--carte-claire) 0%, var(--carte) 70%);
   border: 6px solid rgba(255, 198, 31, 0.75);
@@ -1021,39 +1035,144 @@ select {
   font-weight: 800;
   cursor: pointer;
   transition: transform 0.08s ease-out, filter 0.08s ease-out;
-  outline: none;
 }
 
-.carte-bouton:focus-visible {
-  box-shadow: 0 0 0 8px rgba(255, 246, 226, 0.35), 0 0 70px rgba(255, 198, 31, 0.22);
-}
-
-.carte-bouton b {
-  font-size: 84px;
+.base b {
+  font-size: 72px;
   line-height: 1;
   color: var(--or);
   font-variant-numeric: tabular-nums;
 }
 
-.carte-bouton small {
-  margin-top: 10px;
-  font-size: 28px;
+.base-unite {
+  margin-top: -4px;
+  font-size: 26px;
   font-weight: 500;
   opacity: 0.75;
 }
 
-/* Le doigt posé : l'écrasement du clic ne vient qu'au relâchement, quand on sait qu'on n'a pas glissé. */
-.carte-bouton.enfonce {
+.base small {
+  font-size: 20px;
+  font-weight: 500;
+}
+
+/* Le doigt posé : l'écrasement de la tape ne vient qu'au relâchement, quand on sait qu'on n'a pas glissé. */
+.base.enfonce {
   transform: scale(0.95);
   filter: brightness(0.9);
 }
 
-/* Les commandes par-dessus la carte : elles ne glissent pas avec elle, et le doigt qui s'y pose ne la prend pas. */
-.carte-hud {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
+/* LES PRISES : des cases en pointillé en anneaux autour de la base ; celle que vise l'aimant s'allume. */
+.prise {
+  position: absolute;
+  width: 100px;
+  height: 100px;
+  border-radius: 20px;
+  border: 3px dashed rgba(255, 246, 226, 0.22);
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+
+.prise-visee {
+  border-color: var(--or);
+  border-style: solid;
+  background: rgba(255, 198, 31, 0.18);
+  box-shadow: 0 0 28px rgba(255, 198, 31, 0.7);
+  transform: scale(1.12);
+}
+
+/* LES MODULES : un carré d'une teinte par unité ; branché, il tape vers la base à sa cadence (`--cadence`, `--dx`/`--dy`). */
+.module {
+  position: absolute;
   z-index: 2;
+  width: 100px;
+  height: 100px;
+  border-radius: 20px;
+  background: linear-gradient(160deg, hsl(var(--teinte) 60% 64%) 0%, hsl(var(--teinte) 60% 40%) 100%);
+  border: 4px solid rgba(255, 246, 226, 0.6);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #1b1026;
+  font-weight: 800;
+  font-size: 48px;
+  cursor: grab;
+}
+
+.module b {
+  pointer-events: none;
+}
+
+.module-branche {
+  animation: tapoter var(--cadence) ease-in-out infinite;
+}
+
+/* La fiche : un petit rectangle d'or du module vers la base. */
+.module-branche::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: -1;
+  width: 44px;
+  height: 16px;
+  margin: -8px 0 0 -22px;
+  border-radius: 4px;
+  background: rgba(255, 198, 31, 0.8);
+  transform: rotate(var(--angle)) translateX(-68px);
+}
+
+.module-saisi {
+  z-index: 3;
+  cursor: grabbing;
+  animation: none;
+  transform: scale(1.1);
+  box-shadow: 0 18px 30px rgba(0, 0, 0, 0.55);
+}
+
+/* L'aimant : le module glisse vers la prise visée au lieu d'y sauter. */
+.module-aimante {
+  transition: left 0.14s cubic-bezier(0.2, 0.9, 0.3, 1), top 0.14s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.module-nait {
+  animation: naitre 0.5s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+
+@keyframes tapoter {
+  0%,
+  72% {
+    transform: translate(0, 0);
+  }
+  80% {
+    transform: translate(var(--dx), var(--dy));
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+@keyframes naitre {
+  from {
+    transform: scale(0);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .module-branche {
+    animation: none;
+  }
+}
+
+/* LES COMMANDES par-dessus la carte : elles ne glissent pas avec elle, et le doigt qui s'y pose ne la prend pas. */
+.carte-hud {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
 }
 
 .carte-hud > * {
@@ -1062,7 +1181,7 @@ select {
 
 .carte-zoom {
   position: absolute;
-  top: calc(0.7rem + env(safe-area-inset-top));
+  top: 0.7rem;
   left: 0.9rem;
   padding: 0.2rem 0.55rem;
   border-radius: 0.5rem;
@@ -1072,23 +1191,53 @@ select {
   opacity: 0.8;
 }
 
-.carte-centrer {
+.carte-indice {
   position: absolute;
+  top: 3.2rem;
   left: 50%;
-  bottom: calc(1.1rem + env(safe-area-inset-bottom));
   transform: translateX(-50%);
-  min-height: 3rem;
-  padding: 0 1.6rem;
-}
-
-.carte-centrer:not(:disabled):active {
-  transform: translateX(-50%) scale(0.95);
-}
-
-.carte-build {
-  position: absolute;
-  right: 0.9rem;
-  top: calc(0.9rem + env(safe-area-inset-top));
-  font-size: 0.7rem;
+  margin: 0;
+  padding: 0.3rem 0.8rem;
+  border-radius: 0.6rem;
+  background: rgba(20, 8, 28, 0.6);
+  font-size: 0.85rem;
+  white-space: nowrap;
   pointer-events: none;
+}
+
+.carte-actions {
+  position: absolute;
+  left: 0.8rem;
+  right: 0.8rem;
+  bottom: calc(0.9rem + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.carte-actions > * {
+  pointer-events: auto;
+}
+
+.carte-actions-barre {
+  bottom: calc(var(--barre-bas) + 0.9rem + env(safe-area-inset-bottom));
+}
+
+.carte-actions-ligne {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.carte-actions-ligne button {
+  min-width: 6.5rem;
+  min-height: 3rem;
+}
+
+.carte-auto {
+  text-align: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: 0.5rem;
+  background: rgba(20, 8, 28, 0.55);
 }

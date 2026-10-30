@@ -92,3 +92,21 @@ export const PRESTIGE = {
   base: 1e6,
   parPoint: 1,
 }
+
+/**
+ * LA BASE ET SES PRISES (Keko, 30/10 : « le clicker comme base, et on achète
+ * des modules qui se plug dessus »). Le monde est un plan en pixels-monde ;
+ * la base est un disque au centre, les modules des carrés qu'on branche sur
+ * des prises disposées en anneaux autour d'elle. Le premier anneau est
+ * offert, les suivants s'achètent : la place est la limite, pas l'or seul.
+ * Les coûts des anneaux sont de moi, à rejuger.
+ */
+export const BASE = { rayon: 200 }
+export const MODULE = { taille: 100 }
+export const ANNEAUX: readonly { prises: number; cout: number; distance: number }[] = [
+  { prises: 8, cout: 0, distance: 270 },
+  { prises: 12, cout: 1000, distance: 400 },
+  { prises: 16, cout: 100000, distance: 530 },
+  { prises: 20, cout: 1e7, distance: 660 },
+  { prises: 24, cout: 1e9, distance: 790 },
+]

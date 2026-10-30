@@ -3,12 +3,14 @@
  * par jour. À chaque visite : prestige si ça vaut le coup, quelques dizaines
  * de tapes, vente de ce qu'ils ont en main, puis achats gloutons — l'option
  * qui rapporte le plus de production par or dépensé, tant qu'il reste de l'or.
- * Ils ne font rien qu'un vrai joueur ne pourrait faire.
+ * Un module acheté est branché sur la première prise libre ; base pleine, le
+ * bot achète l'anneau suivant ou jette son module le plus faible pour faire
+ * la place. Ils ne font rien qu'un vrai joueur ne pourrait faire.
  */
 import { AUTO_COUT, PRESTIGE, UNITES } from './donnees.ts'
 import {
-  acheterAmelioration, acheterAuto, acheterUnite, coutAmelioration, coutUnite, debit, multiplicateurPrestige, pointsSi, prestiger,
-  taper, vendre, visible, type Joueur, type Monde,
+  acheterAmelioration, acheterAnneau, acheterAuto, acheterModule, brancher, coutAmelioration, coutAnneau, coutUnite, debit, debitModule,
+  jeter, multiplicateurPrestige, pointsSi, prestiger, prisesLibres, taper, vendre, visible, type Joueur, type Module, type Monde,
 } from './moteur.ts'
 
 export interface Strategie {
@@ -26,20 +28,58 @@ interface Option {
   faire: () => boolean
 }
 
+/** Achète un module et le branche sur la première prise libre. */
+function acheterEtBrancher(j: Joueur, i: number): boolean {
+  const prise = prisesLibres(j)[0]
+  if (prise === undefined) return false
+  const mo = acheterModule(j, i)
+  return mo !== null && brancher(j, mo, prise)
+}
+
+function copie(j: Joueur): Joueur {
+  return { ...j, unites: [...j.unites], niveaux: [...j.niveaux] }
+}
+
 function options(j: Joueur): Option[] {
   const liste: Option[] = []
   const d = debit(j)
+  const libres = prisesLibres(j).length
+  const anneau = coutAnneau(j)
+  // Le module branché le plus faible : celui qu'on jetterait pour faire de la place.
+  let faible: Module | undefined
+  for (const mo of j.modules) if (mo.prise !== null && (faible === undefined || debitModule(j, mo.type) < debitModule(j, faible.type))) faible = mo
   for (let i = 0; i < UNITES.length; i++) {
     if (!visible(j, i)) continue
     const c = coutUnite(j, i)
-    const essai: Joueur = { ...j, unites: [...j.unites], niveaux: [...j.niveaux] }
+    const essai = copie(j)
     essai.unites[i] = (essai.unites[i] ?? 0) + 1
-    liste.push({ cout: c, gain: debit(essai) - d, faire: () => acheterUnite(j, i) })
+    const gain = debit(essai) - d
+    if (libres > 0) liste.push({ cout: c, gain, faire: () => acheterEtBrancher(j, i) })
+    else {
+      if (anneau !== null) liste.push({ cout: c + anneau, gain, faire: () => acheterAnneau(j) && acheterEtBrancher(j, i) })
+      if (faible !== undefined && faible.type !== i) {
+        const e2 = copie(j)
+        e2.unites[i] = (e2.unites[i] ?? 0) + 1
+        e2.unites[faible.type] = (e2.unites[faible.type] ?? 0) - 1
+        const g2 = debit(e2) - d
+        const aJeter = faible
+        if (g2 > 0) {
+          liste.push({
+            cout: c,
+            gain: g2,
+            faire: () => {
+              jeter(j, aJeter)
+              return acheterEtBrancher(j, i)
+            },
+          })
+        }
+      }
+    }
     const ca = coutAmelioration(j, i)
     if (ca !== null) {
-      const e2: Joueur = { ...j, unites: [...j.unites], niveaux: [...j.niveaux] }
-      e2.niveaux[i] = (e2.niveaux[i] ?? 0) + 1
-      liste.push({ cout: ca, gain: debit(e2) - d, faire: () => acheterAmelioration(j, i) })
+      const e3 = copie(j)
+      e3.niveaux[i] = (e3.niveaux[i] ?? 0) + 1
+      liste.push({ cout: ca, gain: debit(e3) - d, faire: () => acheterAmelioration(j, i) })
     }
   }
   return liste

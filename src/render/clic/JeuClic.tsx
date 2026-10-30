@@ -2,8 +2,8 @@
  * LE JEU du système abstrait : une partie contre sept bots, au rythme de
  * l'horloge réelle (`?vitesse=60` : une minute réelle vaut une heure de jeu).
  * Sauvée à chaque action et à chaque seconde ; au retour, le monde rattrape le
- * temps écoulé. Le jeu commence par la tape seule : les pages n'apparaissent
- * qu'avec la première unité.
+ * temps écoulé. Le jeu commence par la base seule : les pages n'apparaissent
+ * qu'avec le premier module.
  */
 import { useEffect, useReducer, useRef, useState, type ReactElement } from 'react'
 import { SAISON_H } from '../../logic/clic/donnees.ts'
@@ -16,14 +16,14 @@ import { basculerSon, sonActif, sonClic } from '../../ui/sons.ts'
 import { Compteur } from '../Compteur.tsx'
 import { declarerCibleOr, monterCouche } from '../effets.ts'
 import { IconeSon } from '../Jeu.tsx'
-import { Atelier } from './Atelier.tsx'
+import { Base } from './Base.tsx'
 import { MarcheClic } from './MarcheClic.tsx'
 import { RivauxClic } from './RivauxClic.tsx'
 
-type Page = 'atelier' | 'marche' | 'rivaux'
+type Page = 'base' | 'marche' | 'rivaux'
 
 const PAGES: { id: Page; nom: string }[] = [
-  { id: 'atelier', nom: 'Atelier' },
+  { id: 'base', nom: 'Base' },
   { id: 'marche', nom: 'Marché' },
   { id: 'rivaux', nom: 'Rivaux' },
 ]
@@ -45,7 +45,7 @@ function Accueil({ onCommencer }: { onCommencer: (nom: string) => void }): React
     <div className="accueil">
       <h1>Quintessence</h1>
       <p className="sourd petit">Prototype du système abstrait, sans habillage.</p>
-      <p>Un seul nombre. Tapez pour produire, vendez pour gagner de l’or, achetez des unités qui produisent toutes seules.</p>
+      <p>Un seul nombre. Tapez la base pour produire, vendez pour gagner de l’or, achetez des modules et branchez-les sur la base : ils tapent pour vous.</p>
       <label>
         Votre nom
         <input type="text" value={nom} maxLength={16} placeholder="Nicolas" onChange={(e) => setNom(e.target.value)} />
@@ -68,7 +68,7 @@ function Accueil({ onCommencer }: { onCommencer: (nom: string) => void }): React
 }
 
 function Table({ partie, reelAuDepart, onRecommencer }: { partie: Partie; reelAuDepart: number; onRecommencer: () => void }): ReactElement {
-  const [page, setPage] = useState<Page>('atelier')
+  const [page, setPage] = useState<Page>('base')
   const [, repeindre] = useReducer((x: number) => x + 1, 0)
   const reel = useRef(reelAuDepart)
   const vitesse = useRef(vitesseDemandee())
@@ -122,9 +122,11 @@ function Table({ partie, reelAuDepart, onRecommencer }: { partie: Partie; reelAu
   const props = { partie, agir }
   // Le jeu s'ouvre une chose à la fois : la barre et l'heure arrivent avec la première unité.
   const ouvert = j.connues >= 2 || j.points > 0
-  const pageVue = ouvert ? page : 'atelier'
+  const pageVue = ouvert ? page : 'base'
+  // La carte remplit le corps : la page ne défile pas, c'est le plan qui glisse.
+  const surLaCarte = !finie(partie) && pageVue === 'base'
   return (
-    <div className="jeu">
+    <div className={`jeu${surLaCarte ? ' jeu-carte' : ''}`}>
       <div className="effets" ref={monterCouche} aria-hidden />
       <header className="entete">
         <span className="entete-or">
@@ -155,7 +157,7 @@ function Table({ partie, reelAuDepart, onRecommencer }: { partie: Partie; reelAu
           <IconeSon actif={sonActif()} />
         </button>
       </header>
-      <main className="corps">
+      <main className={`corps${surLaCarte ? ' corps-carte' : ''}`}>
         {finie(partie) ? (
           <Fin partie={partie} onRecommencer={onRecommencer} />
         ) : pageVue === 'marche' ? (
@@ -163,7 +165,7 @@ function Table({ partie, reelAuDepart, onRecommencer }: { partie: Partie; reelAu
         ) : pageVue === 'rivaux' ? (
           <RivauxClic {...props} />
         ) : (
-          <Atelier {...props} />
+          <Base {...props} avecBarre={ouvert} />
         )}
       </main>
       {ouvert && (

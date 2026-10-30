@@ -38,7 +38,7 @@ function abrege(n: number): string {
 
 function resume(j: Joueur): string {
   const u = UNITES.map((_, i) => `${j.unites[i]}${(j.niveaux[i] ?? 0) > 0 ? `+${j.niveaux[i]}` : ''}`).join('/')
-  return `R ${abrege(j.r)} or ${abrege(j.or)} | ${abrege(debit(j))}/s | [${u}]${j.auto ? ' auto' : ''} | pts ${j.points} (×${j.prestiges}) | total ${abrege(j.total)}`
+  return `R ${abrege(j.r)} or ${abrege(j.or)} | ${abrege(debit(j))}/s | [${u}]${j.auto ? ' auto' : ''} | anneaux ${j.anneaux} | pts ${j.points} (×${j.prestiges}) | total ${abrege(j.total)}`
 }
 
 export function jouerSaison(): Monde {
