@@ -4,7 +4,7 @@ import { COULEURS, ELEMENTS } from '../logic/donnees.ts'
 import { besoinCouleur, CHEF, construire, coutConstruction, lancerCouleur, peutConstruire, peutPayer } from '../logic/moteur.ts'
 import { joueur } from '../logic/partie.ts'
 import { NOM_COULEUR, NOM_RESSOURCE } from '../ui/noms.ts'
-import { duree, nombre } from '../ui/format.ts'
+import { duree, possede } from '../ui/format.ts'
 import { Cout } from './Cout.tsx'
 import { PastilleRessource } from './Icone.tsx'
 import type { PageProps } from './props.ts'
@@ -100,7 +100,7 @@ export function Oeuvre({ partie, agir }: PageProps): ReactElement {
           })}
           {j.couleur >= COULEURS.length && (
             <p className="alerte">
-              Vous tenez la pierre philosophale. {nombre(j.or)} or en poche, et une saison gagnée.
+              Vous tenez la pierre philosophale. {possede(j.or)} or en poche, et une saison gagnée.
             </p>
           )}
         </section>

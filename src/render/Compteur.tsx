@@ -5,7 +5,7 @@
  * attendre que les pièces soient arrivées avant de bouger.
  */
 import { useEffect, useRef, useState, type ReactElement } from 'react'
-import { nombre } from '../ui/format.ts'
+import { possede } from '../ui/format.ts'
 import { mouvementReduit, prendreLeRetard } from './effets.ts'
 
 const HAUT: Keyframe[] = [{ transform: 'scale(1)' }, { transform: 'scale(1.3)', color: '#ffffff', offset: 0.3 }, { transform: 'scale(1)' }]
@@ -47,7 +47,7 @@ export function Compteur({ valeur, duree = 420, cle }: { valeur: number; duree?:
   }, [valeur, duree, cle])
   return (
     <span ref={ref} className="compteur">
-      {nombre(montre)}
+      {possede(montre)}
     </span>
   )
 }

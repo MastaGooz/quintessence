@@ -4,7 +4,7 @@ import { COUPS, ELEMENTS } from '../logic/donnees.ts'
 import { aLe, CHEF, espionner, fortune, peutEspionner, peutPiller, peutSaboter, piller, saboter, voit, type Joueur } from '../logic/moteur.ts'
 import { atteint, classement, joueur, titre } from '../logic/partie.ts'
 import { NOM_ELEMENT } from '../ui/noms.ts'
-import { duree, nombre } from '../ui/format.ts'
+import { duree, nombre, possede } from '../ui/format.ts'
 import type { PageProps } from './props.ts'
 
 const COULEURS_FIOLE = ['transparent', '#15090f', '#fff6e2', '#f2c744', '#d92b2b']
@@ -81,8 +81,8 @@ function Rival({ partie, agir, r }: PageProps & { r: Joueur }): ReactElement {
       </div>
       {vu ? (
         <p className="petit">
-          {nombre(r.or)} or · {r.batiments.length} bâtiments · fortune {nombre(fortune(m, r))} ·{' '}
-          {ELEMENTS.map((e) => `${NOM_ELEMENT[e]} ${r.points[e]}`).join(', ')} · chefs-d’œuvre : {ELEMENTS.map((e) => nombre(r.stock[CHEF[e]])).join(' / ')}
+          {possede(r.or)} or · {r.batiments.length} bâtiments · fortune {nombre(fortune(m, r))} ·{' '}
+          {ELEMENTS.map((e) => `${NOM_ELEMENT[e]} ${r.points[e]}`).join(', ')} · chefs-d’œuvre : {ELEMENTS.map((e) => possede(r.stock[CHEF[e]])).join(' / ')}
           {aLe(r, 'gardien') && ' · gardien'}
           {aLe(r, 'cercle') && ' · cercle'}
         </p>

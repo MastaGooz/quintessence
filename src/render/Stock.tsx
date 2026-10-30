@@ -4,7 +4,7 @@ import { ELEMENTS, RESSOURCES, TOUTES, type Ressource } from '../logic/donnees.t
 import { bilanHoraire, capacite, prixVente } from '../logic/moteur.ts'
 import { joueur } from '../logic/partie.ts'
 import { NOM_ELEMENT, NOM_RESSOURCE } from '../ui/noms.ts'
-import { nombre, nombreFin } from '../ui/format.ts'
+import { nombre, nombreFin, possede } from '../ui/format.ts'
 import { Echange } from './Echange.tsx'
 import { PastilleRessource } from './Icone.tsx'
 import type { PageProps } from './props.ts'
@@ -35,7 +35,7 @@ export function Stock({ partie, agir }: PageProps): ReactElement {
                   {net[r] > 1e-9 ? '+' : ''}
                   {Math.abs(net[r]) > 1e-9 ? `${nombreFin(net[r])}/h` : ''}
                 </span>
-                <span className={`ligne-stock${plein ? ' manque' : ''}`}>{nombre(j.stock[r])}</span>
+                <span className={`ligne-stock${plein ? ' manque' : ''}`}>{possede(j.stock[r])}</span>
                 <span className="ligne-prix sourd">{nombre(prixVente(m, r))} or</span>
               </button>
             )
