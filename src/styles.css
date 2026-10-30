@@ -972,3 +972,123 @@ select {
 .tape small {
   letter-spacing: 0.01em;
 }
+
+/* LA CARTE (test visuel, `?carte`) : un plan infini qu'on fait glisser et qu'on zoome, le bouton de clic au centre. */
+.carte {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  background: radial-gradient(ellipse 80% 60% at 50% 50%, #2a1838 0%, var(--fond) 75%);
+  cursor: grab;
+}
+
+.carte-glisse {
+  cursor: grabbing;
+}
+
+.carte-quadrillage {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Le monde : un seul transform le place et le met à l'échelle ; ses enfants sont en pixels-monde. */
+.carte-monde {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.carte-bouton {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 38%, var(--carte-claire) 0%, var(--carte) 70%);
+  border: 6px solid rgba(255, 198, 31, 0.75);
+  box-shadow: 0 0 70px rgba(255, 198, 31, 0.22), inset 0 -14px 34px rgba(0, 0, 0, 0.35);
+  color: var(--creme);
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.08s ease-out, filter 0.08s ease-out;
+  outline: none;
+}
+
+.carte-bouton:focus-visible {
+  box-shadow: 0 0 0 8px rgba(255, 246, 226, 0.35), 0 0 70px rgba(255, 198, 31, 0.22);
+}
+
+.carte-bouton b {
+  font-size: 84px;
+  line-height: 1;
+  color: var(--or);
+  font-variant-numeric: tabular-nums;
+}
+
+.carte-bouton small {
+  margin-top: 10px;
+  font-size: 28px;
+  font-weight: 500;
+  opacity: 0.75;
+}
+
+/* Le doigt posé : l'écrasement du clic ne vient qu'au relâchement, quand on sait qu'on n'a pas glissé. */
+.carte-bouton.enfonce {
+  transform: scale(0.95);
+  filter: brightness(0.9);
+}
+
+/* Les commandes par-dessus la carte : elles ne glissent pas avec elle, et le doigt qui s'y pose ne la prend pas. */
+.carte-hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.carte-hud > * {
+  pointer-events: auto;
+}
+
+.carte-zoom {
+  position: absolute;
+  top: calc(0.7rem + env(safe-area-inset-top));
+  left: 0.9rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 0.5rem;
+  background: rgba(20, 8, 28, 0.55);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
+.carte-centrer {
+  position: absolute;
+  left: 50%;
+  bottom: calc(1.1rem + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  min-height: 3rem;
+  padding: 0 1.6rem;
+}
+
+.carte-centrer:not(:disabled):active {
+  transform: translateX(-50%) scale(0.95);
+}
+
+.carte-build {
+  position: absolute;
+  right: 0.9rem;
+  top: calc(0.9rem + env(safe-area-inset-top));
+  font-size: 0.7rem;
+  pointer-events: none;
+}
