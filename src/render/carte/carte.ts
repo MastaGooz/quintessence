@@ -37,6 +37,8 @@ export interface Interactions {
 export interface Carte {
   /** Ramène la vue au zoom normal, centrée sur l'origine, en glissant. */
   centrer(): void
+  /** Glisse jusqu'à ce point du monde, au zoom normal : il se place au centre de l'écran, moins `dessous` pixels-monde laissés sous lui (la place des commandes). */
+  viser(wx: number, wy: number, dessous?: number): void
   /** Dit ce que le zoom normal doit faire tenir à l'écran : un rayon autour de l'origine, et `bas` pixels-monde de plus sous lui ; le zoom normal ne descend pas sous `zoomMin`. */
   cadrer(rayon: number, bas?: number, zoomMin?: number): void
   versMonde(sx: number, sy: number): Point
@@ -58,8 +60,8 @@ const LIGNES_MIN = 22
 const LIGNES_PLEINES = 56
 /** L'opacité d'un niveau de maille au plus ; les niveaux se superposent, une ligne commune à trois niveaux est trois fois plus marquée. */
 const ALPHA_MAILLE = 0.22
-/** Le retour au centre, en millisecondes. */
-const DUREE_CENTRER = 380
+/** Un glissement de la vue (le retour au centre, la visée d'une pièce), en millisecondes. */
+export const DUREE_GLISSE = 380
 
 interface Vue {
   x: number
@@ -158,11 +160,6 @@ export function monterCarte(el: HTMLElement, c: HTMLCanvasElement, m: HTMLElemen
     vue.y = p.y - (sy2 - hauteur / 2) / z2
     demander()
   }
-  const arreterLAnimation = (): void => {
-    cancelAnimationFrame(animation)
-    animation = 0
-  }
-
   // LES DOIGTS (et la souris) : un seul glisse, deux pincent ; un doigt posé sur une cible et relevé sans bouger clique ; un doigt posé sur une chose saisissable l'emporte.
   const doigts = new Map<number, Point>()
   let geste: { depart: Point; bouge: boolean; cible: HTMLElement | null } | null = null
@@ -271,14 +268,25 @@ export function monterCarte(el: HTMLElement, c: HTMLCanvasElement, m: HTMLElemen
 
   /** La vue normale : le zoom normal, l'origine en haut du cadre et ce qu'il y a dessous visible. */
   const vueNormale = (): Vue => ({ x: 0, y: cadre.bas / 2, z: normal })
+  /** La vue qui met un point du monde au centre, `dessous` pixels-monde réservés sous lui, au zoom normal. */
+  const vueSur = (wx: number, wy: number, dessous: number): Vue => ({ x: wx, y: wy + dessous / 2, z: normal })
+  const memeVue = (a: Vue, b: Vue): boolean => Math.abs(a.z - b.z) < 1e-6 && Math.abs(a.x - b.x) < 1 && Math.abs(a.y - b.y) < 1
 
-  /** Ramène la vue normale, en glissant. */
-  const centrer = (): void => {
+  /** Où va le glissement en cours, s'il y en a un : un recadrage pendant le trajet garde la destination. */
+  let but: { vue: Vue; visee: { wx: number; wy: number; dessous: number } | null } | null = null
+  const arreterLAnimation = (): void => {
+    cancelAnimationFrame(animation)
+    animation = 0
+    but = null
+  }
+
+  /** Glisse jusqu'à cette vue. */
+  const glisser = (arrivee: Vue, visee: { wx: number; wy: number; dessous: number } | null): void => {
     arreterLAnimation()
+    but = { vue: arrivee, visee }
     const depart: Vue = { ...vue }
-    const arrivee = vueNormale()
     const t0 = performance.now()
-    const duree = mouvementReduit() ? 0 : DUREE_CENTRER
+    const duree = mouvementReduit() ? 0 : DUREE_GLISSE
     const pas = (t: number): void => {
       const u = duree === 0 ? 1 : Math.min(1, (t - t0) / duree)
       const e = 1 - Math.pow(1 - u, 3)
@@ -287,10 +295,19 @@ export function monterCarte(el: HTMLElement, c: HTMLCanvasElement, m: HTMLElemen
       // Le zoom s'interpole en logarithme : à mi-chemin, la moitié du grossissement.
       vue.z = depart.z * Math.pow(arrivee.z / depart.z, e)
       demander()
-      animation = u < 1 ? requestAnimationFrame(pas) : 0
+      if (u < 1) animation = requestAnimationFrame(pas)
+      else {
+        animation = 0
+        but = null
+      }
     }
     animation = requestAnimationFrame(pas)
   }
+
+  /** Ramène la vue normale, en glissant. */
+  const centrer = (): void => glisser(vueNormale(), null)
+  /** Glisse jusqu'à un point du monde (Keko, 31/10 : « quand un nouveau module est créé, focus dessus au lieu de ramener au centre »). */
+  const viser = (wx: number, wy: number, dessous = 0): void => glisser(vueSur(wx, wy, dessous), { wx, wy, dessous })
 
   mesurer()
   Object.assign(vue, vueNormale())
@@ -309,12 +326,15 @@ export function monterCarte(el: HTMLElement, c: HTMLCanvasElement, m: HTMLElemen
 
   return {
     centrer,
+    viser,
     cadrer(rayonNeuf, basNeuf = 0, zoomMin) {
-      const avant = vueNormale()
-      const etaitNormale = Math.abs(vue.z - avant.z) < 1e-6 && Math.abs(vue.x - avant.x) < 1 && Math.abs(vue.y - avant.y) < 1
+      // Ce qui compte, c'est où la vue EST, ou où elle VA : une pièce qui vient de naître a lancé sa visée avant que l'installation grandie ne recadre.
+      const visee = but?.visee ?? null
+      const etaitNormale = memeVue(but?.vue ?? vue, vueNormale())
       cadre = { rayon: rayonNeuf, bas: basNeuf, zoomMin }
       mesurer()
-      if (etaitNormale) centrer()
+      if (visee !== null) viser(visee.wx, visee.wy, visee.dessous)
+      else if (etaitNormale) centrer()
       else demander()
     },
     versMonde,

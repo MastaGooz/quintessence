@@ -28,7 +28,7 @@ import { vibrer } from '../../ui/haptique.ts'
 import { LETTRE_PRODUCTEUR, NOM_AUTO, NOM_BASE, NOM_MODULE, NOM_PRODUCTEUR, NOM_R } from '../../ui/noms-clic.ts'
 import { sonBatir, sonTape } from '../../ui/sons.ts'
 import { Compteur } from '../Compteur.tsx'
-import { monterCarte, type Carte, type Point } from '../carte/carte.ts'
+import { DUREE_GLISSE, monterCarte, type Carte, type Point } from '../carte/carte.ts'
 import { eclater, effetDepense, effetVente, flotter, mouvementReduit } from '../effets.ts'
 import { Boutique } from './Boutique.tsx'
 import { boite, cheminDecoupe, cotesDuModule, cotesDuProducteur } from './pieces.ts'
@@ -313,18 +313,23 @@ export function Base({ partie, agir, avecBarre }: PagePropsClic & { avecBarre: b
     vibrer(pose ? 10 : [20, 40, 20])
   }
 
-  /** Une pièce vient d'être achetée : elle apparaît sous l'installation, et la vue revient au normal pour qu'on la voie. */
+  /**
+   * Une pièce vient d'être achetée : elle apparaît sous l'installation, et la vue glisse jusqu'à elle, au zoom normal
+   * (Keko, 31/10 : « quand un nouveau module est créé, focus dessus au lieu de ramener au centre ») ; l'éclat l'attend là.
+   */
   const naitre = (genre: 'producteur' | 'module', id: number, x: number, y: number): void => {
     setBoutique(false)
     setBulle(null)
     sonBatir()
     vibrer([15, 30])
-    carte.current?.centrer()
+    carte.current?.viser(x, y, DESSOUS_HUD)
     requestAnimationFrame(() => {
       ;(genre === 'module' ? modulesEl : producteursEl).current.get(id)?.classList.add('piece-nait')
+    })
+    window.setTimeout(() => {
       const s = surLaPage({ x, y })
       if (s !== null) eclater(s.x, s.y, 10)
-    })
+    }, DUREE_GLISSE)
   }
 
   /** L'AMÉLIORATION depuis la bulle : un niveau de plus, et le module le montre. */
