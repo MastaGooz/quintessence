@@ -1,29 +1,43 @@
 /**
  * LE MOTEUR du système abstrait : pur, le temps en heures injecté, aucun
- * hasard. Tout ce qu'un joueur peut faire passe par ici (taper, vendre,
- * acheter un module, l'emboîter, l'améliorer, prestiger) ; `avancer` fait
- * produire et vendre le monde.
+ * hasard de son cru (un tirage lui est passé quand il en faut un). Tout ce
+ * qu'un joueur peut faire passe par ici (déclencher un producteur, vendre,
+ * acheter, emboîter, améliorer, prestiger) ; `avancer` fait produire et vendre
+ * le monde.
  *
- * LA BASE ET SES MODULES FONT UN PUZZLE (Keko, 30/10) : la base est un
- * rectangle creusé d'une forme sur chaque côté ; un module est une case qui
- * porte la bosse de sa forme sur un côté et des creux sur les trois autres ;
- * il s'emboîte sur un creux de sa forme, de la base ou d'un module déjà
- * emboîté, et les modules s'enchaînent ainsi en arbre. Seuls les modules
- * reliés à la base produisent. Un module s'améliore niveau par niveau.
+ * LES PRODUCTEURS ET LEURS MODULES (Keko, 31/10) : un producteur est un
+ * rectangle creusé de prises femelles ; il produit un LOT de R à chaque
+ * déclenchement, et une tape le déclenche. Un module est une pièce à une bosse,
+ * qui s'emboîte dans un creux de sa forme sur un producteur et AGIT sur lui :
+ * l'horloge le déclenche toute seule, l'ajout grossit son lot, le
+ * multiplicateur le multiplie, le critique donne une chance qu'il soit décuplé.
+ * Un module s'améliore niveau par niveau, et se déplace d'un producteur à
+ * l'autre. Les producteurs flottent sur le plan ; la base, offerte, est au
+ * centre et n'en bouge pas.
  */
-import { ACHAT, AUTO_COUT, BASE, FORMES, MARCHE, NIVEAU, PIECE, PRESTIGE, PROFILS, TAPE_PART, UNITES } from './donnees.ts'
+import { ACHAT, AUTO_COUT, EFFETS, EMPLACEMENTS, MARCHE, MODULE, MODULES, NIVEAU, PIECE, PRESTIGE, PRODUCTEUR, PRODUCTEURS } from './donnees.ts'
 
-/** UN MODULE : un exemplaire d'une unité, emboîté quelque part ou posé sur le plan. */
+/** UN PRODUCTEUR : un exemplaire d'un type, posé sur le plan (son centre en pixels-monde). */
+export interface Producteur {
+  id: number
+  type: number
+  x: number
+  y: number
+}
+
+/** UN MODULE : un exemplaire d'un type, emboîté sur un producteur ou posé sur le plan. */
 export interface Module {
   id: number
+  /** Le type, qui est aussi sa forme : 0 horloge (rond), 1 ajout (carré), 2 multiplicateur (triangle), 3 critique (trapèze). */
   type: number
   /** Le niveau d'amélioration, à partir de 1. */
   niveau: number
-  /** Sur quoi il est emboîté : 0 la base, sinon l'id d'un autre module ; null quand il est posé sur le plan. */
+  /** Le prix payé : les niveaux en découlent. */
+  prix: number
+  /** Le producteur où il est emboîté, et l'emplacement (voir `EMPLACEMENTS`) ; null quand il est posé. */
   parent: number | null
-  /** Le côté du parent où il est emboîté : pour la base 0 haut, 1 droite, 2 bas, 3 gauche ; pour un module ses côtés à lui, 0 la face, 1 la droite, 3 la gauche (2 est sa bosse). */
-  cote: number
-  /** Posé sur le plan (sans parent) : son centre en pixels-monde et le sens où regarde sa face (0 haut, 1 droite, 2 bas, 3 gauche). Emboîté, tout cela découle du parent. */
+  emplacement: number
+  /** Posé : son centre et le côté vers lequel regarde sa face (0 haut, 1 droite, 2 bas, 3 gauche ; sa bosse est en face). Emboîté, tout cela découle du producteur. */
   x: number
   y: number
   sens: number
@@ -35,10 +49,16 @@ export interface Joueur {
   /** La ressource en main, pas encore vendue. */
   r: number
   or: number
-  /** Les modules achetés de chaque unité, emboîtés ou non : c'est eux que le coût suit. */
-  achetes: number[]
+  producteurs: Producteur[]
   modules: Module[]
-  prochainModule: number
+  /** Le prochain identifiant, commun aux producteurs et aux modules. */
+  prochainId: number
+  /** Les exemplaires achetés de chaque type, emboîtés ou non : c'est eux que le coût suit. */
+  achetesProducteurs: number[]
+  achetesModules: number[]
+  /** Les types que le joueur a déjà vus (le dévoilement survit au prestige). */
+  connusProducteurs: number
+  connusModules: number
   /** Le comptoir automatique : la production se vend au fil de l'eau. */
   auto: boolean
   /** Les points de prestige acquis. */
@@ -47,8 +67,6 @@ export interface Joueur {
   /** Le R produit depuis le dernier prestige, et depuis le début (le score). */
   produitRun: number
   total: number
-  /** Le nombre d'unités que le joueur a déjà vues (le dévoilement survit au prestige). */
-  connues: number
   journal: { tapes: number; orVentes: number; ventes: number }
 }
 
@@ -73,21 +91,31 @@ export interface Monde {
   gazette: Vente[]
 }
 
+/** La base : le premier producteur, offert, au centre du plan. */
+const BASE_ID = 1
+
+function base(): Producteur {
+  return { id: BASE_ID, type: 0, x: 0, y: 0 }
+}
+
 export function nouveauJoueur(id: number, nom: string): Joueur {
   return {
     id,
     nom,
     r: 0,
     or: 0,
-    achetes: UNITES.map(() => 0),
+    producteurs: [base()],
     modules: [],
-    prochainModule: 1,
+    prochainId: BASE_ID + 1,
+    achetesProducteurs: PRODUCTEURS.map(() => 0),
+    achetesModules: MODULES.map(() => 0),
+    connusProducteurs: 1,
+    connusModules: 1,
     auto: false,
     points: 0,
     prestiges: 0,
     produitRun: 0,
     total: 0,
-    connues: 1,
     journal: { tapes: 0, orVentes: 0, ventes: 0 },
   }
 }
@@ -96,8 +124,27 @@ export function nouveauMonde(noms: string[]): Monde {
   return { t: 0, joueurs: noms.map((n, i) => nouveauJoueur(i, n)), volume: 0, demande: MARCHE.demandeMin, historique: [MARCHE.prix], gazette: [] }
 }
 
+export function producteurDe(j: Joueur, id: number): Producteur | undefined {
+  return j.producteurs.find((p) => p.id === id)
+}
+
+export function moduleDe(j: Joueur, id: number): Module | undefined {
+  return j.modules.find((mo) => mo.id === id)
+}
+
+/** Les modules emboîtés sur un producteur. */
+export function modulesDe(j: Joueur, p: Producteur): Module[] {
+  return j.modules.filter((mo) => mo.parent === p.id)
+}
+
+/** Les modules emboîtés quelque part : ceux qui agissent. */
+export function branches(j: Joueur): Set<number> {
+  const ids = new Set(j.producteurs.map((p) => p.id))
+  return new Set(j.modules.filter((mo) => mo.parent !== null && ids.has(mo.parent)).map((mo) => mo.id))
+}
+
 // ---------------------------------------------------------------------------
-// LA GÉOMÉTRIE DU PUZZLE
+// LA GÉOMÉTRIE
 
 /** Un point du plan et un sens (0 haut, 1 droite, 2 bas, 3 gauche). */
 export interface Place {
@@ -106,16 +153,24 @@ export interface Place {
   sens: number
 }
 
+/** Un rectangle : son centre et sa taille. */
+export interface Boite {
+  x: number
+  y: number
+  largeur: number
+  hauteur: number
+}
+
 /** Une découpe sur un côté : la bosse qui s'emboîte, ou le creux qui reçoit. */
 export interface Decoupe {
   genre: 'bosse' | 'creux'
   forme: number
 }
 
-/** Un creux libre : à qui il appartient (0 la base), sur quel côté, sa forme, et où se placerait le module qui s'y emboîte. */
+/** Un creux libre : le producteur, l'emplacement, sa forme, et où se placerait le module qui s'y emboîte. */
 export interface Prise {
   parent: number
-  cote: number
+  emplacement: number
   forme: number
   place: Place
 }
@@ -127,142 +182,88 @@ export const DIRECTIONS: readonly { x: number; y: number }[] = [
   { x: -1, y: 0 },
 ]
 
-/** La forme d'une unité : deux unités par forme (A et E, B et F…). */
-export function formeDuType(type: number): number {
-  return type % FORMES
-}
-
-/** La découpe d'un côté LOCAL d'un module (0 face, 1 droite, 2 bosse, 3 gauche). */
-export function decoupeLocale(type: number, cote: number): Decoupe {
-  if (cote === 2) return { genre: 'bosse', forme: formeDuType(type) }
-  const p = PROFILS[type] ?? [0, 0, 0]
-  return { genre: 'creux', forme: cote === 0 ? p[0] : cote === 1 ? p[1] : p[2] }
-}
-
-/** Le côté local d'un module dont la face regarde `sens`, qui regarde dans la direction `d`. */
-export function coteLocal(sens: number, d: number): number {
-  return (d - sens + 4) % 4
-}
-
-/** Où s'emboîte un module sur le côté `cote` de la base (la base regarde toujours vers le haut : ses côtés sont les directions). */
-export function placeSurLaBase(cote: number): Place {
-  const d = DIRECTIONS[cote] ?? DIRECTIONS[0]!
-  return { x: d.x * (BASE.largeur / 2 + PIECE.taille / 2), y: d.y * (BASE.hauteur / 2 + PIECE.taille / 2), sens: cote }
-}
-
-/** Où s'emboîte un module sur le côté local `cote` d'un module placé en `p`. */
-export function placeSurLeModule(p: Place, cote: number): Place {
-  const sens = (p.sens + cote) % 4
-  const d = DIRECTIONS[sens]!
-  return { x: p.x + d.x * PIECE.taille, y: p.y + d.y * PIECE.taille, sens }
-}
-
-/** Les enfants de chaque parent (0 : la base). Les modules posés n'y figurent pas comme enfants, mais leurs propres enfants, si. */
-function enfantsDe(j: Joueur): Map<number, Module[]> {
-  const enfants = new Map<number, Module[]>()
-  for (const mo of j.modules) {
-    if (mo.parent === null) continue
-    const liste = enfants.get(mo.parent)
-    if (liste === undefined) enfants.set(mo.parent, [mo])
-    else liste.push(mo)
+/** Où s'emboîte un module à l'emplacement `e` d'un producteur centré en (x, y) : collé au bord, sa face vers l'extérieur. */
+export function placeSurProducteur(p: { x: number; y: number }, e: number): Place {
+  const em = EMPLACEMENTS[e] ?? EMPLACEMENTS[0]!
+  const d = DIRECTIONS[em.cote]!
+  const horizontal = em.cote % 2 === 0
+  const distance = (horizontal ? PRODUCTEUR.hauteur : PRODUCTEUR.largeur) / 2 + MODULE.profondeur / 2
+  return {
+    x: p.x + d.x * distance + (horizontal ? em.decalage * PIECE.taille : 0),
+    y: p.y + d.y * distance + (horizontal ? 0 : em.decalage * PIECE.taille),
+    sens: em.cote,
   }
-  return enfants
 }
 
-function poser(racine: Module, place: Place, enfants: Map<number, Module[]>, out: Map<number, Place>): void {
-  out.set(racine.id, place)
-  for (const e of enfants.get(racine.id) ?? []) poser(e, placeSurLeModule(place, e.cote), enfants, out)
+/** La boîte d'un module placé là : large le long du bord qu'il regarde, profond vers lui. */
+export function boiteModule(p: Place): Boite {
+  const droit = p.sens % 2 === 0
+  return { x: p.x, y: p.y, largeur: droit ? MODULE.largeur : MODULE.profondeur, hauteur: droit ? MODULE.profondeur : MODULE.largeur }
 }
 
-/** Où est chaque module (son centre, le sens de sa face) : les emboîtés suivent leur parent depuis la base ; les posés sont où on les a laissés, avec ce qui est emboîté dessus. */
+export function boiteProducteur(p: { x: number; y: number }): Boite {
+  return { x: p.x, y: p.y, largeur: PRODUCTEUR.largeur, hauteur: PRODUCTEUR.hauteur }
+}
+
+function seChevauchent(a: Boite, b: Boite): boolean {
+  return Math.abs(a.x - b.x) < (a.largeur + b.largeur) / 2 - 1 && Math.abs(a.y - b.y) < (a.hauteur + b.hauteur) / 2 - 1
+}
+
+/** Où est chaque module (son centre, le sens de sa face) : les emboîtés suivent leur producteur ; les posés sont où on les a laissés. */
 export function disposition(j: Joueur): Map<number, Place> {
-  const enfants = enfantsDe(j)
   const out = new Map<number, Place>()
-  for (const mo of enfants.get(0) ?? []) poser(mo, placeSurLaBase(mo.cote), enfants, out)
-  for (const mo of j.modules) if (mo.parent === null) poser(mo, { x: mo.x, y: mo.y, sens: mo.sens }, enfants, out)
-  return out
-}
-
-/** Les modules reliés à la base : ceux qui produisent. */
-export function relies(j: Joueur): Set<number> {
-  const enfants = enfantsDe(j)
-  const out = new Set<number>()
-  const pile = [...(enfants.get(0) ?? [])]
-  for (let mo = pile.pop(); mo !== undefined; mo = pile.pop()) {
-    out.add(mo.id)
-    for (const e of enfants.get(mo.id) ?? []) pile.push(e)
+  for (const mo of j.modules) {
+    const p = mo.parent === null ? undefined : producteurDe(j, mo.parent)
+    out.set(mo.id, p === undefined ? { x: mo.x, y: mo.y, sens: mo.sens } : placeSurProducteur(p, mo.emplacement))
   }
   return out
 }
 
-/** Un module et tout ce qui est emboîté dessus, de proche en proche (lui en premier). */
-export function grappe(j: Joueur, racine: Module): Module[] {
-  const enfants = enfantsDe(j)
-  const out: Module[] = []
-  const pile = [racine]
-  for (let mo = pile.pop(); mo !== undefined; mo = pile.pop()) {
-    out.push(mo)
-    for (const e of enfants.get(mo.id) ?? []) pile.push(e)
+/** Ce qui occupe le plan et bloque : les corps des producteurs, et les modules emboîtés (sauf ceux qu'on tient en main). */
+function occupation(j: Joueur, sauf?: ReadonlySet<number>, saufProducteur?: number): Boite[] {
+  const out: Boite[] = []
+  for (const p of j.producteurs) {
+    if (p.id === saufProducteur) continue
+    out.push(boiteProducteur(p))
+    for (const mo of modulesDe(j, p)) if (sauf?.has(mo.id) !== true) out.push(boiteModule(placeSurProducteur(p, mo.emplacement)))
   }
   return out
-}
-
-/** La disposition d'une grappe si sa racine était en `place` : pour l'essayer ailleurs avant de l'y emboîter. */
-export function disposerGrappe(j: Joueur, racine: Module, place: Place): Map<number, Place> {
-  const out = new Map<number, Place>()
-  poser(racine, place, enfantsDe(j), out)
-  return out
-}
-
-function seChevauchent(a: Place, b: Place): boolean {
-  return Math.abs(a.x - b.x) < PIECE.taille - 1 && Math.abs(a.y - b.y) < PIECE.taille - 1
-}
-
-function chevaucheLaBase(p: Place): boolean {
-  return Math.abs(p.x) < BASE.largeur / 2 + PIECE.taille / 2 - 1 && Math.abs(p.y) < BASE.hauteur / 2 + PIECE.taille / 2 - 1
 }
 
 /**
- * Les creux libres : chaque creux de la base ou d'un module relié où rien
- * n'est emboîté, et dont la case est libre. `sauf` : des modules qu'on tient
- * en main — ni leurs creux, ni leurs cases ne comptent.
+ * Les creux libres : chaque creux d'un producteur où rien n'est emboîté, et
+ * dont la place n'est pas prise par autre chose. `sauf` : des modules qu'on
+ * tient en main — ni leurs creux, ni leurs places ne comptent.
  */
 export function prisesLibres(j: Joueur, sauf?: ReadonlySet<number>): Prise[] {
-  const dispo = disposition(j)
-  const reliees = relies(j)
-  const occupees: Place[] = []
-  for (const id of reliees) if (sauf?.has(id) !== true) occupees.push(dispo.get(id)!)
-  const libre = (p: Place): boolean => !chevaucheLaBase(p) && !occupees.some((o) => seChevauchent(o, p))
+  const occupees = occupation(j, sauf)
   const prises = new Set<string>()
-  for (const mo of j.modules) if (mo.parent !== null && sauf?.has(mo.id) !== true) prises.add(`${mo.parent}:${mo.cote}`)
+  for (const mo of j.modules) if (mo.parent !== null && sauf?.has(mo.id) !== true) prises.add(`${mo.parent}:${mo.emplacement}`)
   const out: Prise[] = []
-  for (let c = 0; c < 4; c++) {
-    if (prises.has(`0:${c}`)) continue
-    const place = placeSurLaBase(c)
-    if (libre(place)) out.push({ parent: 0, cote: c, forme: BASE.formes[c] ?? 0, place })
-  }
-  for (const mo of j.modules) {
-    if (!reliees.has(mo.id) || sauf?.has(mo.id) === true) continue
-    const p = dispo.get(mo.id)!
-    for (const c of [0, 1, 3]) {
-      if (prises.has(`${mo.id}:${c}`)) continue
-      const place = placeSurLeModule(p, c)
-      if (libre(place)) out.push({ parent: mo.id, cote: c, forme: decoupeLocale(mo.type, c).forme, place })
-    }
+  for (const p of j.producteurs) {
+    const type = PRODUCTEURS[p.type]
+    if (type === undefined) continue
+    type.creux.forEach((forme, e) => {
+      if (forme === null || prises.has(`${p.id}:${e}`)) return
+      const place = placeSurProducteur(p, e)
+      const boite = boiteModule(place)
+      if (!occupees.some((o) => seChevauchent(o, boite))) out.push({ parent: p.id, emplacement: e, forme, place })
+    })
   }
   return out
 }
 
-/** Ce que l'arbre occupe : la plus grande distance du centre à un bord de case, et le bas de la case la plus basse. */
-export function etendue(j: Joueur): { rayon: number; bas: number } {
-  const dispo = disposition(j)
-  let rayon = BASE.largeur / 2
-  let bas = BASE.hauteur / 2
-  for (const id of relies(j)) {
-    const p = dispo.get(id)!
-    rayon = Math.max(rayon, Math.abs(p.x) + PIECE.taille / 2, Math.abs(p.y) + PIECE.taille / 2)
-    bas = Math.max(bas, p.y + PIECE.taille / 2)
+/** Ce que le plan occupe : la plus grande distance du centre à un bord, de côté ou vers le haut, et le bas du plus bas. `tout` compte aussi les modules posés. */
+export function etendue(j: Joueur, tout = true): { rayon: number; bas: number } {
+  let rayon = PRODUCTEUR.largeur / 2
+  let bas = PRODUCTEUR.hauteur / 2
+  const voir = (b: Boite): void => {
+    rayon = Math.max(rayon, Math.abs(b.x) + b.largeur / 2, -(b.y - b.hauteur / 2))
+    bas = Math.max(bas, b.y + b.hauteur / 2)
   }
+  for (const p of j.producteurs) voir(boiteProducteur(p))
+  const dispo = disposition(j)
+  for (const mo of j.modules) if (tout || mo.parent !== null) voir(boiteModule(dispo.get(mo.id)!))
   return { rayon: rayon + PIECE.encoche.profondeur, bas }
 }
 
@@ -273,96 +274,195 @@ export function multiplicateurPrestige(j: Joueur): number {
   return 1 + PRESTIGE.parPoint * j.points
 }
 
-/** Ce que multiplie un niveau : le niveau lui-même, et un doublement tous les `palier` niveaux. */
-export function multiplicateurNiveau(niveau: number): number {
-  return niveau * Math.pow(2, Math.floor(niveau / NIVEAU.palier))
+/**
+ * L'effet d'un module d'un type à un niveau : pour l'horloge, des
+ * déclenchements par seconde ; pour l'ajout, une part du lot de base ; pour le
+ * multiplicateur, ce qu'il ajoute au ×1 ; pour le critique, une chance. Le
+ * niveau L vaut L fois le premier.
+ */
+export function effet(type: number, niveau: number): number {
+  const f = niveau
+  switch (type) {
+    case 0:
+      return f / EFFETS.periode
+    case 1:
+      return EFFETS.ajout * f
+    case 2:
+      return EFFETS.multiplicateur * f
+    default:
+      return 1 - Math.pow(1 - EFFETS.critique, f)
+  }
 }
 
-/** Ce que produirait un module d'une unité à ce niveau, en R par seconde. */
-export function debitAuNiveau(j: Joueur, type: number, niveau: number): number {
-  return (UNITES[type]?.debit ?? 0) * multiplicateurNiveau(niveau) * multiplicateurPrestige(j)
+/** Ce qu'un producteur donne avec ses modules. */
+export interface Bilan {
+  /** Le lot d'un déclenchement ordinaire, en R. */
+  lot: number
+  /** La chance qu'un déclenchement soit un coup critique (lot × `coup`). */
+  chance: number
+  /** Le lot moyen, critiques comprises. */
+  lotMoyen: number
+  /** Les déclenchements par seconde des horloges. */
+  frequence: number
+  /** La production par seconde, en R : le lot moyen fois la fréquence. */
+  debit: number
 }
 
-/** Ce que produit un module, relié ou non (posé, il ne compte pas dans `debit`). */
-export function debitModule(j: Joueur, mo: Module): number {
-  return debitAuNiveau(j, mo.type, mo.niveau)
+/** Le bilan d'un lot de base avec ces modules : les ajouts s'additionnent, les multiplicateurs se multiplient, les chances de critique se composent, les horloges s'ajoutent. */
+export function bilan(lot0: number, mods: readonly { type: number; niveau: number }[], prestige: number): Bilan {
+  let ajout = 0
+  let mult = 1
+  let sansCritique = 1
+  let frequence = 0
+  for (const mo of mods) {
+    const e = effet(mo.type, mo.niveau)
+    if (mo.type === 0) frequence += e
+    else if (mo.type === 1) ajout += e
+    else if (mo.type === 2) mult *= 1 + e
+    else sansCritique *= 1 - e
+  }
+  const chance = 1 - sansCritique
+  const lot = lot0 * prestige * (1 + ajout) * mult
+  const lotMoyen = lot * (1 + (EFFETS.coup - 1) * chance)
+  return { lot, chance, lotMoyen, frequence, debit: lotMoyen * frequence }
 }
 
-/** La production du joueur, en R par seconde : les modules reliés à la base. */
+export function bilanProducteur(j: Joueur, p: Producteur): Bilan {
+  return bilan(PRODUCTEURS[p.type]?.lot ?? 0, modulesDe(j, p), multiplicateurPrestige(j))
+}
+
+/** La production du joueur, en R par seconde : tous ses producteurs, par leurs horloges. */
 export function debit(j: Joueur): number {
-  const r = relies(j)
   let d = 0
-  for (const mo of j.modules) if (r.has(mo.id)) d += debitModule(j, mo)
+  for (const p of j.producteurs) d += bilanProducteur(j, p).debit
   return d
 }
 
-/** La tape vaut une part de la production par seconde, et au moins 1 R multiplié par le prestige : après un prestige, on ne repart pas du premier jour. */
-export function valeurTape(j: Joueur): number {
-  return Math.max(multiplicateurPrestige(j), TAPE_PART * debit(j))
+/** Le producteur dont un déclenchement rapporte le plus : celui qu'on tape. */
+export function meilleurProducteur(j: Joueur): Producteur {
+  let meilleur = j.producteurs[0]!
+  let max = -1
+  for (const p of j.producteurs) {
+    const v = bilanProducteur(j, p).lotMoyen
+    if (v > max) {
+      max = v
+      meilleur = p
+    }
+  }
+  return meilleur
 }
 
-export function taper(j: Joueur): number {
-  const v = valeurTape(j)
-  j.r += v
-  j.produitRun += v
-  j.total += v
+/**
+ * Déclenche un producteur (une tape) : il produit son lot. `alea` (de 0 à 1)
+ * décide du critique ; sans lui, le lot moyen (les bots, qui ne tirent rien).
+ */
+export function declencher(j: Joueur, p: Producteur, alea?: number): { gain: number; critique: boolean } {
+  const b = bilanProducteur(j, p)
+  const critique = alea !== undefined && alea < b.chance
+  const gain = alea === undefined ? b.lotMoyen : critique ? b.lot * EFFETS.coup : b.lot
+  j.r += gain
+  j.produitRun += gain
+  j.total += gain
   j.journal.tapes += 1
-  return v
+  return { gain, critique }
+}
+
+/** Une tape sur le meilleur producteur. */
+export function taper(j: Joueur, alea?: number): number {
+  return declencher(j, meilleurProducteur(j), alea).gain
 }
 
 // ---------------------------------------------------------------------------
 // LES ACHATS
 
-/** Le coût du prochain module d'une unité. */
-export function coutModule(j: Joueur, i: number): number {
-  const u = UNITES[i]
-  if (u === undefined) return Infinity
-  return Math.ceil(u.cout * Math.pow(ACHAT.croissance, j.achetes[i] ?? 0))
+/** Le coût du prochain producteur d'un type (la base ne s'achète pas). */
+export function coutProducteur(j: Joueur, i: number): number {
+  const t = PRODUCTEURS[i]
+  if (t === undefined || i === 0) return Infinity
+  return Math.ceil(t.cout * Math.pow(ACHAT.croissance, j.achetesProducteurs[i] ?? 0))
 }
 
-/** Une unité est visible dès qu'on possède la précédente (le dévoilement survit au prestige). */
-export function visible(j: Joueur, i: number): boolean {
-  return i < j.connues
+/**
+ * Un type de producteur est visible dès qu'on l'a dévoilé — le suivant en
+ * possédant le précédent, le premier avec son second module — ou dès qu'on
+ * peut le payer : un producteur qu'on n'a pas envie d'acheter ne cache pas
+ * ceux d'après.
+ */
+export function visibleProducteur(j: Joueur, i: number): boolean {
+  return i < j.connusProducteurs || (i > 0 && j.or + 1e-9 >= coutProducteur(j, i))
 }
 
-export function peutAcheterModule(j: Joueur, i: number): boolean {
-  return visible(j, i) && j.or + 1e-9 >= coutModule(j, i)
+export function peutAcheterProducteur(j: Joueur, i: number): boolean {
+  return i > 0 && visibleProducteur(j, i) && j.or + 1e-9 >= coutProducteur(j, i)
 }
 
-/** Où apparaît un module qu'on vient d'acheter : sous l'arbre, en rang. */
-export function placeDApparition(j: Joueur): { x: number; y: number } {
+/** Où apparaît un producteur qu'on vient d'acheter : sous tout le reste, avec la place de ses modules du haut. */
+export function placeDApparitionProducteur(j: Joueur): { x: number; y: number } {
+  return { x: 0, y: etendue(j).bas + MODULE.profondeur + PIECE.encoche.profondeur + 40 + PRODUCTEUR.hauteur / 2 }
+}
+
+/** Achète un producteur : il apparaît sous le reste, ses creux vides. Rend le producteur, ou null. */
+export function acheterProducteur(j: Joueur, i: number): Producteur | null {
+  if (!peutAcheterProducteur(j, i)) return null
+  j.or -= coutProducteur(j, i)
+  j.achetesProducteurs[i] = (j.achetesProducteurs[i] ?? 0) + 1
+  const place = placeDApparitionProducteur(j)
+  const p: Producteur = { id: j.prochainId++, type: i, x: place.x, y: place.y }
+  j.producteurs.push(p)
+  j.connusProducteurs = Math.max(j.connusProducteurs, Math.min(PRODUCTEURS.length, i + 2))
+  return p
+}
+
+/** Le coût du prochain module d'un type. */
+export function coutModule(j: Joueur, k: number): number {
+  const t = MODULES[k]
+  if (t === undefined) return Infinity
+  return Math.ceil(t.cout * Math.pow(ACHAT.croissance, j.achetesModules[k] ?? 0))
+}
+
+/** Un type de module est visible dès qu'on possède le précédent (le dévoilement survit au prestige). */
+export function visibleModule(j: Joueur, k: number): boolean {
+  return k < j.connusModules
+}
+
+export function peutAcheterModule(j: Joueur, k: number): boolean {
+  return visibleModule(j, k) && j.or + 1e-9 >= coutModule(j, k)
+}
+
+/** Où apparaît un module qu'on vient d'acheter : sous l'installation, en rang. */
+export function placeDApparitionModule(j: Joueur): { x: number; y: number } {
   const n = j.modules.filter((mo) => mo.parent === null).length
   const pas = PIECE.taille + 30
   // Le premier au milieu, puis de part et d'autre.
   const colonnes = [0, 1, -1, 2, -2]
-  return { x: (colonnes[n % 5] ?? 0) * pas, y: etendue(j).bas + PIECE.taille / 2 + 70 + Math.floor(n / 5) * pas }
+  return { x: (colonnes[n % 5] ?? 0) * pas, y: etendue(j, false).bas + 60 + MODULE.profondeur / 2 + Math.floor(n / 5) * (MODULE.profondeur + 40) }
 }
 
-/** Achète un module : il apparaît posé sous l'arbre, à emboîter. Rend le module, ou null. */
-export function acheterModule(j: Joueur, i: number): Module | null {
-  if (!peutAcheterModule(j, i)) return null
-  j.or -= coutModule(j, i)
-  j.achetes[i] = (j.achetes[i] ?? 0) + 1
-  const place = placeDApparition(j)
-  const mo: Module = { id: j.prochainModule++, type: i, niveau: 1, parent: null, cote: 0, x: place.x, y: place.y, sens: 0 }
+/** Achète un module : il apparaît posé, à emboîter. Rend le module, ou null. */
+export function acheterModule(j: Joueur, k: number): Module | null {
+  if (!peutAcheterModule(j, k)) return null
+  const prix = coutModule(j, k)
+  j.or -= prix
+  j.achetesModules[k] = (j.achetesModules[k] ?? 0) + 1
+  const place = placeDApparitionModule(j)
+  const mo: Module = { id: j.prochainId++, type: k, niveau: 1, prix, parent: null, emplacement: 0, x: place.x, y: place.y, sens: 0 }
   j.modules.push(mo)
-  // Posséder une unité dévoile la suivante.
-  j.connues = Math.max(j.connues, Math.min(UNITES.length, i + 2))
+  // Posséder un module dévoile le suivant ; le second dévoile le premier producteur à acheter.
+  j.connusModules = Math.max(j.connusModules, Math.min(MODULES.length, k + 2))
+  if (j.achetesModules.reduce((s, n) => s + n, 0) >= 2) j.connusProducteurs = Math.max(j.connusProducteurs, 2)
   return mo
 }
 
-/** Le coût du niveau suivant d'un module. */
+/** Le coût du niveau suivant d'un module : une part de son prix, qui croît à chaque niveau. */
 export function coutNiveau(mo: Module): number {
-  const u = UNITES[mo.type]
-  if (u === undefined) return Infinity
-  return Math.ceil(u.cout * NIVEAU.premier * Math.pow(NIVEAU.croissance, mo.niveau - 1))
+  return Math.ceil(mo.prix * NIVEAU.premier * Math.pow(NIVEAU.croissance, mo.niveau - 1))
 }
 
 export function peutAmeliorer(j: Joueur, mo: Module): boolean {
   return j.or + 1e-9 >= coutNiveau(mo)
 }
 
-/** Monte un module d'un niveau, relié ou non (posé, il garde son niveau pour plus tard). */
+/** Monte un module d'un niveau, emboîté ou non (posé, il garde son niveau pour plus tard). */
 export function ameliorer(j: Joueur, mo: Module): boolean {
   if (!peutAmeliorer(j, mo)) return false
   j.or -= coutNiveau(mo)
@@ -373,35 +473,21 @@ export function ameliorer(j: Joueur, mo: Module): boolean {
 // ---------------------------------------------------------------------------
 // L'EMBOÎTEMENT
 
-/** La grappe d'un module tiendrait-elle, sa racine en `place`, sans chevaucher la base ni un module relié qui n'en fait pas partie ? */
-export function grappeTient(j: Joueur, mo: Module, place: Place): boolean {
-  const g = new Set(grappe(j, mo).map((m) => m.id))
-  const dispo = disposition(j)
-  const r = relies(j)
-  for (const p of disposerGrappe(j, mo, place).values()) {
-    if (chevaucheLaBase(p)) return false
-    for (const id of r) if (!g.has(id) && seChevauchent(dispo.get(id)!, p)) return false
-  }
-  return true
-}
-
-/** Les creux où un module (avec sa grappe) peut aller : libres, de sa forme, et où tout tient. */
+/** Les creux où un module peut aller : libres, et de sa forme. */
 export function prisesPour(j: Joueur, mo: Module): Prise[] {
-  const g = new Set(grappe(j, mo).map((m) => m.id))
-  const forme = formeDuType(mo.type)
-  return prisesLibres(j, g).filter((p) => p.forme === forme && !g.has(p.parent) && grappeTient(j, mo, p.place))
+  return prisesLibres(j, new Set([mo.id])).filter((p) => p.forme === mo.type)
 }
 
-/** Emboîte un module (et ce qui est emboîté dessus) sur un creux libre de sa forme où tout tient. Rend faux sinon. */
-export function brancher(j: Joueur, mo: Module, parent: number, cote: number): boolean {
-  const prise = prisesPour(j, mo).find((p) => p.parent === parent && p.cote === cote)
+/** Emboîte un module sur un creux libre de sa forme. Rend faux sinon. */
+export function brancher(j: Joueur, mo: Module, parent: number, emplacement: number): boolean {
+  const prise = prisesPour(j, mo).find((p) => p.parent === parent && p.emplacement === emplacement)
   if (prise === undefined) return false
   mo.parent = parent
-  mo.cote = cote
+  mo.emplacement = emplacement
   return true
 }
 
-/** Détache un module (avec ce qui est emboîté dessus) et le pose en (x, y), sa face vers `sens` : il ne produit plus. */
+/** Détache un module et le pose en (x, y), sa face vers `sens` : il n'agit plus sur rien. */
 export function debrancher(mo: Module, x: number, y: number, sens: number): void {
   mo.parent = null
   mo.x = x
@@ -409,11 +495,53 @@ export function debrancher(mo: Module, x: number, y: number, sens: number): void
   mo.sens = sens
 }
 
-/** Déplace un module posé (avec ce qui est emboîté dessus). */
+/** Déplace un module posé. */
 export function deplacer(mo: Module, x: number, y: number): void {
   if (mo.parent !== null) return
   mo.x = x
   mo.y = y
+}
+
+/** Un producteur tiendrait-il là, avec ses modules, sans chevaucher un autre producteur ni ses modules ? */
+export function producteurTient(j: Joueur, p: Producteur, x: number, y: number): boolean {
+  const autres = occupation(j, undefined, p.id)
+  const boites = [boiteProducteur({ x, y }), ...modulesDe(j, p).map((mo) => boiteModule(placeSurProducteur({ x, y }, mo.emplacement)))]
+  return !boites.some((b) => autres.some((o) => seChevauchent(o, b)))
+}
+
+/** Déplace un producteur (ses modules suivent) là où il tient. La base ne bouge pas. Rend faux sinon. */
+export function deplacerProducteur(j: Joueur, p: Producteur, x: number, y: number): boolean {
+  if (p.type === 0 || !producteurTient(j, p, x, y)) return false
+  p.x = x
+  p.y = y
+  return true
+}
+
+/**
+ * Les modules d'un producteur qui trouveraient un creux de leur forme sur un
+ * producteur d'un type donné, les plus forts d'abord : ce qu'une migration
+ * emporterait. Sans rien changer.
+ */
+export function migrables(j: Joueur, de: Producteur, typeVers: number): Module[] {
+  const creux = PRODUCTEURS[typeVers]?.creux ?? []
+  const libres = [0, 1, 2, 3].map((forme) => creux.filter((c) => c === forme).length)
+  const out: Module[] = []
+  for (const mo of modulesDe(j, de).sort((a, b) => b.niveau - a.niveau)) {
+    if ((libres[mo.type] ?? 0) <= 0) continue
+    libres[mo.type] = (libres[mo.type] ?? 0) - 1
+    out.push(mo)
+  }
+  return out
+}
+
+/** Déplace les modules d'un producteur vers un autre, les plus forts d'abord, chacun sur un creux libre de sa forme. Rend ceux qui ont bougé. */
+export function migrer(j: Joueur, de: Producteur, vers: Producteur): Module[] {
+  const bouges: Module[] = []
+  for (const mo of modulesDe(j, de).sort((a, b) => b.niveau - a.niveau)) {
+    const prise = prisesPour(j, mo).find((p) => p.parent === vers.id)
+    if (prise !== undefined && brancher(j, mo, prise.parent, prise.emplacement)) bouges.push(mo)
+  }
+  return bouges
 }
 
 export function peutAcheterAuto(j: Joueur): boolean {
@@ -451,7 +579,8 @@ export function prixCourant(m: Monde): number {
 export function gainVente(m: Monde, q: number): number {
   if (q <= 0) return 0
   const d = demande(m)
-  return MARCHE.prix * d * Math.log((d + m.volume + q) / (d + m.volume))
+  // `log1p` : quand la demande dépasse la vente de vingt ordres de grandeur, (d + q) / d vaut 1 en flottant, et log en ferait 0.
+  return MARCHE.prix * d * Math.log1p(q / (d + m.volume))
 }
 
 /** Vend `q` R du joueur (tout ce qu'il a si `q` dépasse) ; rend l'or gagné. */
@@ -486,6 +615,7 @@ export function peutPrestiger(j: Joueur): boolean {
   return pointsSi(j) >= 1
 }
 
+/** Tout remettre à zéro contre des points : il ne reste que la base, nue. Ce qu'on connaît reste connu. */
 export function prestiger(j: Joueur): boolean {
   const gain = pointsSi(j)
   if (gain < 1) return false
@@ -493,7 +623,9 @@ export function prestiger(j: Joueur): boolean {
   j.prestiges += 1
   j.r = 0
   j.or = 0
-  j.achetes = UNITES.map(() => 0)
+  j.achetesProducteurs = PRODUCTEURS.map(() => 0)
+  j.achetesModules = MODULES.map(() => 0)
+  j.producteurs = [base()]
   j.modules = []
   j.produitRun = 0
   return true

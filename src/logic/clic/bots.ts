@@ -1,16 +1,18 @@
 /**
  * LES BOTS du système abstrait : des joueurs simulés qui passent quelques fois
  * par jour. À chaque visite : prestige si ça vaut le coup, quelques dizaines
- * de tapes, vente de ce qu'ils ont en main, puis achats gloutons — l'option
- * qui rapporte le plus de production par or dépensé, tant qu'il reste de l'or :
- * un module de plus, emboîté sur le creux libre de sa forme le plus près de la
- * base, ou un niveau de plus sur un module relié. Ils ne font rien qu'un vrai
- * joueur ne pourrait faire.
+ * de tapes sur leur meilleur producteur, vente de ce qu'ils ont en main, puis
+ * achats gloutons — l'option qui rapporte le plus de production par or
+ * dépensé, tant qu'il reste de l'or : un module de plus sur le creux où il
+ * rapporte le plus, un niveau de plus sur un module emboîté, ou un producteur
+ * de plus où migrent les modules de leur producteur le plus productif. Ils ne
+ * font rien qu'un vrai joueur ne pourrait faire.
  */
-import { AUTO_COUT, PRESTIGE, UNITES } from './donnees.ts'
+import { ACHAT, AUTO_COUT, MODULES, PRESTIGE, PRODUCTEURS } from './donnees.ts'
 import {
-  acheterModule, acheterAuto, ameliorer, brancher, coutModule, coutNiveau, debit, debitAuNiveau, debitModule, formeDuType,
-  multiplicateurPrestige, pointsSi, prestiger, prisesLibres, relies, taper, vendre, visible, type Joueur, type Monde,
+  acheterAuto, acheterModule, acheterProducteur, ameliorer, bilan, bilanProducteur, brancher, coutModule, coutNiveau, coutProducteur, debit, migrables, migrer,
+  modulesDe, multiplicateurPrestige, pointsSi, prestiger, prisesLibres, prisesPour, producteurDe, taper, vendre, visibleModule, visibleProducteur,
+  type Joueur, type Monde, type Prise, type Producteur,
 } from './moteur.ts'
 
 export interface Strategie {
@@ -28,29 +30,102 @@ interface Option {
   faire: () => boolean
 }
 
+function lot(p: Producteur): number {
+  return PRODUCTEURS[p.type]?.lot ?? 0
+}
+
+/** Le producteur qui produit le plus par seconde : celui dont on déménagerait les modules. */
+function plusProductif(j: Joueur): Producteur {
+  let meilleur = j.producteurs[0]!
+  let max = -1
+  for (const p of j.producteurs) {
+    const d = bilanProducteur(j, p).debit
+    if (d > max) {
+      max = d
+      meilleur = p
+    }
+  }
+  return meilleur
+}
+
 function options(j: Joueur): Option[] {
   const liste: Option[] = []
-  // Un module de plus, sur le creux libre de sa forme le plus près de la base : l'arbre reste ramassé.
-  const prises = prisesLibres(j).sort((a, b) => Math.hypot(a.place.x, a.place.y) - Math.hypot(b.place.x, b.place.y))
-  for (let i = 0; i < UNITES.length; i++) {
-    if (!visible(j, i)) continue
-    const forme = formeDuType(i)
-    const prise = prises.find((p) => p.forme === forme)
-    if (prise === undefined) continue
+  const prestige = multiplicateurPrestige(j)
+  // UN MODULE DE PLUS, sur le creux libre de sa forme où il rapporte le plus.
+  const prises = prisesLibres(j)
+  for (let k = 0; k < MODULES.length; k++) {
+    if (!visibleModule(j, k)) continue
+    let meilleure: { prise: Prise; gain: number } | null = null
+    for (const prise of prises) {
+      if (prise.forme !== k) continue
+      const p = producteurDe(j, prise.parent)
+      if (p === undefined) continue
+      const mods = modulesDe(j, p)
+      const gain = bilan(lot(p), [...mods, { type: k, niveau: 1 }], prestige).debit - bilan(lot(p), mods, prestige).debit
+      if (meilleure === null || gain > meilleure.gain) meilleure = { prise, gain }
+    }
+    if (meilleure === null) continue
+    const prise = meilleure.prise
     liste.push({
-      cout: coutModule(j, i),
-      gain: debitAuNiveau(j, i, 1),
+      cout: coutModule(j, k),
+      gain: meilleure.gain,
       faire: () => {
-        const mo = acheterModule(j, i)
-        return mo !== null && brancher(j, mo, prise.parent, prise.cote)
+        const mo = acheterModule(j, k)
+        return mo !== null && brancher(j, mo, prise.parent, prise.emplacement)
       },
     })
   }
-  // Un niveau de plus sur un module relié.
-  const r = relies(j)
-  for (const mo of j.modules) {
-    if (!r.has(mo.id)) continue
-    liste.push({ cout: coutNiveau(mo), gain: debitAuNiveau(j, mo.type, mo.niveau + 1) - debitModule(j, mo), faire: () => ameliorer(j, mo) })
+  // UN NIVEAU DE PLUS sur un module emboîté.
+  for (const p of j.producteurs) {
+    const mods = modulesDe(j, p)
+    const avant = bilan(lot(p), mods, prestige).debit
+    for (const mo of mods) {
+      const apres = bilan(lot(p), mods.map((m) => (m === mo ? { type: m.type, niveau: m.niveau + 1 } : m)), prestige).debit
+      liste.push({ cout: coutNiveau(mo), gain: apres - avant, faire: () => ameliorer(j, mo) })
+    }
+  }
+  // UN PRODUCTEUR DE PLUS, en trois paquets : avec les modules du plus productif qui y trouvent un creux et des modules neufs dans les creux restants ; avec des modules neufs partout ; avec une seule horloge neuve.
+  const de = plusProductif(j)
+  const modsDe = modulesDe(j, de)
+  const avant = bilan(lot(de), modsDe, prestige).debit
+  for (let i = 1; i < PRODUCTEURS.length; i++) {
+    if (!visibleProducteur(j, i)) continue
+    const type = PRODUCTEURS[i]!
+    for (const paquet of ['migration', 'neufs', 'horloge'] as const) {
+      const partants = paquet === 'migration' ? migrables(j, de, i) : []
+      if (paquet === 'migration' && partants.length === 0) continue
+      // Les creux que rien ne vient remplir reçoivent des modules neufs, au prix qu'ils coûteront l'un après l'autre.
+      const neufs: { type: number; niveau: number }[] = []
+      let coutNeufs = 0
+      const achetes = [...j.achetesModules]
+      for (let f = 0; f < MODULES.length; f++) {
+        if (!visibleModule(j, f) || (paquet === 'horloge' && f !== 0)) continue
+        const libres = type.creux.filter((c) => c === f).length - partants.filter((mo) => mo.type === f).length
+        for (let n = 0; n < (paquet === 'horloge' ? Math.min(1, libres) : libres); n++) {
+          coutNeufs += Math.ceil((MODULES[f]?.cout ?? Infinity) * Math.pow(ACHAT.croissance, achetes[f] ?? 0))
+          achetes[f] = (achetes[f] ?? 0) + 1
+          neufs.push({ type: f, niveau: 1 })
+        }
+      }
+      if (partants.length + neufs.length === 0) continue
+      const restants = modsDe.filter((mo) => !partants.includes(mo))
+      const apres = bilan(type.lot, [...partants, ...neufs], prestige).debit + bilan(lot(de), restants, prestige).debit
+      liste.push({
+        cout: coutProducteur(j, i) + coutNeufs,
+        gain: apres - avant,
+        faire: () => {
+          const p = acheterProducteur(j, i)
+          if (p === null) return false
+          if (paquet === 'migration') migrer(j, de, p)
+          for (const n of neufs) {
+            const mo = acheterModule(j, n.type)
+            const prise = mo === null ? undefined : prisesPour(j, mo).find((x) => x.parent === p.id)
+            if (mo === null || prise === undefined || !brancher(j, mo, prise.parent, prise.emplacement)) return false
+          }
+          return true
+        },
+      })
+    }
   }
   return liste
 }

@@ -1,10 +1,20 @@
 /**
  * LE SYSTÈME ABSTRAIT (Keko, 30/10/2026 : « on va créer d'abord un système
  * abstrait, on lui donnera un thème habillage APRÈS ») : une seule ressource R,
- * une seule monnaie (l'or), des unités sans aucune entrée qui produisent R par
- * seconde, un marché commun dont le prix baisse avec ce que tous ont vendu,
- * des paliers et des améliorations qui doublent, un prestige qui remet à zéro
- * contre un multiplicateur permanent. Les noms (A, B, C…) sont dans `ui/noms`.
+ * une seule monnaie (l'or), un marché commun dont le prix baisse avec ce que
+ * tous ont vendu, un prestige qui remet à zéro contre un multiplicateur
+ * permanent. Les noms (A, B, C…) sont dans `ui/noms-clic`.
+ *
+ * LES PRODUCTEURS ET LEURS MODULES (Keko, 31/10) : « les producteurs génèrent
+ * des ressources, comme celui où on tape, avec des prises femelles, et les
+ * modules, de différentes formes de prises mâles » ; « les modules agissent sur
+ * le producteur : en l'automatisant, en l'augmentant, en convertissant… ». Un
+ * producteur produit un LOT de R à chaque déclenchement ; une tape le
+ * déclenche. Un module est une pièce à une seule bosse, qui s'emboîte dans un
+ * creux de sa forme sur un producteur, et agit sur lui. Quatre formes, quatre
+ * effets : l'horloge (rond) le déclenche toute seule, l'ajout (carré) grossit
+ * le lot, le multiplicateur (triangle) le multiplie, le critique (trapèze)
+ * donne une chance qu'il soit décuplé. Le niveau se prend sur le module.
  *
  * Les chiffres de ce fichier sont des valeurs de départ réglées par
  * `simulation/clic.ts`, pas des décisions de Keko.
@@ -12,54 +22,103 @@
 
 export const SAISON_H = 168
 
-export interface Unite {
+/** UN TYPE DE PRODUCTEUR : ce qu'il produit à chaque déclenchement, et les creux qu'il offre. */
+export interface TypeProducteur {
+  id: string
+  /** Le coût du premier exemplaire, en or (la base est offerte). */
+  cout: number
+  /** Le lot : ce que produit un déclenchement, en R, avant les modules. */
+  lot: number
+  /** La forme du creux de chaque emplacement (voir `EMPLACEMENTS`), ou null quand le bord est plein. */
+  creux: readonly (number | null)[]
+}
+
+/** Les quatre formes : 0 rond (horloge), 1 carré (ajout), 2 triangle (multiplicateur), 3 trapèze (critique). */
+export const FORMES = 4
+const R = 0
+const C = 1
+const T = 2
+const Z = 3
+const _ = null
+
+/**
+ * Neuf producteurs : la base, offerte, puis huit qui coûtent quinze fois plus
+ * que le précédent pour un lot quatre fois plus gros — et des creux de plus
+ * en plus nombreux. Mesuré (`node simulation/clic.ts`) : à dix fois le coût
+ * pour cinq fois le lot, l'échelle entière était épuisée le deuxième jour et
+ * tous les bots finissaient au même point ; à quinze pour quatre, la semaine
+ * reste une montée (×70, ×30, ×7, ×4 par jour) et les assidus finissent dix à
+ * cinquante fois devant les occasionnels. Les profils sont de moi : chacun
+ * manque de quelque chose, pour que le choix du producteur compte.
+ * Emplacements : haut (gauche, centre, droite), droite, bas (droite, centre,
+ * gauche), gauche.
+ */
+export const PRODUCTEURS: readonly TypeProducteur[] = [
+  { id: 'base', cout: 0, lot: 1, creux: [_, R, _, C, _, T, _, Z] },
+  { id: 'a', cout: 100, lot: 4, creux: [R, _, C, _, T, _, _, _] },
+  { id: 'b', cout: 1500, lot: 16, creux: [R, _, R, C, _, T, _, _] },
+  { id: 'c', cout: 22500, lot: 64, creux: [_, R, _, C, T, _, T, Z] },
+  { id: 'd', cout: 337500, lot: 256, creux: [R, _, Z, T, _, Z, _, T] },
+  { id: 'e', cout: 5.0625e6, lot: 1024, creux: [R, C, R, T, _, Z, _, T] },
+  { id: 'f', cout: 7.59375e7, lot: 4096, creux: [R, _, C, C, T, _, Z, C] },
+  { id: 'g', cout: 1.1390625e9, lot: 16384, creux: [R, R, Z, T, C, _, Z, T] },
+  { id: 'h', cout: 1.70859375e10, lot: 65536, creux: [R, C, R, T, Z, T, Z, C] },
+]
+
+/** UN TYPE DE MODULE : sa forme est son indice (0 rond … 3 trapèze). */
+export interface TypeModule {
   id: string
   /** Le coût du premier exemplaire, en or. */
   cout: number
-  /** Ce qu'un exemplaire produit, en R par seconde. */
-  debit: number
 }
 
-/**
- * Huit unités : chacune coûte dix fois plus que la précédente et produit six à
- * huit fois plus. Les débits sont ceux de Cookie Clicker divisés par vingt :
- * mesuré sur une saison simulée (`node simulation/clic.ts`), c'est l'échelle
- * qui donne un ordre de grandeur par jour sur sept jours ; vingt fois plus
- * vite, tout l'arbre est épuisé le premier jour.
- */
-export const UNITES: readonly Unite[] = [
-  { id: 'a', cout: 10, debit: 0.005 },
-  { id: 'b', cout: 100, debit: 0.05 },
-  { id: 'c', cout: 1100, debit: 0.4 },
-  { id: 'd', cout: 12000, debit: 2.35 },
-  { id: 'e', cout: 130000, debit: 13 },
-  { id: 'f', cout: 1.4e6, debit: 70 },
-  { id: 'g', cout: 2e7, debit: 390 },
-  { id: 'h', cout: 3.3e8, debit: 2200 },
+export const MODULES: readonly TypeModule[] = [
+  { id: 'horloge', cout: 10 },
+  { id: 'ajout', cout: 25 },
+  { id: 'multiplicateur', cout: 50 },
+  { id: 'critique', cout: 40 },
 ]
 
 /**
- * UN MODULE DE PLUS coûte ce multiple du précédent DU MÊME TYPE. Haut
- * exprès : la progression passe par les niveaux (Keko, 30/10 : « plutôt que
- * rajouter des modules, on pourrait cliquer sur les modules existants et les
+ * LES EFFETS, au niveau 1 ; le niveau L les multiplie par L. L'horloge
+ * déclenche le producteur toutes les `periode` secondes. L'ajout ajoute
+ * `ajout` fois le lot de base du producteur. Le multiplicateur multiplie le lot
+ * par 1 + `multiplicateur`. Le critique donne une chance `critique` (composée
+ * niveau par niveau : 1 − (1 − c)^L) que le lot soit multiplié par `coup`.
+ * Mesuré : à 0,25 par niveau, quatre modules sur la base donnaient ×16 pour
+ * cent or et la semaine finissait en 10²⁵ ; à 0,1, ×1,4, et la montée tient
+ * sept jours.
+ */
+export const EFFETS = {
+  periode: 60,
+  ajout: 0.1,
+  multiplicateur: 0.1,
+  critique: 0.02,
+  coup: 10,
+}
+
+/**
+ * UNE PIÈCE DE PLUS (producteur ou module) coûte ce multiple du précédent DU
+ * MÊME TYPE. Haut exprès : la progression passe par les niveaux (Keko, 30/10 :
+ * « plutôt que rajouter des modules, cliquer sur les modules existants et les
  * améliorer individuellement »), et on ne veut pas des foules de pièces.
  */
 export const ACHAT = { croissance: 2.5 }
 
 /**
- * LES NIVEAUX d'un module : le niveau L multiplie son débit par L, et par 2
- * tous les `palier` niveaux ; passer du niveau L au suivant coûte
- * `premier` fois le coût de base du type, fois `croissance` par niveau déjà
- * pris. Chiffres réglés par `simulation/clic.ts`.
+ * LES NIVEAUX d'un module : le niveau L multiplie son effet par L ; passer du
+ * niveau L au suivant coûte `premier` fois le prix payé pour le module, fois
+ * `croissance` par niveau déjà pris. Mesuré : le doublement tous les dix
+ * niveaux de la version d'avant, multiplié sur les huit modules d'un
+ * producteur, battait n'importe quelle croissance du coût (niveaux 70 et
+ * totaux en 10²⁵ en une semaine) — il est parti ; et à moins de ×2,5 par
+ * niveau, les niveaux restaient la meilleure dépense jusqu'à la fin.
  */
 export const NIVEAU = {
-  premier: 0.6,
-  croissance: 1.2,
-  palier: 10,
+  premier: 10,
+  croissance: 2.5,
 }
 
-/** La tape vaut cette part de la production par seconde, et au moins 1 R. */
-export const TAPE_PART = 0.01
 /** Au-delà de ce rythme, les tapes ne comptent plus (auto-clic). */
 export const TAPES_MAX_PAR_S = 10
 
@@ -83,59 +142,44 @@ export const MARCHE = {
 export const AUTO_COUT = 2000
 
 /**
- * LE PRESTIGE : remettre à zéro unités, améliorations, R et or contre des
+ * LE PRESTIGE : remettre à zéro producteurs, modules, R et or contre des
  * points. Les points gagnés valent la racine de (R produit pendant le run /
- * `base`) ; chaque point ajoute `parPoint` au multiplicateur de production,
- * et la tape vaut ce multiplicateur. Mesuré : à 0,1 par point le prestige
- * coûtait plus qu'il ne rendait (deux jours de reconstruction pour ×2) ; à
- * 1 par point, le joueur médian prestige trois ou quatre fois dans la
- * semaine et garde son ordre de grandeur par jour. Base 10⁵ : les assidus
- * finissent dix mille fois devant les occasionnels ; 10⁶ : mille fois.
+ * `base`) ; chaque point ajoute `parPoint` au multiplicateur des lots. Mesuré
+ * à 10⁸ : le joueur médian prestige deux ou trois fois dans la semaine pour
+ * trois à dix points ; à 10⁶, l'assidu finissait avec deux cents points et
+ * mille fois devant tout le monde.
  */
 export const PRESTIGE = {
-  base: 1e6,
+  base: 1e8,
   parPoint: 1,
 }
 
 /**
- * LE PUZZLE (Keko, 30/10 : « une forme rectangulaire, avec un slot sur chaque
- * côté, et chaque côté aurait une forme de puzzle qui pourrait matcher
- * certains types de pièce », puis « enchaînement tout de suite, deux types par
- * forme »). Le monde est un plan en pixels-monde. La base est un rectangle de
- * trois cases sur une, creusé d'une forme sur chaque côté. Un module est une
- * case carrée : sa bosse (la forme de son type, `type % FORMES` : A et E sont
- * ronds, B et F carrés, C et G triangles, D et H trapèzes) s'emboîte dans un
- * creux de la même forme, de la base ou d'un autre module ; ses trois autres
- * côtés sont des creux (`PROFILS`), où d'autres modules s'emboîtent à leur
- * tour. Les modules s'enchaînent donc en arbre depuis la base, et seuls ceux
- * qui lui sont reliés produisent. Tout est en cases d'une taille : les côtés
- * de la base sont des multiples impairs de la case, pour que tout s'aligne.
+ * LA GÉOMÉTRIE. Le monde est un plan en pixels-monde, en cases d'une taille.
+ * Un producteur est un rectangle de trois cases sur une ; un module, une
+ * pièce d'une case de large qui s'emboîte sur son bord, sa bosse vers lui. La
+ * bosse et le creux : leur largeur le long du bord, et ce qu'ils dépassent ou
+ * s'enfoncent.
  */
-export const FORMES = 4
 export const PIECE = {
   taille: 150,
-  /** La bosse et le creux : leur largeur le long du bord, et ce qu'ils dépassent ou s'enfoncent. */
   encoche: { largeur: 56, profondeur: 30 },
 }
-export const BASE = {
-  largeur: 450,
-  hauteur: 150,
-  /** La forme creusée sur chaque côté : haut, droite, bas, gauche. */
-  formes: [0, 1, 2, 3] as readonly number[],
-}
+export const PRODUCTEUR = { largeur: 450, hauteur: 150 }
+export const MODULE = { largeur: 150, profondeur: 100 }
+
 /**
- * Les creux d'un module, par côté local quand sa bosse est en bas : [face,
- * droite, gauche]. Chaque module ouvre les trois autres formes que la sienne ;
- * les deux types d'une même forme les ouvrent en miroir, pour qu'échanger
- * l'un contre l'autre change la géométrie. De moi, à rejuger.
+ * Les huit emplacements d'un producteur, dans le sens des aiguilles : le côté
+ * (0 haut, 1 droite, 2 bas, 3 gauche) et le décalage le long du côté, en
+ * cases, depuis son milieu (vers la droite ou vers le bas).
  */
-export const PROFILS: readonly (readonly [number, number, number])[] = [
-  [2, 3, 1], // A, rond : en face un triangle, à droite un trapèze, à gauche un carré
-  [3, 0, 2], // B, carré
-  [0, 1, 3], // C, triangle
-  [1, 2, 0], // D, trapèze
-  [2, 1, 3], // E, rond : le miroir de A
-  [3, 2, 0], // F, carré
-  [0, 3, 1], // G, triangle
-  [1, 0, 2], // H, trapèze
+export const EMPLACEMENTS: readonly { cote: number; decalage: number }[] = [
+  { cote: 0, decalage: -1 },
+  { cote: 0, decalage: 0 },
+  { cote: 0, decalage: 1 },
+  { cote: 1, decalage: 0 },
+  { cote: 2, decalage: 1 },
+  { cote: 2, decalage: 0 },
+  { cote: 2, decalage: -1 },
+  { cote: 3, decalage: 0 },
 ]

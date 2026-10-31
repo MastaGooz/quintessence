@@ -1,9 +1,10 @@
 /**
- * LES DÉCOUPES DU PUZZLE, en chemins SVG. Une pièce est un rectangle dont
- * chaque côté porte une bosse, un creux ou rien ; la bosse et le creux d'une
- * même forme ont la même silhouette, pour que l'une remplisse l'autre quand
- * deux pièces se touchent. Les quatre formes : rond, carré, triangle, trapèze
- * (une queue d'aronde). Les coordonnées sont centrées sur la pièce.
+ * LES DÉCOUPES DES PIÈCES, en chemins SVG. Une pièce est un rectangle dont
+ * chaque côté porte des bosses, des creux ou rien, à des emplacements répartis
+ * le long du côté ; la bosse et le creux d'une même forme ont la même
+ * silhouette, pour que l'une remplisse l'autre quand deux pièces se touchent.
+ * Les quatre formes : rond, carré, triangle, trapèze (une queue d'aronde). Les
+ * coordonnées sont centrées sur la pièce.
  */
 import { PIECE } from '../../logic/clic/donnees.ts'
 import type { Decoupe } from '../../logic/clic/moteur.ts'
@@ -17,10 +18,11 @@ const n = (v: number): string => (Math.round(v * 100) / 100).toString()
 
 /**
  * Le chemin d'un rectangle `largeur` × `hauteur` dont les côtés, dans le sens
- * des aiguilles (haut, droite, bas, gauche), portent chacun une découpe ou
+ * des aiguilles (haut, droite, bas, gauche), portent chacun une liste
+ * d'emplacements répartis le long du côté, dans le même sens : une découpe ou
  * rien. La bosse dépasse de `profondeur`, le creux s'enfonce d'autant.
  */
-export function cheminDecoupe(largeur: number, hauteur: number, cotes: readonly (Decoupe | null)[], encoche: Encoche = PIECE.encoche): string {
+export function cheminDecoupe(largeur: number, hauteur: number, cotes: readonly (readonly (Decoupe | null)[])[], encoche: Encoche = PIECE.encoche): string {
   const w = largeur / 2
   const h = hauteur / 2
   // Chaque côté : son départ, sa direction, sa normale vers l'extérieur, sa longueur.
@@ -33,12 +35,13 @@ export function cheminDecoupe(largeur: number, hauteur: number, cotes: readonly 
   const demi = encoche.largeur / 2
   let d = `M ${n(-w)} ${n(-h)}`
   bords.forEach((b, k) => {
-    const c = cotes[k] ?? null
+    const liste = cotes[k] ?? []
     const fin = { x: b.x + b.ux * b.l, y: b.y + b.uy * b.l }
-    if (c !== null) {
-      // Un point du bord : `t` le long du bord, `s` vers l'extérieur (négatif : vers l'intérieur).
-      const p = (t: number, s: number): string => `${n(b.x + b.ux * t + b.nx * s)} ${n(b.y + b.uy * t + b.ny * s)}`
-      const m = b.l / 2
+    // Un point du bord : `t` le long du bord, `s` vers l'extérieur (négatif : vers l'intérieur).
+    const p = (t: number, s: number): string => `${n(b.x + b.ux * t + b.nx * s)} ${n(b.y + b.uy * t + b.ny * s)}`
+    liste.forEach((c, i) => {
+      if (c === null) return
+      const m = ((i + 0.5) * b.l) / liste.length
       const s = c.genre === 'bosse' ? encoche.profondeur : -encoche.profondeur
       switch (c.forme) {
         case 0: {
@@ -59,7 +62,7 @@ export function cheminDecoupe(largeur: number, hauteur: number, cotes: readonly 
           // TRAPÈZE : une queue d'aronde, plus large au bout qu'au col.
           d += ` L ${p(m - demi * 0.55, 0)} L ${p(m - demi, s)} L ${p(m + demi, s)} L ${p(m + demi * 0.55, 0)}`
       }
-    }
+    })
     d += ` L ${n(fin.x)} ${n(fin.y)}`
   })
   return `${d} Z`
@@ -69,4 +72,15 @@ export function cheminDecoupe(largeur: number, hauteur: number, cotes: readonly 
 export function boite(largeur: number, hauteur: number, encoche: Encoche = PIECE.encoche): { x: number; y: number; largeur: number; hauteur: number } {
   const a = encoche.profondeur
   return { x: -largeur / 2 - a, y: -hauteur / 2 - a, largeur: largeur + 2 * a, hauteur: hauteur + 2 * a }
+}
+
+/** Les quatre côtés d'un producteur, depuis ses huit emplacements (haut ×3, droite, bas ×3, gauche), en creux. */
+export function cotesDuProducteur(creux: readonly (number | null)[]): (Decoupe | null)[][] {
+  const c = (f: number | null | undefined): Decoupe | null => (f === null || f === undefined ? null : { genre: 'creux', forme: f })
+  return [[c(creux[0]), c(creux[1]), c(creux[2])], [c(creux[3])], [c(creux[4]), c(creux[5]), c(creux[6])], [c(creux[7])]]
+}
+
+/** Les quatre côtés d'un module : sa bosse en bas, rien ailleurs. */
+export function cotesDuModule(forme: number): (Decoupe | null)[][] {
+  return [[null], [null], [{ genre: 'bosse', forme }], [null]]
 }

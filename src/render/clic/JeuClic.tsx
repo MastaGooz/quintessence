@@ -46,7 +46,7 @@ function Accueil({ onCommencer }: { onCommencer: (nom: string) => void }): React
       <h1>Quintessence</h1>
       <p className="sourd petit">Prototype du système abstrait, sans habillage.</p>
       <p>
-        Un seul nombre. Tapez la base pour produire, vendez pour gagner de l’or, achetez des modules et emboîtez-les sur la base, puis les uns sur les autres : ils tapent pour vous. Tapez un module pour l’améliorer.
+        Un seul nombre. Tapez la base pour produire, vendez pour gagner de l’or. Achetez des modules et emboîtez-les sur la base : une horloge la fait produire toute seule, les autres grossissent chaque lot. Puis des producteurs plus gros, où vos modules déménagent. Tapez un module pour l’améliorer.
       </p>
       <label>
         Votre nom
@@ -122,8 +122,8 @@ function Table({ partie, reelAuDepart, onRecommencer }: { partie: Partie; reelAu
   const m = partie.monde
   const j = joueur(partie)
   const props = { partie, agir }
-  // Le jeu s'ouvre une chose à la fois : la barre et l'heure arrivent avec la première unité.
-  const ouvert = j.connues >= 2 || j.points > 0
+  // Le jeu s'ouvre une chose à la fois : la barre et l'heure arrivent avec le premier module.
+  const ouvert = j.connusModules >= 2 || j.points > 0
   const pageVue = ouvert ? page : 'base'
   // La carte remplit le corps : la page ne défile pas, c'est le plan qui glisse.
   const surLaCarte = !finie(partie) && pageVue === 'base'
