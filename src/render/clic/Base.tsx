@@ -20,7 +20,7 @@ import { CASE, MODULE, MODULES, PIECE, PLANETE, PRODUCTEUR, PRODUCTEURS, TAPES_M
 import {
   DIRECTIONS, ameliorer, bilan, bilanProducteur, boiteModule, branches, brancher, bruler, coutNiveau, coutProspection, debit, debitReel, debrancher, declencher,
   deplacer, deplacerProducteur, disposition, effet, etendue, extracteursASec, frontiere, gainBrulage, gisementsConnus, limiteParLaVeine, moduleDe, modulesDe,
-  multiplicateurPrestige, peutAmeliorer, peutProduire, peutProspecter, placeDApparitionProducteur, placeSurProducteur, plafond, planeteDe, prisesPour, producteurDe,
+  multiplicateurPrestige, peutAmeliorer, peutProduire, peutProspecter, placeDApparitionProducteur, placeLibre, placeSurProducteur, plafond, planeteDe, prisesPour, producteurDe,
   producteurTient, prospecter, surLesCases, type Module, type Place, type Prise, type Producteur,
 } from '../../logic/clic/moteur.ts'
 import { centreDeZone, origineDeZone, type Zone } from '../../logic/clic/planete.ts'
@@ -472,12 +472,19 @@ export function Base({ partie, agir, avecBarre }: PagePropsClic & { avecBarre: b
   const veines = gisementsConnus(j)
   const prestige = multiplicateurPrestige(j)
   const secs = extracteursASec(j)
+  // Un extracteur que sa veine bride alors qu'une veine libre plus riche existe : l'indice le dit.
+  const brides = j.producteurs.filter((p) => limiteParLaVeine(j, p))
+  const brideAvecMieux = brides.some((p) => {
+    const place = placeLibre(j, p.id)
+    return place !== null && (place.gisement.debit / 3600) * prestige > plafond(j, p)
+  })
 
   // UN INDICE à la fois : le premier geste, puis ce qui bloque.
   let indice: string | null = null
   if (debut && j.r < 1) indice = `Tapez ${NOM_BASE} pour extraire de la ${NOM_R}.`
   else if (poses > 0 && branchees.size === 0) indice = 'Glissez le module sur le creux de sa forme.'
   else if (secs.length > 0 && t === null) indice = `Un ${NOM_EXTRACTEUR} est à sec : glissez-le sur une ${NOM_VEINE}.`
+  else if (brideAvecMieux && t === null) indice = `Une ${NOM_VEINE} ne donne pas plus que son maximum : une ${NOM_VEINE} plus riche est libre.`
   else if (j.connusProducteurs >= 2 && placeDApparitionProducteur(j) === null && front.some((z) => j.or + 1e-9 >= coutProspection(z))) indice = 'Plus de place sur vos veines : tapez une zone « ? » pour prospecter.'
   else if (branchees.size > 0 && j.modules.every((mo) => mo.niveau === 1) && bulle === null && j.or >= 50) indice = 'Tapez un module pour l’améliorer.'
 
@@ -536,7 +543,7 @@ export function Base({ partie, agir, avecBarre }: PagePropsClic & { avecBarre: b
                 ))}
               </svg>
               <span className="gisement-texte">
-                <b>{reste <= 0 ? 'épuisée' : parSeconde((gisement.debit / 3600) * prestige)}</b>
+                <b>{reste <= 0 ? 'épuisée' : `${parSeconde((gisement.debit / 3600) * prestige)} au plus`}</b>
                 {reste > 0 && (
                   <small>
                     {abrege(reste)} {NOM_R}
@@ -646,8 +653,8 @@ export function Base({ partie, agir, avecBarre }: PagePropsClic & { avecBarre: b
                       ) : (
                         <>
                           <small>{abregeFin(b.lotMoyen)} par coup</small>
-                          <small className={actif ? (bride ? 'manque' : 'gain') : 'sourd'}>
-                            {actif ? `${parSeconde(reel)}${bride ? ` · ${NOM_VEINE} pleine` : ''}` : 'tapez-le, ou posez une horloge'}
+                          <small className={actif ? (bride ? 'limite' : 'gain') : 'sourd'}>
+                            {actif ? `${parSeconde(reel)}${bride ? ` · la ${NOM_VEINE} ne donne pas plus` : ''}` : 'tapez-le, ou posez une horloge'}
                           </small>
                         </>
                       )}
@@ -835,8 +842,8 @@ function BilanDuPorteur({ j, porteur, module }: { j: ReturnType<typeof joueur>; 
         <>à sec, rien ne changera tant qu’il n’est pas sur une {NOM_VEINE}.</>
       ) : apres.frequence > 0 ? (
         <>
-          {parSeconde(debitAvant)} → <span className={debitApres > debitAvant ? 'gain' : 'manque'}>{parSeconde(debitApres)}</span>
-          {debitApres <= debitAvant && apres.debit > avant.debit && ` · la ${NOM_VEINE} est pleine`}
+          {parSeconde(debitAvant)} → <span className={debitApres > debitAvant ? 'gain' : 'limite'}>{parSeconde(debitApres)}</span>
+          {debitApres <= debitAvant && apres.debit > avant.debit && ` · la ${NOM_VEINE} ne donne pas plus : il faut une ${NOM_VEINE} plus riche`}
         </>
       ) : (
         <>

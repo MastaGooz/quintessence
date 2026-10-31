@@ -1143,6 +1143,11 @@ select {
   stroke: rgba(255, 170, 60, 0.75);
 }
 
+/* Au maximum de sa veine : ambre, pas rouge — ce n'est pas une panne, c'est un plafond. */
+.limite {
+  color: #ffb14d;
+}
+
 /* LA PLANÈTE : les zones, en pixels-monde. Une zone révélée n'est qu'un cadre discret ; une zone « ? » touche le connu et se tape pour prospecter ; l'inconnu est voilé. */
 .zone {
   position: absolute;
