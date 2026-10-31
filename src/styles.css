@@ -1128,6 +1128,162 @@ select {
   }
 }
 
+/* À sec (pas de veine sous lui) : terne ; bridé par sa veine : un liseré ambre. */
+.producteur-sec .producteur-forme path {
+  fill: #2d2436;
+  stroke: rgba(255, 246, 226, 0.3);
+  filter: none;
+}
+
+.producteur-sec b {
+  opacity: 0.5;
+}
+
+.producteur-bride .producteur-forme path {
+  stroke: rgba(255, 170, 60, 0.75);
+}
+
+/* LA PLANÈTE : les zones, en pixels-monde. Une zone révélée n'est qu'un cadre discret ; une zone « ? » touche le connu et se tape pour prospecter ; l'inconnu est voilé. */
+.zone {
+  position: absolute;
+  z-index: 0;
+  border-radius: 28px;
+  pointer-events: none;
+}
+
+.zone-connue {
+  border: 2px solid rgba(255, 246, 226, 0.07);
+}
+
+.zone-inconnue {
+  background: rgba(6, 2, 10, 0.92);
+}
+
+.zone-frontiere {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(14, 6, 22, 0.8);
+  border: 4px dashed rgba(255, 246, 226, 0.22);
+  pointer-events: auto;
+  cursor: pointer;
+  transition: background 0.15s ease-out, border-color 0.15s ease-out;
+}
+
+.zone-payable {
+  border-color: rgba(255, 198, 31, 0.45);
+}
+
+.zone-frontiere.enfonce,
+.zone-choisie {
+  background: rgba(40, 20, 56, 0.7);
+  border-color: var(--or);
+}
+
+.zone-texte {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: var(--creme);
+  opacity: 0.8;
+}
+
+.zone-texte b {
+  font-size: 160px;
+  line-height: 1;
+  font-weight: 800;
+}
+
+.zone-payable .zone-texte b {
+  color: var(--or);
+}
+
+.zone-texte small {
+  font-size: 34px;
+  font-weight: 600;
+}
+
+/* LES VEINES : la tache de cases d'un gisement, qui pâlit en se vidant (`--plein`), grise une fois épuisée. */
+.gisement {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.gisement svg {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+}
+
+.gisement rect {
+  fill: rgba(200, 155, 90, calc(0.16 + 0.34 * var(--plein, 1)));
+  stroke: rgba(200, 155, 90, calc(0.35 + 0.45 * var(--plein, 1)));
+  stroke-width: 3;
+}
+
+.gisement-vide rect {
+  fill: rgba(120, 110, 130, 0.14);
+  stroke: rgba(120, 110, 130, 0.35);
+  stroke-dasharray: 14 10;
+}
+
+.gisement-texte {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 18px;
+  border-radius: 18px;
+  background: rgba(20, 8, 28, 0.55);
+  color: var(--creme);
+  white-space: nowrap;
+}
+
+.gisement-texte b {
+  font-size: 30px;
+  line-height: 1.1;
+  color: var(--terre);
+}
+
+.gisement-vide .gisement-texte b {
+  color: rgba(255, 246, 226, 0.5);
+}
+
+.gisement-texte small {
+  font-size: 22px;
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+/* La jauge d'une veine, sur la page Planète. */
+.jauge-veine {
+  display: block;
+  width: 100%;
+  max-width: 14rem;
+  height: 0.35rem;
+  margin-top: 0.3rem;
+  border-radius: 0.2rem;
+  background: rgba(255, 246, 226, 0.12);
+  overflow: hidden;
+}
+
+.jauge-veine > span {
+  display: block;
+  height: 100%;
+  background: var(--terre);
+}
+
+.ligne-eteinte {
+  opacity: 0.55;
+}
+
 /* LES CREUX où le module qu'on tient peut aller : des cases en pointillé ; celle que vise l'aimant s'allume. */
 .prise {
   position: absolute;

@@ -1,19 +1,21 @@
 /**
- * LA BOUTIQUE : ce qui s'achète. Les producteurs, qui apparaissent sous
- * l'installation avec leurs creux vides ; les modules, qui apparaissent posés,
- * à glisser sur un creux de leur forme ; le comptoir automatique ; le prestige.
- * Les niveaux se prennent sur la carte, dans la bulle du module (Keko, 30/10 :
- * « cliquer sur les modules existants et les améliorer individuellement »).
+ * LA BOUTIQUE : ce qui s'achète. Les extracteurs, qui apparaissent sur la
+ * veine libre la plus riche avec leurs creux vides ; les modules, qui
+ * apparaissent posés à côté du robot, à glisser sur un creux de leur forme ;
+ * la raffinerie automatique ; le départ pour une autre planète. Les niveaux se
+ * prennent sur la carte, dans la bulle du module (Keko, 30/10 : « cliquer sur
+ * les modules existants et les améliorer individuellement ») ; la prospection
+ * aussi, en tapant une zone « ? ».
  */
 import { useState, type ReactElement } from 'react'
 import { AUTO_COUT, MODULES, PRESTIGE, PRODUCTEURS } from '../../logic/clic/donnees.ts'
 import {
-  acheterAuto, acheterModule, acheterProducteur, branches, coutModule, coutProducteur, multiplicateurPrestige, peutAcheterModule, peutAcheterProducteur,
-  pointsSi, prestiger, prisesLibres, visibleModule, visibleProducteur, type Module, type Producteur,
+  acheterAuto, acheterModule, acheterProducteur, bilanPlanete, branches, coutModule, coutProducteur, coutProspection, frontiere, multiplicateurPrestige, peutAcheterModule,
+  peutAcheterProducteur, placeDApparitionProducteur, pointsSi, prestiger, prisesLibres, visibleModule, visibleProducteur, type Module, type Producteur,
 } from '../../logic/clic/moteur.ts'
 import { joueur } from '../../logic/clic/partie.ts'
-import { abrege } from '../../ui/format.ts'
-import { EXPLICATION_MODULE, NOM_AUTO, NOM_MODULE, NOM_PRESTIGE, NOM_PRODUCTEUR, NOM_R, NOMS_FORMES } from '../../ui/noms-clic.ts'
+import { abrege, parSeconde } from '../../ui/format.ts'
+import { EXPLICATION_MODULE, NOM_AUTO, NOM_ENERGIE, NOM_EXTRACTEUR, NOM_MODULE, NOM_PLAN, NOM_PRESTIGE, NOM_PRODUCTEUR, NOM_R, NOM_VEINE, NOMS_FORMES } from '../../ui/noms-clic.ts'
 import { vibrer } from '../../ui/haptique.ts'
 import { sonBatir } from '../../ui/sons.ts'
 import { eclater, effetDepense, flotter } from '../effets.ts'
@@ -71,13 +73,17 @@ export function Boutique({
   const autoVisible = !j.auto && (j.or >= AUTO_COUT / 4 || j.modules.length >= 3)
   const producteursVisibles = PRODUCTEURS.map((_, i) => i > 0 && visibleProducteur(j, i))
   const prochainProducteur = producteursVisibles.findIndex((v, i) => i > 0 && !v)
+  const place = placeDApparitionProducteur(j)
+  const front = frontiere(j)
+  const prospectionMoinsChere = front.length > 0 ? Math.min(...front.map(coutProspection)) : Infinity
+  const planete = bilanPlanete(j)
 
   return (
     <Feuille titre="Boutique" onFermer={onFermer}>
       {/* LES MODULES */}
       <section>
         <h2>Modules</h2>
-        <p className="sourd petit">Un module acheté apparaît posé sous l’installation : glissez-le sur un creux de sa forme, sur un producteur. Tapez-le pour l’améliorer.</p>
+        <p className="sourd petit">Un module acheté apparaît posé au-dessus du robot : glissez-le sur un creux de sa forme, sur le robot ou un {NOM_EXTRACTEUR}. Tapez-le pour l’améliorer.</p>
         {MODULES.map((t, k) => {
           if (!visibleModule(j, k)) return null
           const branches_ = j.modules.filter((mo) => mo.type === k && branchees.has(mo.id)).length
@@ -102,7 +108,7 @@ export function Boutique({
                   </span>
                 </span>
                 <button type="button" className={payable ? 'bouton-principal' : ''} disabled={!payable} onClick={(e) => acheterM(k, e.currentTarget)}>
-                  {abrege(cout)} or
+                  {abrege(cout)} {NOM_ENERGIE}
                 </button>
               </div>
             </div>
@@ -115,13 +121,25 @@ export function Boutique({
         )}
       </section>
 
-      {/* LES PRODUCTEURS */}
+      {/* LES EXTRACTEURS */}
       {(producteursVisibles.some((v) => v) || j.connusModules >= 2) && (
         <section>
-          <h2>Producteurs</h2>
+          <h2>Extracteurs</h2>
           <p className="sourd petit">
-            Un producteur produit son lot à chaque coup : une tape, ou le tic d’une horloge. Il apparaît sous l’installation, ses creux vides ; vos modules peuvent y déménager.
+            Un {NOM_EXTRACTEUR} produit son lot à chaque coup, une tape ou le tic d’une horloge, mais jamais plus que sa {NOM_VEINE} ne donne. Il apparaît sur votre {NOM_VEINE} libre la plus riche, ses creux
+            vides ; vos modules peuvent y déménager, et vous le tirez d’une {NOM_VEINE} à l’autre.
           </p>
+          {producteursVisibles.some((v) => v) &&
+            (place === null ? (
+              <p className="petit manque">
+                Aucune place libre sur vos {NOM_VEINE}s : prospectez une zone « ? » sur la carte
+                {Number.isFinite(prospectionMoinsChere) && ` (dès ${abrege(prospectionMoinsChere)} ${NOM_ENERGIE})`}, ou déplacez un {NOM_EXTRACTEUR} à sec.
+              </p>
+            ) : (
+              <p className="petit sourd">
+                Le prochain se posera sur une {NOM_VEINE} à {parSeconde((place.gisement.debit / 3600) * prestige)} au plus.
+              </p>
+            ))}
           {PRODUCTEURS.map((t, i) => {
             if (!producteursVisibles[i]) return null
             const possedes = j.producteurs.filter((p) => p.type === i).length
@@ -143,13 +161,13 @@ export function Boutique({
                     </span>
                   </span>
                   <button type="button" className={payable ? 'bouton-principal' : ''} disabled={!payable} onClick={(e) => acheterP(i, e.currentTarget)}>
-                    {abrege(cout)} or
+                    {abrege(cout)} {NOM_ENERGIE}
                   </button>
                 </div>
               </div>
             )
           })}
-          {prochainProducteur === 1 && <p className="sourd petit verrou">Le premier producteur se dévoile avec votre second module.</p>}
+          {prochainProducteur === 1 && <p className="sourd petit verrou">Le premier {NOM_EXTRACTEUR} se dévoile avec votre second module.</p>}
           {prochainProducteur > 1 && (
             <p className="sourd petit verrou">
               {NOM_PRODUCTEUR[prochainProducteur]} se dévoile avec {NOM_PRODUCTEUR[prochainProducteur - 1]?.toLowerCase()}, ou dès que vous pouvez le payer.
@@ -158,13 +176,13 @@ export function Boutique({
         </section>
       )}
 
-      {/* LE COMPTOIR AUTOMATIQUE */}
+      {/* LA RAFFINERIE AUTOMATIQUE */}
       {autoVisible && (
         <section>
           <div className="ligne">
             <span className="unite-texte">
               <b>{NOM_AUTO}</b>
-              <span className="petit sourd">Vend votre production au fil de l’eau, même absent. Un gros lot vendu d’un coup rapporte moins que le même étalé.</span>
+              <span className="petit sourd">Brûle votre {NOM_R} au fil de l’eau, même absent : plus besoin de revenir pour l’{NOM_ENERGIE}.</span>
             </span>
             <button
               type="button"
@@ -179,34 +197,35 @@ export function Boutique({
                 })
               }}
             >
-              {abrege(AUTO_COUT)} or
+              {abrege(AUTO_COUT)} {NOM_ENERGIE}
             </button>
           </div>
         </section>
       )}
 
-      {/* LE PRESTIGE */}
+      {/* QUITTER LA PLANÈTE */}
       {prestigeVisible && (
         <section>
           <div className="ligne">
             <span className="unite-texte">
               <b>{NOM_PRESTIGE}</b>
               <span className="petit sourd">
-                Tout remettre à zéro (producteurs et modules, {NOM_R}, or) contre des points permanents : chaque point ajoute ×1 à tous les lots, tape comprise.
-                {j.points > 0 && ` Vous avez ${j.points} point${j.points > 1 ? 's' : ''} (lots ×${abrege(prestige)}).`}
+                Repartir sur une planète neuve, le robot nu (plus d’{NOM_EXTRACTEUR}s, de modules, de {NOM_R} ni d’{NOM_ENERGIE}), avec des {NOM_PLAN}s permanents : chaque {NOM_PLAN} ajoute ×1 à tous les lots et
+                à ce que donnent les {NOM_VEINE}s. Celle-ci est consumée à {Math.round((1 - planete.restant / Math.max(1, planete.quantite)) * 100)} %.
+                {j.points > 0 && ` Vous avez ${j.points} ${NOM_PLAN}${j.points > 1 ? 's' : ''} (×${abrege(prestige)}).`}
               </span>
               <span className="petit">
                 {gain >= 1 ? (
                   <>
-                    Maintenant : <b className="gain">+{gain} point{gain > 1 ? 's' : ''}</b>, lots ×{abrege(prestige)} → ×{abrege(prestige + gain)}
+                    Maintenant : <b className="gain">+{gain} {NOM_PLAN}{gain > 1 ? 's' : ''}</b>, ×{abrege(prestige)} → ×{abrege(prestige + gain)}
                   </>
                 ) : (
-                  <>Premier point à {abrege(PRESTIGE.base)} {NOM_R} produits depuis le dernier prestige ({abrege(j.produitRun)} pour l’instant).</>
+                  <>Premier {NOM_PLAN} à {abrege(PRESTIGE.base)} {NOM_R} extraites sur cette planète ({abrege(j.produitRun)} pour l’instant).</>
                 )}
               </span>
             </span>
             <button type="button" className={gain >= 1 ? 'bouton-danger' : ''} disabled={gain < 1} onClick={() => setConfirmer(true)}>
-              Prestiger
+              Décoller
             </button>
           </div>
         </section>
@@ -214,11 +233,12 @@ export function Boutique({
       {confirmer && (
         <Feuille titre={NOM_PRESTIGE} onFermer={() => setConfirmer(false)}>
           <p>
-            Vous perdez vos {j.producteurs.length - 1} producteur{j.producteurs.length > 2 ? 's' : ''} et vos {j.modules.length} module{j.modules.length > 1 ? 's' : ''} avec leurs niveaux,{' '}
-            {abrege(j.r)} {NOM_R} et {abrege(j.or)} or. Il ne reste que la base, nue.
+            Vous laissez vos {j.producteurs.length - 1} {NOM_EXTRACTEUR}{j.producteurs.length > 2 ? 's' : ''} et vos {j.modules.length} module{j.modules.length > 1 ? 's' : ''} avec leurs niveaux,{' '}
+            {abrege(j.r)} {NOM_R} et {abrege(j.or)} {NOM_ENERGIE}, et ce qui reste dans la planète. Il ne reste que le robot, nu, sur une planète neuve.
           </p>
           <p>
-            Vous gagnez <b className="gain">+{gain} point{gain > 1 ? 's' : ''}</b> : tous vos lots passent de ×{abrege(prestige)} à ×{abrege(prestige + gain)}, pour toujours. Ce que vous connaissez reste connu.
+            Vous gagnez <b className="gain">+{gain} {NOM_PLAN}{gain > 1 ? 's' : ''}</b> : tous vos lots et vos {NOM_VEINE}s passent de ×{abrege(prestige)} à ×{abrege(prestige + gain)}, pour toujours. Ce que vous
+            connaissez reste connu.
           </p>
           <div className="boutons">
             <button type="button" onClick={() => setConfirmer(false)}>
@@ -239,18 +259,18 @@ export function Boutique({
                   const r = document.querySelector('.producteur-base')?.getBoundingClientRect()
                   if (r !== undefined) {
                     eclater(r.left + r.width / 2, r.top + r.height / 2, 30)
-                    flotter(r.left + r.width / 2, r.top, `+${gain} point${gain > 1 ? 's' : ''}`, 'flottant-or', 1.8)
+                    flotter(r.left + r.width / 2, r.top, `+${gain} ${NOM_PLAN}${gain > 1 ? 's' : ''}`, 'flottant-or', 1.8)
                   }
                 })
               }}
             >
-              Prestiger
+              Décoller
             </button>
           </div>
         </Feuille>
       )}
       <p className="sourd petit centre marge-haute">
-        Total produit : {abrege(j.total)} {NOM_R}
+        Total extrait : {abrege(j.total)} {NOM_R}
       </p>
     </Feuille>
   )

@@ -1,9 +1,16 @@
 /**
  * LE SYSTÈME ABSTRAIT (Keko, 30/10/2026 : « on va créer d'abord un système
- * abstrait, on lui donnera un thème habillage APRÈS ») : une seule ressource R,
- * une seule monnaie (l'or), un marché commun dont le prix baisse avec ce que
- * tous ont vendu, un prestige qui remet à zéro contre un multiplicateur
- * permanent. Les noms (A, B, C…) sont dans `ui/noms-clic`.
+ * abstrait, on lui donnera un thème habillage APRÈS ») : une seule ressource
+ * (le minerai), une seule monnaie (l'énergie), un prestige qui remet à zéro
+ * contre un multiplicateur permanent. Les noms sont dans `ui/noms-clic`.
+ *
+ * LA PLANÈTE (Keko, 31/10 : « IA × minage : un petit robot qui mine pour
+ * construire des machines et d'autres robots, jusqu'à tout consumer, avec
+ * l'énergie en monnaie générale ») : le plan est une planète finie, découpée
+ * en zones ; chaque zone révélée montre son gisement ; un extracteur ne
+ * produit que posé sur un gisement, et le vide ; on paie pour prospecter les
+ * zones voisines. Le robot (la base) mine à la main, partout, gratuitement :
+ * on n'est jamais bloqué.
  *
  * LES PRODUCTEURS ET LEURS MODULES (Keko, 31/10) : « les producteurs génèrent
  * des ressources, comme celui où on tape, avec des prises femelles, et les
@@ -123,22 +130,40 @@ export const NIVEAU = {
 export const TAPES_MAX_PAR_S = 10
 
 /**
- * LE MARCHÉ COMMUN : le prix d'un R vaut `prix × D / (D + V)`, où V est le
- * volume vendu récemment par tous (il fond de moitié toutes les `demiVie`
- * heures) et D la demande : ce que tous les joueurs produisent en `tampon`
- * heures, au moins `demandeMin`, suivi avec une inertie de `inertie` heures
- * (demi-écart). Vendre q d'un coup rapporte l'intégrale du prix de V à V + q :
- * un gros lot se vend moins cher que le même étalé.
+ * L'ÉNERGIE est la seule monnaie (Keko, 31/10 : « l'énergie en monnaie
+ * générale ») : le minerai se BRÛLE à ce taux. Le marché commun est parti avec
+ * la planète finie : la rareté n'est plus dans un prix qui baisse avec ce que
+ * tous vendent, elle est dans le sol, qui se vide.
  */
-export const MARCHE = {
-  prix: 1,
-  demandeMin: 100,
-  tampon: 3,
-  demiVie: 2,
-  inertie: 6,
+export const ENERGIE = { parMinerai: 1 }
+
+/**
+ * LA PLANÈTE (Keko, 31/10 : « les zones sont des gisements, les bases sont les
+ * extracteurs ») : des zones carrées de `zone` cases de côté, en `anneaux`
+ * anneaux autour de celle du robot ; une part `sterile` des zones n'a pas de
+ * gisement. Un gisement est une VEINE : elle ne donne que `debit` minerai par
+ * heure, quel que soit l'extracteur posé dessus, et en contient `debit ×
+ * duree` heures. Mesuré : avec la seule quantité, un gros extracteur vidait
+ * son gisement en une heure et restait à sec jusqu'à la visite suivante (70 %
+ * du temps) ; avec le débit, une veine dure la journée, les petits extracteurs
+ * gardent leur usage et les gros veulent des veines riches, plus loin. L'anneau
+ * n donne `premier × croissance^(n−1)` par heure, à un facteur `ecart` près
+ * (tiré) ; la veine du départ, sous le robot, est fixée par `depart`.
+ * Chiffres à régler par `simulation/clic.ts`.
+ */
+export const PLANETE = {
+  zone: 8,
+  anneaux: 4,
+  sterile: 0.3,
+  debit: { premier: 2e3, croissance: 12, ecart: 2 },
+  duree: { heures: 24, ecart: 1.5 },
+  depart: { debit: 600, quantite: 1e4 },
 }
 
-/** Le comptoir automatique : il vend la production au fil de l'eau. */
+/** PROSPECTER une zone de l'anneau n coûte `premier × croissance^(n−1)` énergie : loin, c'est cher, et plus riche. */
+export const PROSPECTION = { premier: 60, croissance: 12 }
+
+/** La raffinerie automatique : elle brûle la production au fil de l'eau. */
 export const AUTO_COUT = 2000
 
 /**
@@ -155,16 +180,18 @@ export const PRESTIGE = {
 }
 
 /**
- * LA GÉOMÉTRIE. Le monde est un plan en pixels-monde, en cases d'une taille.
- * Un producteur est un rectangle de trois cases sur une ; un module, une
- * pièce d'une case de large qui s'emboîte sur son bord, sa bosse vers lui. La
- * bosse et le creux : leur largeur le long du bord, et ce qu'ils dépassent ou
+ * LA GÉOMÉTRIE. Le monde est un plan en pixels-monde, en cases d'une taille ;
+ * la case (0, 0) est centrée sur l'origine. Un producteur est un rectangle de
+ * trois cases sur une, posé sur des cases entières ; un module, une pièce
+ * d'une case de large qui s'emboîte sur son bord, sa bosse vers lui. La bosse
+ * et le creux : leur largeur le long du bord, et ce qu'ils dépassent ou
  * s'enfoncent.
  */
 export const PIECE = {
   taille: 150,
   encoche: { largeur: 56, profondeur: 30 },
 }
+export const CASE = PIECE.taille
 export const PRODUCTEUR = { largeur: 450, hauteur: 150 }
 export const MODULE = { largeur: 150, profondeur: 100 }
 

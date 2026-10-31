@@ -24,8 +24,8 @@ export const BOTS: (Strategie & { visites: number })[] = [
 export const PAS = 0.25
 
 export interface Partie {
-  /** 4 : les producteurs et leurs modules à effet ; une sauvegarde plus ancienne est abandonnée. */
-  version: 4
+  /** 5 : la planète, ses gisements et l'énergie ; une sauvegarde plus ancienne est abandonnée. */
+  version: 5
   graine: number
   monde: Monde
   /** Par bot, l'instant de sa dernière visite jouée. */
@@ -33,7 +33,7 @@ export interface Partie {
 }
 
 export function nouvellePartie(graine: number, nomDuJoueur: string): Partie {
-  return { version: 4, graine, monde: nouveauMonde([nomDuJoueur, ...BOTS.map((b) => b.nom)]), dernieresVisites: BOTS.map(() => -1) }
+  return { version: 5, graine, monde: nouveauMonde([nomDuJoueur, ...BOTS.map((b) => b.nom)], graine), dernieresVisites: BOTS.map(() => -1) }
 }
 
 export function joueur(p: Partie): Joueur {
@@ -76,7 +76,7 @@ export function rattraper(p: Partie, jusqua: number): void {
   }
 }
 
-/** Le classement : le R produit depuis le début. */
+/** Le classement : le minerai produit depuis le début. */
 export function classement(p: Partie): Joueur[] {
   return [...p.monde.joueurs].sort((a, b) => b.total - a.total)
 }
@@ -89,7 +89,7 @@ export function serialiser(p: Partie): string {
 export function deserialiser(texte: string): Partie | null {
   try {
     const p = JSON.parse(texte) as Partie
-    if (p === null || typeof p !== 'object' || p.version !== 4) return null
+    if (p === null || typeof p !== 'object' || p.version !== 5) return null
     if (!Array.isArray(p.monde?.joueurs) || p.monde.joueurs.length !== BOTS.length + 1) return null
     if (!Array.isArray(p.dernieresVisites)) return null
     return p

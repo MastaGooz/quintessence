@@ -53,8 +53,12 @@ const ZOOM_MIN = 1 / 6
 const ZOOM_MAX = 4
 /** Un doigt qui bouge de plus que ça (en pixels d'écran) glisse : ce n'est plus un clic. */
 const SEUIL_GLISSE = 10
-/** La maille du quadrillage, en pixels-monde. */
-const MAILLE = 50
+/** La maille du quadrillage, en pixels-monde : la case du jeu, centrée sur l'origine (les lignes passent à une demi-case des multiples). */
+const MAILLE = 150
+const DECALAGE = MAILLE / 2
+/** Pendant une saisie, un doigt à moins de ça du bord (en pixels d'écran) fait glisser la carte, à cette vitesse au plus (pixels d'écran par seconde). */
+const BORD = 48
+const DERIVE = 900
 /** Des lignes espacées de moins que ça (en pixels d'écran) ne se dessinent pas ; au-dessus elles apparaissent en fondu. */
 const LIGNES_MIN = 22
 const LIGNES_PLEINES = 56
@@ -132,12 +136,12 @@ export function monterCarte(el: HTMLElement, c: HTMLCanvasElement, m: HTMLElemen
       if (alpha <= 0) continue
       ctx.strokeStyle = `rgba(255, 246, 226, ${alpha.toFixed(3)})`
       ctx.beginPath()
-      for (let wx = Math.floor(gauche / pas) * pas; wx <= droite; wx += pas) {
+      for (let wx = Math.floor((gauche + DECALAGE) / pas) * pas - DECALAGE; wx <= droite; wx += pas) {
         const sx = Math.round((wx - x) * z + largeur / 2) + 0.5
         ctx.moveTo(sx, 0)
         ctx.lineTo(sx, hauteur)
       }
-      for (let wy = Math.floor(haut / pas) * pas; wy <= bas; wy += pas) {
+      for (let wy = Math.floor((haut + DECALAGE) / pas) * pas - DECALAGE; wy <= bas; wy += pas) {
         const sy = Math.round((wy - y) * z + hauteur / 2) + 0.5
         ctx.moveTo(0, sy)
         ctx.lineTo(largeur, sy)
@@ -168,6 +172,39 @@ export function monterCarte(el: HTMLElement, c: HTMLCanvasElement, m: HTMLElemen
   const relacher = (): void => geste?.cible?.classList.remove('enfonce')
   const rect = (): DOMRect => el.getBoundingClientRect()
 
+  // LA DÉRIVE : pendant une saisie, le doigt près du bord fait glisser la carte sous la pièce, pour l'emporter plus loin que l'écran.
+  let derive = 0
+  let doigtTenu: Point | null = null
+  let dernierPas = 0
+  /** La vitesse de dérive (de −1 à 1 sur chaque axe) pour un doigt à cet endroit de l'écran : nulle loin des bords, pleine au bord. */
+  const vitesse = (p: Point): Point => {
+    const vers = (v: number, taille: number): number => (v < BORD ? -(BORD - v) / BORD : v > taille - BORD ? (v - (taille - BORD)) / BORD : 0)
+    return { x: Math.max(-1, Math.min(1, vers(p.x, largeur))), y: Math.max(-1, Math.min(1, vers(p.y, hauteur))) }
+  }
+  const arreterLaDerive = (): void => {
+    cancelAnimationFrame(derive)
+    derive = 0
+    doigtTenu = null
+  }
+  const deriver = (t: number): void => {
+    if (!saisi || doigtTenu === null) {
+      derive = 0
+      return
+    }
+    const dt = Math.min(0.05, (t - dernierPas) / 1000)
+    dernierPas = t
+    const v = vitesse(doigtTenu)
+    if (v.x === 0 && v.y === 0) {
+      derive = 0
+      return
+    }
+    vue.x += (v.x * DERIVE * dt) / vue.z
+    vue.y += (v.y * DERIVE * dt) / vue.z
+    demander()
+    inter.onTrainer?.(versMonde(doigtTenu.x, doigtTenu.y))
+    derive = requestAnimationFrame(deriver)
+  }
+
   const bas = (e: PointerEvent): void => {
     if (e.pointerType === 'mouse' && e.button !== 0) return
     const t = e.target as Element
@@ -176,6 +213,7 @@ export function monterCarte(el: HTMLElement, c: HTMLCanvasElement, m: HTMLElemen
     if (saisi) {
       // Un second doigt pendant une saisie : on voulait pincer, pas emporter. La saisie s'annule, les deux doigts pincent.
       saisi = false
+      arreterLaDerive()
       inter.onAnnuler?.()
       geste = null
     }
@@ -214,6 +252,12 @@ export function monterCarte(el: HTMLElement, c: HTMLCanvasElement, m: HTMLElemen
     if (saisi) {
       if (!saisie.bouge && Math.hypot(apres.x - saisie.depart.x, apres.y - saisie.depart.y) > SEUIL_GLISSE) saisie.bouge = true
       inter.onTrainer?.(versMonde(apres.x, apres.y))
+      doigtTenu = apres
+      const v = vitesse(apres)
+      if ((v.x !== 0 || v.y !== 0) && derive === 0 && saisie.bouge) {
+        dernierPas = performance.now()
+        derive = requestAnimationFrame(deriver)
+      }
       return
     }
     if (doigts.size === 1 && geste !== null) {
@@ -246,6 +290,7 @@ export function monterCarte(el: HTMLElement, c: HTMLCanvasElement, m: HTMLElemen
     if (saisi) {
       if (doigts.size === 0) {
         saisi = false
+        arreterLaDerive()
         inter.onLacher?.(versMonde(p.x, p.y), saisie.bouge)
       }
       return
@@ -343,6 +388,7 @@ export function monterCarte(el: HTMLElement, c: HTMLCanvasElement, m: HTMLElemen
       observateur.disconnect()
       cancelAnimationFrame(image)
       cancelAnimationFrame(animation)
+      arreterLaDerive()
       el.removeEventListener('pointerdown', bas)
       el.removeEventListener('pointermove', mouvement)
       el.removeEventListener('pointerup', haut)

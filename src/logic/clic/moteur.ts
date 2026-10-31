@@ -1,23 +1,30 @@
 /**
  * LE MOTEUR du système abstrait : pur, le temps en heures injecté, aucun
  * hasard de son cru (un tirage lui est passé quand il en faut un). Tout ce
- * qu'un joueur peut faire passe par ici (déclencher un producteur, vendre,
- * acheter, emboîter, améliorer, prestiger) ; `avancer` fait produire et vendre
- * le monde.
+ * qu'un joueur peut faire passe par ici (déclencher un producteur, brûler le
+ * minerai, acheter, emboîter, améliorer, prospecter, déplacer, quitter la
+ * planète) ; `avancer` fait produire le monde.
  *
  * LES PRODUCTEURS ET LEURS MODULES (Keko, 31/10) : un producteur est un
- * rectangle creusé de prises femelles ; il produit un LOT de R à chaque
- * déclenchement, et une tape le déclenche. Un module est une pièce à une bosse,
- * qui s'emboîte dans un creux de sa forme sur un producteur et AGIT sur lui :
- * l'horloge le déclenche toute seule, l'ajout grossit son lot, le
- * multiplicateur le multiplie, le critique donne une chance qu'il soit décuplé.
- * Un module s'améliore niveau par niveau, et se déplace d'un producteur à
- * l'autre. Les producteurs flottent sur le plan ; la base, offerte, est au
- * centre et n'en bouge pas.
+ * rectangle creusé de prises femelles ; il produit un LOT de minerai à chaque
+ * déclenchement, et une tape le déclenche. Un module est une pièce à une
+ * bosse, qui s'emboîte dans un creux de sa forme sur un producteur et AGIT sur
+ * lui : l'horloge le déclenche toute seule, l'ajout grossit son lot, le
+ * multiplicateur le multiplie, le critique donne une chance qu'il soit
+ * décuplé. Un module s'améliore niveau par niveau, et se déplace d'un
+ * producteur à l'autre.
+ *
+ * LA PLANÈTE (Keko, 31/10) : le plan est une planète finie en zones ; le
+ * robot (la base, offerte, au centre, qui ne bouge pas) mine à la main
+ * partout ; les EXTRACTEURS (les producteurs achetés) ne produisent que posés
+ * sur un gisement révélé, qu'ils vident ; on paie pour prospecter une zone qui
+ * touche le connu ; on déplace un extracteur à sec vers un autre gisement.
  */
-import { ACHAT, AUTO_COUT, EFFETS, EMPLACEMENTS, MARCHE, MODULE, MODULES, NIVEAU, PIECE, PRESTIGE, PRODUCTEUR, PRODUCTEURS } from './donnees.ts'
+import { ACHAT, AUTO_COUT, CASE, EFFETS, EMPLACEMENTS, ENERGIE, MODULE, MODULES, NIVEAU, PIECE, PRESTIGE, PRODUCTEUR, PRODUCTEURS, PROSPECTION } from './donnees.ts'
+import { engendrerPlanete, gisementEn, voisines, zoneEn, type Cellule, type Gisement, type Planete, type Zone } from './planete.ts'
+import { graineDe } from '../rng.ts'
 
-/** UN PRODUCTEUR : un exemplaire d'un type, posé sur le plan (son centre en pixels-monde). */
+/** UN PRODUCTEUR : un exemplaire d'un type, posé sur le plan (son centre en pixels-monde, au centre d'une case). */
 export interface Producteur {
   id: number
   type: number
@@ -43,14 +50,23 @@ export interface Module {
   sens: number
 }
 
+/** Ce que le joueur a changé à sa planète : la graine qui l'engendre, les zones révélées, et ce qui reste dans chaque gisement. */
+export interface EtatPlanete {
+  graine: number
+  revelees: number[]
+  restant: number[]
+}
+
 export interface Joueur {
   id: number
   nom: string
-  /** La ressource en main, pas encore vendue. */
+  /** Le minerai en main, pas encore brûlé. */
   r: number
+  /** L'énergie : la monnaie. */
   or: number
   producteurs: Producteur[]
   modules: Module[]
+  planete: EtatPlanete
   /** Le prochain identifiant, commun aux producteurs et aux modules. */
   prochainId: number
   /** Les exemplaires achetés de chaque type, emboîtés ou non : c'est eux que le coût suit. */
@@ -59,36 +75,21 @@ export interface Joueur {
   /** Les types que le joueur a déjà vus (le dévoilement survit au prestige). */
   connusProducteurs: number
   connusModules: number
-  /** Le comptoir automatique : la production se vend au fil de l'eau. */
+  /** La raffinerie automatique : la production se brûle au fil de l'eau. */
   auto: boolean
-  /** Les points de prestige acquis. */
+  /** Les plans (les points de prestige) acquis. */
   points: number
   prestiges: number
-  /** Le R produit depuis le dernier prestige, et depuis le début (le score). */
+  /** Le minerai produit depuis le dernier prestige, et depuis le début (le score). */
   produitRun: number
   total: number
-  journal: { tapes: number; orVentes: number; ventes: number }
-}
-
-export interface Vente {
-  t: number
-  joueur: number
-  quantite: number
-  or: number
+  journal: { tapes: number; energie: number; brulages: number; prospections: number }
 }
 
 export interface Monde {
   /** L'heure de jeu, depuis le début de la saison. */
   t: number
   joueurs: Joueur[]
-  /** Le volume vendu récemment par tous, qui fond avec le temps. */
-  volume: number
-  /** La demande : elle suit la production de tous avec de l'inertie, pour qu'un prestige collectif ne l'effondre pas. */
-  demande: number
-  /** Le prix relevé à chaque heure pleine (le dernier en dernier). */
-  historique: number[]
-  /** Les grosses ventes récentes, pour la gazette. */
-  gazette: Vente[]
 }
 
 /** La base : le premier producteur, offert, au centre du plan. */
@@ -98,7 +99,14 @@ function base(): Producteur {
   return { id: BASE_ID, type: 0, x: 0, y: 0 }
 }
 
-export function nouveauJoueur(id: number, nom: string): Joueur {
+/** Une planète neuve : sa zone centrale révélée, tous ses gisements pleins. */
+export function nouvellePlanete(graine: number): EtatPlanete {
+  const planete = engendrerPlanete(graine)
+  const centre = zoneEn(planete, 0, 0)
+  return { graine, revelees: centre === undefined ? [] : [centre.id], restant: planete.gisements.map((g) => g.quantite) }
+}
+
+export function nouveauJoueur(id: number, nom: string, graine: number): Joueur {
   return {
     id,
     nom,
@@ -106,6 +114,7 @@ export function nouveauJoueur(id: number, nom: string): Joueur {
     or: 0,
     producteurs: [base()],
     modules: [],
+    planete: nouvellePlanete(graine),
     prochainId: BASE_ID + 1,
     achetesProducteurs: PRODUCTEURS.map(() => 0),
     achetesModules: MODULES.map(() => 0),
@@ -116,12 +125,13 @@ export function nouveauJoueur(id: number, nom: string): Joueur {
     prestiges: 0,
     produitRun: 0,
     total: 0,
-    journal: { tapes: 0, orVentes: 0, ventes: 0 },
+    journal: { tapes: 0, energie: 0, brulages: 0, prospections: 0 },
   }
 }
 
-export function nouveauMonde(noms: string[]): Monde {
-  return { t: 0, joueurs: noms.map((n, i) => nouveauJoueur(i, n)), volume: 0, demande: MARCHE.demandeMin, historique: [MARCHE.prix], gazette: [] }
+/** Le monde d'une saison : tous les joueurs reçoivent la même planète (chacun la sienne, mais la même carte). */
+export function nouveauMonde(noms: string[], graine: number): Monde {
+  return { t: 0, joueurs: noms.map((n, i) => nouveauJoueur(i, n, graineDe(graine, 1))) }
 }
 
 export function producteurDe(j: Joueur, id: number): Producteur | undefined {
@@ -182,6 +192,25 @@ export const DIRECTIONS: readonly { x: number; y: number }[] = [
   { x: -1, y: 0 },
 ]
 
+/** Le centre de la case la plus proche d'un point. */
+export function surLesCases(x: number, y: number): { x: number; y: number } {
+  return { x: Math.round(x / CASE) * CASE, y: Math.round(y / CASE) * CASE }
+}
+
+export function celluleDe(x: number, y: number): Cellule {
+  return { i: Math.round(x / CASE), j: Math.round(y / CASE) }
+}
+
+export function centreDeCellule(c: Cellule): { x: number; y: number } {
+  return { x: c.i * CASE, y: c.j * CASE }
+}
+
+/** Les trois cases qu'occupe le corps d'un producteur centré là. */
+export function casesDuCorps(x: number, y: number): Cellule[] {
+  const c = celluleDe(x, y)
+  return [-1, 0, 1].map((d) => ({ i: c.i + d, j: c.j }))
+}
+
 /** Où s'emboîte un module à l'emplacement `e` d'un producteur centré en (x, y) : collé au bord, sa face vers l'extérieur. */
 export function placeSurProducteur(p: { x: number; y: number }, e: number): Place {
   const em = EMPLACEMENTS[e] ?? EMPLACEMENTS[0]!
@@ -203,6 +232,11 @@ export function boiteModule(p: Place): Boite {
 
 export function boiteProducteur(p: { x: number; y: number }): Boite {
   return { x: p.x, y: p.y, largeur: PRODUCTEUR.largeur, hauteur: PRODUCTEUR.hauteur }
+}
+
+/** L'empreinte d'un producteur avec la place de tous ses modules possibles, tout autour. */
+export function empreinte(p: { x: number; y: number }): Boite {
+  return { x: p.x, y: p.y, largeur: PRODUCTEUR.largeur + 2 * MODULE.profondeur, hauteur: PRODUCTEUR.hauteur + 2 * MODULE.profondeur }
 }
 
 function seChevauchent(a: Boite, b: Boite): boolean {
@@ -268,6 +302,125 @@ export function etendue(j: Joueur, tout = true): { rayon: number; bas: number } 
 }
 
 // ---------------------------------------------------------------------------
+// LA PLANÈTE DU JOUEUR
+
+export function planeteDe(j: Joueur): Planete {
+  return engendrerPlanete(j.planete.graine)
+}
+
+export function zoneRevelee(j: Joueur, zone: number): boolean {
+  return j.planete.revelees.includes(zone)
+}
+
+/** Ce qui reste dans un gisement. */
+export function restant(j: Joueur, gisement: number): number {
+  return j.planete.restant[gisement] ?? 0
+}
+
+/** Le gisement sous un producteur centré là : ses trois cases dans le même gisement, d'une zone révélée. Null sinon. */
+export function gisementSous(j: Joueur, x: number, y: number): Gisement | null {
+  const planete = planeteDe(j)
+  const cases = casesDuCorps(x, y)
+  const g = gisementEn(planete, cases[0]!)
+  if (g === null) return null
+  for (const c of cases) if (gisementEn(planete, c) !== g) return null
+  const gisement = planete.gisements[g]
+  if (gisement === undefined || !zoneRevelee(j, gisement.zone)) return null
+  return gisement
+}
+
+/** Le gisement d'un producteur : la base n'en a pas besoin, elle mine partout. */
+export function gisementDe(j: Joueur, p: Producteur): Gisement | null {
+  return p.type === 0 ? null : gisementSous(j, p.x, p.y)
+}
+
+/** Un producteur produit-il là où il est : la base toujours ; un extracteur s'il a du minerai sous lui. */
+export function peutProduire(j: Joueur, p: Producteur): boolean {
+  if (p.type === 0) return true
+  const g = gisementDe(j, p)
+  return g !== null && restant(j, g.id) > 0
+}
+
+/** Ce que la veine sous un producteur laisse passer, en minerai par seconde : sans limite pour la base, rien hors gisement. Les plans (le prestige) l'élargissent comme ils grossissent les lots : sinon ils ne serviraient à rien sur une veine pleine. */
+export function plafond(j: Joueur, p: Producteur): number {
+  if (p.type === 0) return Infinity
+  const g = gisementDe(j, p)
+  return g === null ? 0 : (g.debit / 3600) * multiplicateurPrestige(j)
+}
+
+/** La production continue d'un producteur, en minerai par seconde : ses horloges, bornées par sa veine, et rien s'il est à sec. */
+export function debitReel(j: Joueur, p: Producteur): number {
+  if (!peutProduire(j, p)) return 0
+  return Math.min(bilanProducteur(j, p).debit, plafond(j, p))
+}
+
+/** Un extracteur dont les horloges donneraient plus que sa veine ne laisse passer : il lui faut une veine plus riche. */
+export function limiteParLaVeine(j: Joueur, p: Producteur): boolean {
+  return p.type !== 0 && peutProduire(j, p) && bilanProducteur(j, p).debit > plafond(j, p) * 1.001
+}
+
+/** Les gisements révélés, avec ce qui leur reste et les extracteurs posés dessus. */
+export function gisementsConnus(j: Joueur): { gisement: Gisement; zone: Zone; restant: number; extracteurs: Producteur[] }[] {
+  const planete = planeteDe(j)
+  const out: { gisement: Gisement; zone: Zone; restant: number; extracteurs: Producteur[] }[] = []
+  for (const zoneId of j.planete.revelees) {
+    const zone = planete.zones[zoneId]
+    if (zone === undefined || zone.gisement === null) continue
+    const gisement = planete.gisements[zone.gisement]
+    if (gisement === undefined) continue
+    out.push({ gisement, zone, restant: restant(j, gisement.id), extracteurs: j.producteurs.filter((p) => p.type !== 0 && gisementDe(j, p)?.id === gisement.id) })
+  }
+  return out
+}
+
+/** Les zones qu'on peut prospecter : inconnues, et voisines d'une zone révélée. */
+export function frontiere(j: Joueur): Zone[] {
+  const planete = planeteDe(j)
+  const connues = new Set(j.planete.revelees)
+  const vues = new Set<number>()
+  const out: Zone[] = []
+  for (const id of j.planete.revelees) {
+    const z = planete.zones[id]
+    if (z === undefined) continue
+    for (const v of voisines(planete, z)) {
+      if (connues.has(v.id) || vues.has(v.id)) continue
+      vues.add(v.id)
+      out.push(v)
+    }
+  }
+  return out
+}
+
+export function coutProspection(z: Zone): number {
+  return Math.ceil(PROSPECTION.premier * Math.pow(PROSPECTION.croissance, Math.max(0, z.anneau - 1)))
+}
+
+export function peutProspecter(j: Joueur, z: Zone): boolean {
+  return !zoneRevelee(j, z.id) && frontiere(j).some((f) => f.id === z.id) && j.or + 1e-9 >= coutProspection(z)
+}
+
+/** Révèle une zone contre de l'énergie. Rend la zone (son gisement, ou rien), ou null. */
+export function prospecter(j: Joueur, z: Zone): Zone | null {
+  if (!peutProspecter(j, z)) return null
+  j.or -= coutProspection(z)
+  j.planete.revelees.push(z.id)
+  j.journal.prospections += 1
+  return z
+}
+
+/** Ce que la planète contenait, et ce qu'il en reste, tous gisements confondus (révélés ou non). */
+export function bilanPlanete(j: Joueur): { quantite: number; restant: number } {
+  const planete = planeteDe(j)
+  let quantite = 0
+  let reste = 0
+  for (const g of planete.gisements) {
+    quantite += g.quantite
+    reste += restant(j, g.id)
+  }
+  return { quantite, restant: reste }
+}
+
+// ---------------------------------------------------------------------------
 // LA PRODUCTION
 
 export function multiplicateurPrestige(j: Joueur): number {
@@ -296,7 +449,7 @@ export function effet(type: number, niveau: number): number {
 
 /** Ce qu'un producteur donne avec ses modules. */
 export interface Bilan {
-  /** Le lot d'un déclenchement ordinaire, en R. */
+  /** Le lot d'un déclenchement ordinaire, en minerai. */
   lot: number
   /** La chance qu'un déclenchement soit un coup critique (lot × `coup`). */
   chance: number
@@ -304,7 +457,7 @@ export interface Bilan {
   lotMoyen: number
   /** Les déclenchements par seconde des horloges. */
   frequence: number
-  /** La production par seconde, en R : le lot moyen fois la fréquence. */
+  /** La production par seconde : le lot moyen fois la fréquence. */
   debit: number
 }
 
@@ -327,22 +480,24 @@ export function bilan(lot0: number, mods: readonly { type: number; niveau: numbe
   return { lot, chance, lotMoyen, frequence, debit: lotMoyen * frequence }
 }
 
+/** Le bilan d'un producteur tel qu'il est équipé : ce qu'il donnerait sur du minerai. */
 export function bilanProducteur(j: Joueur, p: Producteur): Bilan {
   return bilan(PRODUCTEURS[p.type]?.lot ?? 0, modulesDe(j, p), multiplicateurPrestige(j))
 }
 
-/** La production du joueur, en R par seconde : tous ses producteurs, par leurs horloges. */
+/** La production du joueur, en minerai par seconde : ses producteurs qui ont de quoi produire, par leurs horloges, chacun borné par sa veine. */
 export function debit(j: Joueur): number {
   let d = 0
-  for (const p of j.producteurs) d += bilanProducteur(j, p).debit
+  for (const p of j.producteurs) d += debitReel(j, p)
   return d
 }
 
-/** Le producteur dont un déclenchement rapporte le plus : celui qu'on tape. */
+/** Le producteur dont un déclenchement rapporte le plus, parmi ceux qui ont de quoi produire : celui qu'on tape. */
 export function meilleurProducteur(j: Joueur): Producteur {
   let meilleur = j.producteurs[0]!
   let max = -1
   for (const p of j.producteurs) {
+    if (!peutProduire(j, p)) continue
     const v = bilanProducteur(j, p).lotMoyen
     if (v > max) {
       max = v
@@ -352,19 +507,33 @@ export function meilleurProducteur(j: Joueur): Producteur {
   return meilleur
 }
 
+/** Le minerai entre dans les comptes du joueur ; un extracteur le prend à son gisement. Rend ce qui a vraiment été produit. */
+function extraire(j: Joueur, p: Producteur, voulu: number): number {
+  let gain = voulu
+  if (p.type !== 0) {
+    const g = gisementDe(j, p)
+    if (g === null) return 0
+    gain = Math.min(voulu, restant(j, g.id))
+    j.planete.restant[g.id] = restant(j, g.id) - gain
+  }
+  j.r += gain
+  j.produitRun += gain
+  j.total += gain
+  return gain
+}
+
 /**
- * Déclenche un producteur (une tape) : il produit son lot. `alea` (de 0 à 1)
- * décide du critique ; sans lui, le lot moyen (les bots, qui ne tirent rien).
+ * Déclenche un producteur (une tape) : il produit son lot, s'il a du minerai
+ * sous lui. `alea` (de 0 à 1) décide du critique ; sans lui, le lot moyen (les
+ * bots, qui ne tirent rien).
  */
 export function declencher(j: Joueur, p: Producteur, alea?: number): { gain: number; critique: boolean } {
   const b = bilanProducteur(j, p)
   const critique = alea !== undefined && alea < b.chance
-  const gain = alea === undefined ? b.lotMoyen : critique ? b.lot * EFFETS.coup : b.lot
-  j.r += gain
-  j.produitRun += gain
-  j.total += gain
+  const voulu = alea === undefined ? b.lotMoyen : critique ? b.lot * EFFETS.coup : b.lot
+  const gain = extraire(j, p, voulu)
   j.journal.tapes += 1
-  return { gain, critique }
+  return { gain, critique: critique && gain > 0 }
 }
 
 /** Une tape sur le meilleur producteur. */
@@ -392,21 +561,67 @@ export function visibleProducteur(j: Joueur, i: number): boolean {
   return i < j.connusProducteurs || (i > 0 && j.or + 1e-9 >= coutProducteur(j, i))
 }
 
+/** Une place sur un gisement : le centre de la case, et le gisement. */
+export interface PlaceLibre {
+  x: number
+  y: number
+  gisement: Gisement
+}
+
+/**
+ * Les places libres sur les gisements révélés qui ont du minerai, une par
+ * gisement : la veine la plus riche d'abord (puis la plus pleine), et dessus
+ * la première case (de haut en bas, de gauche à droite) où le corps tient dans
+ * le gisement et où l'empreinte entière (la place de tous les modules) ne
+ * touche l'empreinte d'aucun autre producteur. `sauf` : un producteur qu'on
+ * déplace, qui ne se gêne pas lui-même.
+ */
+export function placesLibres(j: Joueur, sauf?: number): PlaceLibre[] {
+  const planete = planeteDe(j)
+  const autres = j.producteurs.filter((p) => p.id !== sauf).map((p) => empreinte(p))
+  const connus = gisementsConnus(j)
+    .filter((g) => g.restant > 0)
+    .sort((a, b) => b.gisement.debit - a.gisement.debit || b.restant - a.restant)
+  const out: PlaceLibre[] = []
+  for (const { gisement } of connus) {
+    // La case la plus proche du milieu du gisement d'abord : l'extracteur se pose au centre de sa veine, pas dans un coin.
+    const ci = gisement.cellules.reduce((s, c) => s + c.i, 0) / gisement.cellules.length
+    const cj = gisement.cellules.reduce((s, c) => s + c.j, 0) / gisement.cellules.length
+    const cases = [...gisement.cellules].sort((a, b) => Math.hypot(a.i - ci, a.j - cj) - Math.hypot(b.i - ci, b.j - cj) || a.j - b.j || a.i - b.i)
+    for (const c of cases) {
+      if (gisementEn(planete, { i: c.i - 1, j: c.j }) !== gisement.id || gisementEn(planete, { i: c.i + 1, j: c.j }) !== gisement.id) continue
+      const centre = centreDeCellule(c)
+      const e = empreinte(centre)
+      if (!autres.some((o) => seChevauchent(o, e))) {
+        out.push({ ...centre, gisement })
+        break
+      }
+    }
+  }
+  return out
+}
+
+/** La meilleure place libre : sur la veine la plus riche. */
+export function placeLibre(j: Joueur, sauf?: number): PlaceLibre | null {
+  return placesLibres(j, sauf)[0] ?? null
+}
+
+/** Où apparaît un producteur qu'on vient d'acheter : la meilleure place libre sur un gisement ; null s'il n'y en a pas (il faut prospecter, ou déplacer). */
+export function placeDApparitionProducteur(j: Joueur): PlaceLibre | null {
+  return placeLibre(j)
+}
+
 export function peutAcheterProducteur(j: Joueur, i: number): boolean {
-  return i > 0 && visibleProducteur(j, i) && j.or + 1e-9 >= coutProducteur(j, i)
+  return i > 0 && visibleProducteur(j, i) && j.or + 1e-9 >= coutProducteur(j, i) && placeDApparitionProducteur(j) !== null
 }
 
-/** Où apparaît un producteur qu'on vient d'acheter : sous tout le reste, avec la place de ses modules du haut. */
-export function placeDApparitionProducteur(j: Joueur): { x: number; y: number } {
-  return { x: 0, y: etendue(j).bas + MODULE.profondeur + PIECE.encoche.profondeur + 40 + PRODUCTEUR.hauteur / 2 }
-}
-
-/** Achète un producteur : il apparaît sous le reste, ses creux vides. Rend le producteur, ou null. */
+/** Achète un producteur : il apparaît sur un gisement, ses creux vides. Rend le producteur, ou null. */
 export function acheterProducteur(j: Joueur, i: number): Producteur | null {
   if (!peutAcheterProducteur(j, i)) return null
+  const place = placeDApparitionProducteur(j)
+  if (place === null) return null
   j.or -= coutProducteur(j, i)
   j.achetesProducteurs[i] = (j.achetesProducteurs[i] ?? 0) + 1
-  const place = placeDApparitionProducteur(j)
   const p: Producteur = { id: j.prochainId++, type: i, x: place.x, y: place.y }
   j.producteurs.push(p)
   j.connusProducteurs = Math.max(j.connusProducteurs, Math.min(PRODUCTEURS.length, i + 2))
@@ -429,13 +644,14 @@ export function peutAcheterModule(j: Joueur, k: number): boolean {
   return visibleModule(j, k) && j.or + 1e-9 >= coutModule(j, k)
 }
 
-/** Où apparaît un module qu'on vient d'acheter : sous l'installation, en rang. */
+/** Où apparaît un module qu'on vient d'acheter : au-dessus du robot (sa veine est dessous), en rang, hors de portée de l'aimant de son creux du haut. */
 export function placeDApparitionModule(j: Joueur): { x: number; y: number } {
   const n = j.modules.filter((mo) => mo.parent === null).length
   const pas = PIECE.taille + 30
-  // Le premier au milieu, puis de part et d'autre.
+  // Le premier au milieu, puis de part et d'autre ; une rangée de plus au-dessus tous les cinq.
   const colonnes = [0, 1, -1, 2, -2]
-  return { x: (colonnes[n % 5] ?? 0) * pas, y: etendue(j, false).bas + 60 + MODULE.profondeur / 2 + Math.floor(n / 5) * (MODULE.profondeur + 40) }
+  const premiereRangee = PRODUCTEUR.hauteur / 2 + MODULE.profondeur + 35 + MODULE.profondeur / 2
+  return { x: (colonnes[n % 5] ?? 0) * pas, y: -(premiereRangee + Math.floor(n / 5) * (MODULE.profondeur + 20)) }
 }
 
 /** Achète un module : il apparaît posé, à emboîter. Rend le module, ou null. */
@@ -447,7 +663,7 @@ export function acheterModule(j: Joueur, k: number): Module | null {
   const place = placeDApparitionModule(j)
   const mo: Module = { id: j.prochainId++, type: k, niveau: 1, prix, parent: null, emplacement: 0, x: place.x, y: place.y, sens: 0 }
   j.modules.push(mo)
-  // Posséder un module dévoile le suivant ; le second dévoile le premier producteur à acheter.
+  // Posséder un module dévoile le suivant ; le second dévoile le premier extracteur à acheter.
   j.connusModules = Math.max(j.connusModules, Math.min(MODULES.length, k + 2))
   if (j.achetesModules.reduce((s, n) => s + n, 0) >= 2) j.connusProducteurs = Math.max(j.connusProducteurs, 2)
   return mo
@@ -471,7 +687,7 @@ export function ameliorer(j: Joueur, mo: Module): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// L'EMBOÎTEMENT
+// L'EMBOÎTEMENT ET LES DÉPLACEMENTS
 
 /** Les creux où un module peut aller : libres, et de sa forme. */
 export function prisesPour(j: Joueur, mo: Module): Prise[] {
@@ -502,19 +718,70 @@ export function deplacer(mo: Module, x: number, y: number): void {
   mo.y = y
 }
 
-/** Un producteur tiendrait-il là, avec ses modules, sans chevaucher un autre producteur ni ses modules ? */
+/** Un producteur tiendrait-il là (au centre d'une case), avec ses modules, sans chevaucher un autre producteur ni ses modules ? Un extracteur veut en plus du minerai sous lui. */
 export function producteurTient(j: Joueur, p: Producteur, x: number, y: number): boolean {
+  const c = surLesCases(x, y)
+  if (p.type !== 0) {
+    const g = gisementSous(j, c.x, c.y)
+    if (g === null || restant(j, g.id) <= 0) return false
+  }
   const autres = occupation(j, undefined, p.id)
-  const boites = [boiteProducteur({ x, y }), ...modulesDe(j, p).map((mo) => boiteModule(placeSurProducteur({ x, y }, mo.emplacement)))]
+  const boites = [boiteProducteur(c), ...modulesDe(j, p).map((mo) => boiteModule(placeSurProducteur(c, mo.emplacement)))]
   return !boites.some((b) => autres.some((o) => seChevauchent(o, b)))
 }
 
-/** Déplace un producteur (ses modules suivent) là où il tient. La base ne bouge pas. Rend faux sinon. */
+/** Déplace un producteur (ses modules suivent) là où il tient, au centre d'une case. La base ne bouge pas. Rend faux sinon. */
 export function deplacerProducteur(j: Joueur, p: Producteur, x: number, y: number): boolean {
   if (p.type === 0 || !producteurTient(j, p, x, y)) return false
-  p.x = x
-  p.y = y
+  const c = surLesCases(x, y)
+  p.x = c.x
+  p.y = c.y
   return true
+}
+
+/** Les extracteurs qui n'ont plus rien sous eux : à sec, ou hors gisement. */
+export function extracteursASec(j: Joueur): Producteur[] {
+  return j.producteurs.filter((p) => p.type !== 0 && !peutProduire(j, p))
+}
+
+/** Déplace chaque extracteur à sec vers la meilleure place libre, s'il y en a une ; les plus gros d'abord, pour qu'ils prennent les veines les plus riches. Rend ceux qui ont bougé. */
+export function deplacerLesExtracteursASec(j: Joueur): Producteur[] {
+  const bouges: Producteur[] = []
+  const secs = extracteursASec(j).sort((a, b) => bilanProducteur(j, b).debit - bilanProducteur(j, a).debit)
+  for (const p of secs) {
+    const place = placeLibre(j, p.id)
+    if (place === null) break
+    p.x = place.x
+    p.y = place.y
+    bouges.push(p)
+  }
+  return bouges
+}
+
+/**
+ * Déplace les extracteurs que leur veine bride vers une veine plus riche
+ * libre, quand il y en a une (les plus bridés d'abord). Ce qu'un joueur
+ * attentif ferait en revenant d'une prospection. Rend ceux qui ont bougé.
+ */
+export function deplacerLesExtracteursBrides(j: Joueur): Producteur[] {
+  const bouges: Producteur[] = []
+  for (let n = 0; n < 20; n++) {
+    const brides = j.producteurs
+      .filter((p) => limiteParLaVeine(j, p))
+      .sort((a, b) => bilanProducteur(j, b).debit - plafond(j, b) - (bilanProducteur(j, a).debit - plafond(j, a)))
+    let bouge = false
+    for (const p of brides) {
+      const place = placeLibre(j, p.id)
+      if (place === null || place.gisement.debit / 3600 <= plafond(j, p)) continue
+      p.x = place.x
+      p.y = place.y
+      bouges.push(p)
+      bouge = true
+      break
+    }
+    if (!bouge) break
+  }
+  return bouges
 }
 
 /**
@@ -556,57 +823,29 @@ export function acheterAuto(j: Joueur): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// LE MARCHÉ COMMUN
+// L'ÉNERGIE
 
-/** Ce que la demande vise : ce que tous produisent en `tampon` heures, au moins le plancher. */
-export function demandeVisee(m: Monde): number {
-  let d = 0
-  for (const j of m.joueurs) d += debit(j) * 3600 * MARCHE.tampon
-  return Math.max(MARCHE.demandeMin, d)
+/** Ce que rapporte brûler `q` minerai. */
+export function gainBrulage(q: number): number {
+  return Math.max(0, q) * ENERGIE.parMinerai
 }
 
-export function demande(m: Monde): number {
-  return m.demande
-}
-
-/** Le prix d'un R maintenant, pour une vente infinitésimale. */
-export function prixCourant(m: Monde): number {
-  const d = demande(m)
-  return (MARCHE.prix * d) / (d + m.volume)
-}
-
-/** Ce que rapporte vendre `q` d'un coup : l'intégrale du prix de V à V + q. */
-export function gainVente(m: Monde, q: number): number {
-  if (q <= 0) return 0
-  const d = demande(m)
-  // `log1p` : quand la demande dépasse la vente de vingt ordres de grandeur, (d + q) / d vaut 1 en flottant, et log en ferait 0.
-  return MARCHE.prix * d * Math.log1p(q / (d + m.volume))
-}
-
-/** Vend `q` R du joueur (tout ce qu'il a si `q` dépasse) ; rend l'or gagné. */
-export function vendre(m: Monde, j: Joueur, q: number, journaliser = true): number {
+/** Brûle `q` minerai du joueur (tout ce qu'il a si `q` dépasse) ; rend l'énergie gagnée. */
+export function bruler(j: Joueur, q: number, journaliser = true): number {
   const quantite = Math.min(q, j.r)
   if (quantite <= 0) return 0
-  const or = gainVente(m, quantite)
+  const energie = gainBrulage(quantite)
   j.r -= quantite
-  j.or += or
-  m.volume += quantite
-  j.journal.orVentes += or
-  if (journaliser) {
-    j.journal.ventes += 1
-    // La gazette garde les ventes qui pèsent sur le marché : au moins un dixième de la demande.
-    if (quantite >= demande(m) / 10) {
-      m.gazette.push({ t: m.t, joueur: j.id, quantite, or })
-      if (m.gazette.length > 40) m.gazette.shift()
-    }
-  }
-  return or
+  j.or += energie
+  j.journal.energie += energie
+  if (journaliser) j.journal.brulages += 1
+  return energie
 }
 
 // ---------------------------------------------------------------------------
-// LE PRESTIGE
+// QUITTER LA PLANÈTE (le prestige)
 
-/** Les points que rapporterait un prestige maintenant. */
+/** Les plans que rapporterait un départ maintenant. */
 export function pointsSi(j: Joueur): number {
   return Math.floor(Math.sqrt(j.produitRun / PRESTIGE.base))
 }
@@ -615,7 +854,7 @@ export function peutPrestiger(j: Joueur): boolean {
   return pointsSi(j) >= 1
 }
 
-/** Tout remettre à zéro contre des points : il ne reste que la base, nue. Ce qu'on connaît reste connu. */
+/** Tout remettre à zéro contre des plans : une planète neuve, le robot nu. Ce qu'on connaît reste connu. */
 export function prestiger(j: Joueur): boolean {
   const gain = pointsSi(j)
   if (gain < 1) return false
@@ -628,34 +867,28 @@ export function prestiger(j: Joueur): boolean {
   j.producteurs = [base()]
   j.modules = []
   j.produitRun = 0
+  j.planete = nouvellePlanete(graineDe(j.planete.graine, 977))
   return true
 }
 
 // ---------------------------------------------------------------------------
 // LE TEMPS
 
-/** Fait vivre le monde `dt` heures : chacun produit (et vend, au comptoir automatique), le volume fond, le prix se relève. */
+/** Fait vivre le monde `dt` heures : chaque producteur produit ce que sa veine lui laisse (et la raffinerie automatique brûle). */
 export function avancer(m: Monde, dt: number): void {
   if (dt <= 0) return
   for (const j of m.joueurs) {
-    const prod = debit(j) * 3600 * dt
-    j.produitRun += prod
-    j.total += prod
-    j.r += prod
-    // Le comptoir automatique vend tout ce qu'on a en main : la production, et les tapes.
-    if (j.auto) vendre(m, j, j.r, false)
+    for (const p of j.producteurs) {
+      const d = debitReel(j, p)
+      if (d > 0) extraire(j, p, d * 3600 * dt)
+    }
+    // La raffinerie automatique brûle tout ce qu'on a en main : la production, et les tapes.
+    if (j.auto) bruler(j, j.r, false)
   }
-  const avant = m.t
   m.t += dt
-  m.volume *= Math.pow(0.5, dt / MARCHE.demiVie)
-  m.demande += (demandeVisee(m) - m.demande) * (1 - Math.pow(0.5, dt / MARCHE.inertie))
-  if (Math.floor(m.t + 1e-9) > Math.floor(avant + 1e-9)) {
-    m.historique.push(prixCourant(m))
-    if (m.historique.length > 24 * 8) m.historique.shift()
-  }
 }
 
-/** La fortune d'un joueur : son or, et ce que vaudrait son R au prix courant. */
-export function fortune(m: Monde, j: Joueur): number {
-  return j.or + j.r * prixCourant(m)
+/** La fortune d'un joueur : son énergie, et ce que donnerait son minerai brûlé. */
+export function fortune(j: Joueur): number {
+  return j.or + gainBrulage(j.r)
 }

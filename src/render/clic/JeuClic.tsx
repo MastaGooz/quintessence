@@ -11,20 +11,20 @@ import { debit } from '../../logic/clic/moteur.ts'
 import { classement, finie, joueur, nouvellePartie, rattraper, type Partie } from '../../logic/clic/partie.ts'
 import { ecrireSauvegardeClic, effacerSauvegardeClic, lireSauvegardeClic } from '../../ui/stockage-clic.ts'
 import { abrege, duree, horloge, parSeconde } from '../../ui/format.ts'
-import { NOM_R } from '../../ui/noms-clic.ts'
+import { NOM_ENERGIE, NOM_R } from '../../ui/noms-clic.ts'
 import { basculerSon, sonActif, sonClic } from '../../ui/sons.ts'
 import { Compteur } from '../Compteur.tsx'
 import { declarerCibleOr, monterCouche } from '../effets.ts'
 import { IconeSon } from '../Jeu.tsx'
 import { Base } from './Base.tsx'
-import { MarcheClic } from './MarcheClic.tsx'
+import { PlaneteClic } from './PlaneteClic.tsx'
 import { RivauxClic } from './RivauxClic.tsx'
 
-type Page = 'base' | 'marche' | 'rivaux'
+type Page = 'base' | 'planete' | 'rivaux'
 
 const PAGES: { id: Page; nom: string }[] = [
-  { id: 'base', nom: 'Base' },
-  { id: 'marche', nom: 'Marché' },
+  { id: 'base', nom: 'Carte' },
+  { id: 'planete', nom: 'Planète' },
   { id: 'rivaux', nom: 'Rivaux' },
 ]
 
@@ -44,9 +44,11 @@ function Accueil({ onCommencer }: { onCommencer: (nom: string) => void }): React
   return (
     <div className="accueil">
       <h1>Quintessence</h1>
-      <p className="sourd petit">Prototype du système abstrait, sans habillage.</p>
+      <p className="sourd petit">Prototype, habillé par les mots seulement.</p>
       <p>
-        Un seul nombre. Tapez la base pour produire, vendez pour gagner de l’or. Achetez des modules et emboîtez-les sur la base : une horloge la fait produire toute seule, les autres grossissent chaque lot. Puis des producteurs plus gros, où vos modules déménagent. Tapez un module pour l’améliorer.
+        Vous êtes un petit robot sur une planète à consumer. Tapez-le pour extraire de la {NOM_R}, brûlez-la pour faire de l’{NOM_ENERGIE}. Achetez des modules et emboîtez-les sur lui : une horloge le fait
+        travailler tout seul, les autres grossissent chaque lot. Puis des extracteurs, posés sur les veines de la planète, où vos modules déménagent. Prospectez les zones voisines pour trouver des veines plus
+        riches.
       </p>
       <label>
         Votre nom
@@ -135,7 +137,7 @@ function Table({ partie, reelAuDepart, onRecommencer }: { partie: Partie; reelAu
           <b ref={declarerCibleOr}>
             <Compteur valeur={j.or} cle="or" format={abrege} />
           </b>{' '}
-          or
+          {NOM_ENERGIE}
         </span>
         <span className="entete-heure">
           {ouvert && horloge(m.t)}
@@ -162,8 +164,8 @@ function Table({ partie, reelAuDepart, onRecommencer }: { partie: Partie; reelAu
       <main className={`corps${surLaCarte ? ' corps-carte' : ''}`}>
         {finie(partie) ? (
           <Fin partie={partie} onRecommencer={onRecommencer} />
-        ) : pageVue === 'marche' ? (
-          <MarcheClic {...props} />
+        ) : pageVue === 'planete' ? (
+          <PlaneteClic {...props} />
         ) : pageVue === 'rivaux' ? (
           <RivauxClic {...props} />
         ) : (
