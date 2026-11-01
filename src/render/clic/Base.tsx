@@ -6,13 +6,12 @@
  * modules, de différentes formes de prises mâles ; les modules agissent sur le
  * producteur »). Les trois sources de départ sont au centre, une par couleur :
  * une tape dessus produit. Une raffinerie ou un mélangeur tapé convertit un
- * lot ; un atelier tapé lance une fournée : un module en sort, de rareté
- * tirée, et va dans la soute. On glisse un module d'un creux à l'autre (sur un
- * creux occupé, il prend la place, l'autre va dans la soute) ; on le lâche
- * dans le vide pour le ranger dans la soute ; on tire un générateur pour le
- * ranger ailleurs, ses modules suivent. Une tape sur un module ouvre sa bulle
- * (son niveau) ; la roue d'un générateur ouvre la sienne (son réglage, son
- * niveau).
+ * lot. Les modules se fabriquent dans la boutique et arrivent dans la soute.
+ * On glisse un module d'un creux à l'autre (sur un creux occupé, il prend la
+ * place, l'autre va dans la soute) ; on le lâche dans le vide pour le ranger
+ * dans la soute ; on tire un générateur pour le ranger ailleurs, ses modules
+ * suivent. Une tape sur un module ouvre sa bulle (son niveau) ; la roue d'un
+ * générateur ouvre sa feuille (son réglage, son niveau).
  *
  * Le glisser est impératif (la pièce suit le doigt sans rendu React) ; le
  * moteur n'est touché qu'au lâcher. Entre les deux, un rendu peut survenir
@@ -21,28 +20,27 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react'
 import { COULEURS, FAMILLES, FORMES, MELANGE, MODULE, PIECE, PRIMAIRES, PRODUCTEUR, PRODUCTEURS, TAPES_MAX_PAR_S, aDuBleu, couleurDe, sorteDe } from '../../logic/clic/donnees.ts'
 import {
-  DIRECTIONS, acheter, ameliorer, ameliorerSource, atelierEnAttente, bilan, bilanProducteur, boiteModule, branches, brancher, chancesDe, coutAchat, coutNiveau, coutNiveauSource, coutProducteur,
-  debitTotal, debrancher, declencher, deplacerProducteur, disponible, disposition, effetsDe, entree, entrees, estAtelier, estSource, etendue, force, fourneesParSeconde, fusibles, genreDe, lotDeBase,
-  meilleurePrise, moduleDe, modulesDe, multiplicateurPrestige, peutAmeliorer, peutAmeliorerSource, peutFabriquer, peutPayer, placeSurProducteur, prisesPour, producteurDe, producteurTient, regler,
-  sortie, soute, stockPour, surLesCases, typeDe, valeurMoyenne, type Coup, type Joueur, type Module, type Monde, type Place, type Prise, type Producteur,
+  DIRECTIONS, acheter, ameliorer, ameliorerSource, bilan, bilanProducteur, boiteModule, branches, brancher, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, debitTotal,
+  debrancher, declencher, deplacerProducteur, disponible, disposition, effetsDe, entrees, estSource, etendue, force, fusibles, genreDe, lotDeBase, meilleurePrise, moduleDe, modulesDe,
+  multiplicateurPrestige, peutAmeliorer, peutAmeliorerSource, peutFabriquer, peutPayer, placeSurProducteur, prisesPour, producteurDe, producteurTient, regler, sortesFormees, sortie, soute,
+  surLesCases, typeDe, type Coup, type Joueur, type Module, type Monde, type Place, type Prise, type Producteur,
 } from '../../logic/clic/moteur.ts'
 import { joueur } from '../../logic/clic/partie.ts'
 import { abrege, parSeconde } from '../../ui/format.ts'
 import { vibrer } from '../../ui/haptique.ts'
-import {
-  EXPLICATION_TRAIT, LETTRE_PRODUCTEUR, NOM_COULEUR, NOM_MATIERE, NOM_OR, NOM_RARETE, NOM_SOUTE, NOM_TRAIT, NOMS_FORMES, explicationModule, nomProducteur, nomSorte, nomSortePluriel,
-} from '../../ui/noms-clic.ts'
-import { sonBatir, sonEtape, sonTape } from '../../ui/sons.ts'
+import { EXPLICATION_TRAIT, LETTRE_PRODUCTEUR, NOM_COULEUR, NOM_MATIERE, NOM_OR, NOM_RARETE, NOM_SOUTE, NOM_TRAIT, NOMS_FORMES, explicationModule, nomProducteur, nomSorte, nomSortePluriel } from '../../ui/noms-clic.ts'
+import { sonBatir, sonTape } from '../../ui/sons.ts'
 import { Compteur } from '../Compteur.tsx'
 import { DUREE_GLISSE, monterCarte, type Carte, type Point } from '../carte/carte.ts'
 import { eclater, effetDepense, flotter, mouvementReduit } from '../effets.ts'
 import { Feuille } from '../Feuille.tsx'
-import { BoutonCout, Boutique } from './Boutique.tsx'
-import { Glyphe, GlypheSorte, TEINTES } from './Glyphe.tsx'
+import { BoutonCout, Boutique, COULEURS_RARETE } from './Boutique.tsx'
+import { Choix } from './Choix.tsx'
+import { Glyphe, Symbole, SymboleSorte, TEINTES } from './Glyphe.tsx'
 import { boite, cheminDecoupe, cotesDuModule, cotesDuProducteur } from './pieces.ts'
 import type { PagePropsClic } from './props.ts'
 import { Soute } from './Soute.tsx'
-import { abregeFin, heures, pourcent, texteEffet } from './texte.ts'
+import { abregeFin, texteEffet } from './texte.ts'
 
 /** La portée de l'aimant : à moins de ça d'un creux de sa forme (en pixels-monde), le module s'y pose. */
 const AIMANT = 120
@@ -56,8 +54,6 @@ const ECRASER: Keyframe[] = [{ transform: 'scale(0.96)' }, { transform: 'scale(1
 const SERIE_MS = 450
 /** Une horloge plus rapide que ça ne fait plus flotter ses lots : la pulsation suffit. */
 const FLOTTE_MIN_MS = 1500
-/** La couleur de chaque rareté, pour les éclats. */
-const COULEURS_RARETE: readonly string[] = ['#d9d2e6', '#7fe0a0', '#4fb3e8', '#c77dff', '#ffc61f']
 /** La couleur d'éclat de chaque couleur de matière. */
 const couleurEclat = (c: number): string => `hsl(${TEINTES[c] ?? 45} 80% 65%)`
 /** Au plus tant de stocks dans le coin de la carte. */
@@ -105,7 +101,7 @@ type Traine =
       tient: boolean
     }
 
-/** Ce dont la bulle est ouverte : un module (son niveau), ou un générateur (son réglage, son niveau). */
+/** Ce dont la bulle est ouverte : un module (son niveau), ou un générateur (sa feuille : réglage, niveau). */
 type Bulle = { genre: 'module'; id: number } | { genre: 'producteur'; id: number }
 
 export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { avecBarre: boolean; versMarche: () => void }): ReactElement {
@@ -132,7 +128,6 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
   const dispo = disposition(j)
   const branchees = branches(j)
   const enSoute = soute(j)
-  const ateliers = j.producteurs.filter(estAtelier)
   const raffineries = j.producteurs.filter((p) => genreDe(p) === 'raffinerie')
   const rondes = Array.from({ length: PRIMAIRES }, (_, c) => j.matiere[sorteDe(c, 0)] ?? 0).reduce((s, q) => s + q, 0)
   const rien = j.modules.length === 0 && j.producteurs.length === PRIMAIRES
@@ -157,28 +152,6 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     }, 350)
   }
 
-  /** LES MODULES SORTIS d'une fournée : chacun se révèle, sa rareté avec, et file vers la soute. */
-  const reveler = (faits: Module[], critique: boolean, x: number, y: number): void => {
-    const meilleur = faits.reduce((r, mo) => Math.max(r, mo.rarete), 0)
-    if (meilleur >= 2) sonEtape()
-    else sonBatir()
-    vibrer(meilleur >= 3 ? [20, 30, 60, 30, 90] : meilleur >= 1 ? [15, 30, 40] : [15, 30])
-    faits.forEach((mo, k) => {
-      window.setTimeout(() => {
-        const couleur = COULEURS_RARETE[mo.rarete] ?? 'var(--or)'
-        eclater(x, y - 20, 8 + mo.rarete * 8, couleur)
-        flotter(
-          x,
-          y - 30 - k * 24,
-          `${majuscule(nomSorte(sorteDe(mo.couleur, mo.forme)))} ${NOM_RARETE[mo.rarete]}${mo.trait !== null ? ` · ${NOM_TRAIT[mo.trait]}` : ''}${critique && k === 0 ? ' · critique !' : ''}`,
-          `flottant-rarete flottant-rarete-${mo.rarete}`,
-          1 + mo.rarete * 0.25,
-        )
-      }, k * 160)
-    })
-    versLaSoute(null, '')
-  }
-
   // LA TAPE sur un générateur : une série, et le plafond par seconde (contre les auto-clics).
   const serie = useRef({ n: 0, t: 0 })
   const recentes = useRef<number[]>([])
@@ -189,28 +162,24 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     recentes.current.push(maintenant)
     serie.current = { n: maintenant - serie.current.t < SERIE_MS ? serie.current.n + 1 : 0, t: maintenant }
     const n = serie.current.n
-    const genre = genreDe(p)
-    let coup: Coup = { gain: 0, critique: false, grosLot: false, sorte: 0, modules: [] }
+    const source = estSource(p)
+    let coup: Coup = { gain: 0, critique: false, grosLot: false, sorte: 0 }
     agirRef.current(() => {
       coup = declencher(m, j, p, Math.random())
     })
     if (coup.gain <= 0) {
-      // Rien à convertir, pas de fournée : la bulle du générateur dit ce qui manque.
-      if (genre !== 'source') {
+      // Rien à convertir : la feuille du générateur dit ce qui manque.
+      if (!source) {
         setBulle({ genre: 'producteur', id: p.id })
         vibrer([20, 40, 20])
       }
       return
     }
-    if (!mouvementReduit()) producteursEl.current.get(p.id)?.animate(ECRASER, { duration: genre === 'atelier' ? 220 : 170, easing: 'ease-out' })
-    if (genre === 'atelier') {
-      reveler(coup.modules, coup.critique, x, y)
-      return
-    }
+    if (!mouvementReduit()) producteursEl.current.get(p.id)?.animate(ECRASER, { duration: 170, easing: 'ease-out' })
     sonTape(coup.critique ? n + 6 : n)
     vibrer(coup.critique ? [10, 30, 25] : coup.grosLot ? [10, 20, 15] : 8)
     const c = couleurDe(coup.sorte)
-    const texte = `+${abregeFin(coup.gain)}${genre === 'source' ? '' : ` ${nomSortePluriel(coup.sorte)}`}${coup.critique ? ' !' : ''}${coup.grosLot ? ' ×3' : ''}`
+    const texte = `+${abregeFin(coup.gain)}${source ? '' : ` ${nomSortePluriel(coup.sorte)}`}${coup.critique ? ' !' : ''}${coup.grosLot ? ' ×3' : ''}`
     flotter(x, y, texte, `flottant-couleur flottant-couleur-${c}`, coup.critique ? 2 : coup.grosLot ? 1.6 : Math.min(1.7, 1 + n * 0.05))
     if (coup.critique) eclater(x, y, 22, couleurEclat(c))
     else if (coup.grosLot) eclater(x, y, 16, couleurEclat(c))
@@ -431,7 +400,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     if (!mouvementReduit()) modulesEl.current.get(mo.id)?.animate(ECRASER, { duration: 220, easing: 'ease-out' })
   }
 
-  /** L'AMÉLIORATION d'une source depuis sa bulle : son lot grandit (Keko : « j'investis dans le rouge pour augmenter sa prod »). */
+  /** L'AMÉLIORATION d'une source depuis sa feuille : son lot grandit (Keko : « j'investis dans le rouge pour augmenter sa prod »). */
   const ameliorerSourceIci = (p: Producteur, bouton: HTMLElement): void => {
     if (!peutAmeliorerSource(j, p)) return
     effetDepense(bouton.getBoundingClientRect(), coutNiveauSource(p).quantite)
@@ -460,7 +429,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     versLaSoute(s, `→ ${NOM_SOUTE.toLowerCase()}`)
   }
 
-  /** ACHETER au marché, depuis la bulle d'un générateur, la matière qui manque à son prochain coup. */
+  /** ACHETER au marché, depuis la feuille d'un transformateur, la matière qui manque à son prochain coup. */
   const acheterPourIci = (p: Producteur, bouton: HTMLElement): void => {
     const achats = manquesDe(j, p)
     const cout = achats.reduce((s, a) => s + coutAchat(m, a.sorte, a.quantite), 0)
@@ -539,42 +508,26 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // LES FOURNÉES DES HORLOGES : quand un atelier a tourné tout seul, le module sorti se dit au-dessus de lui.
-  const fourneesVues = useRef(new Map<number, number>())
-  useEffect(() => {
-    for (const p of ateliers) {
-      const avant = fourneesVues.current.get(p.id)
-      fourneesVues.current.set(p.id, p.fournees)
-      if (avant === undefined || p.fournees <= avant) continue
-      const s = surLaPage({ x: p.x, y: p.y - PRODUCTEUR.hauteur / 2 })
-      if (s !== null) flotter(s.x, s.y, `+${p.fournees - avant} module${p.fournees - avant > 1 ? 's' : ''}`, 'flottant-or', 1)
-    }
-  })
-
   const t = traine.current
   const souteVisible = j.modules.length > 0
   const boutiqueVisible = rondes >= 10 || !rien || j.points > 0
   const coutR1 = coutProducteur(j, FAMILLES.raffinerie.premier)
-  const coutA1 = coutProducteur(j, FAMILLES.atelier.premier)
   const aHorloge = j.modules.some((mo) => mo.forme === 1 && aDuBleu(mo.couleur))
   const branchable = enSoute.some((mo) => meilleurePrise(m, j, mo) !== null)
-  const atelierPret = ateliers.find((p) => peutFabriquer(j, p))
-  const atelierManque = ateliers.find((p) => !peutFabriquer(j, p))
   const raffineriePrete = raffineries.find((p) => disponible(j, p) >= 1)
+  const fabricable = sortesFormees().some((s) => peutFabriquer(j, s, 0))
+  const coutCarre = coutFabrication(j, sorteDe(0, 1), 0).quantite
 
   // UN INDICE à la fois : le premier geste, puis ce qui bloque.
   let indice: string | null = null
   if (debut) indice = 'Tapez une source pour produire des ronds.'
   else if (raffineries.length === 0 && !peutPayer(j, coutR1)) indice = `Une raffinerie coûte ${coutR1.quantite} ronds d’une couleur : tapez vos sources.`
   else if (raffineries.length === 0) indice = 'Achetez une raffinerie dans la boutique : elle donne une forme à vos ronds.'
-  else if (ateliers.length === 0 && !peutPayer(j, coutA1) && raffineriePrete !== undefined) indice = `Tapez la raffinerie : un atelier coûte ${coutA1.quantite} ${NOM_MATIERE} formée.`
-  else if (ateliers.length === 0 && !peutPayer(j, coutA1)) indice = 'La raffinerie n’a plus de ronds à former : tapez la source de sa couleur.'
-  else if (ateliers.length === 0) indice = `Achetez un atelier dans la boutique : il fera des modules de votre ${NOM_MATIERE} formée.`
+  else if (j.modules.length === 0 && !fabricable && raffineriePrete !== undefined) indice = `Tapez la raffinerie : un module carré coûte ${coutCarre} carrés de sa couleur.`
+  else if (j.modules.length === 0 && !fabricable) indice = 'La raffinerie n’a plus de ronds à former : tapez la source de sa couleur.'
+  else if (j.modules.length === 0) indice = `Fabriquez un module dans la boutique, avec votre ${NOM_MATIERE} formée.`
   else if (branchable && t === null) indice = `Un module attend dans la ${NOM_SOUTE.toLowerCase()} : branchez-le.`
-  else if (j.modules.length === 0 && atelierPret !== undefined) indice = 'Tapez l’atelier pour lancer une fournée.'
-  else if (j.modules.length === 0 && atelierManque !== undefined)
-    indice = `Il manque ${abrege(entree(j, atelierManque) - stockPour(j, atelierManque))} ${nomSortePluriel(sortie(atelierManque))} pour une fournée : une raffinerie réglée dessus (sa roue), et tapez-la.`
-  else if (!aHorloge && j.modules.length > 0) indice = `Pas d’horloge : réglez une raffinerie et un atelier sur le ${nomSorte(sorteDe(2, 1))} (leur roue).`
+  else if (!aHorloge) indice = `Pas d’horloge : réglez une raffinerie sur le ${nomSorte(sorteDe(2, 1))} (sa roue), et fabriquez-en un.`
   else if (fusibles(j).length > 0) indice = `Trois modules pareils dans la ${NOM_SOUTE.toLowerCase()} : fondez-les en un plus rare.`
   else if (branchees.size > 0 && j.modules.every((mo) => mo.niveau === 1) && bulle === null && j.modules.some((mo) => peutAmeliorer(j, mo))) indice = 'Tapez un module pour l’améliorer.'
 
@@ -631,9 +584,8 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
           const b = bilanProducteur(j, p)
           const genre = genreDe(p)
           const source = genre === 'source'
-          const atelier = genre === 'atelier'
-          const nourri = source || (atelier ? peutFabriquer(j, p) : disponible(j, p) >= 1)
-          const actif = b.frequence > 0 && nourri && !(atelier && atelierEnAttente(j, p))
+          const nourri = source || disponible(j, p) >= 1
+          const actif = b.frequence > 0 && nourri
           const cadence = actif ? Math.min(60, Math.max(0.25, 1 / b.frequence)) : 0
           const style: CSSProperties & Record<string, string | number> = {
             left: x - PRODUCTEUR.largeur / 2,
@@ -647,7 +599,6 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
           if (!source) classes.push('producteur-transfo')
           if (actif) classes.push('producteur-actif')
           if (!source && nourri) classes.push('atelier-pret')
-          if (atelier && atelierEnAttente(j, p)) classes.push('atelier-attente')
           if (enMain) classes.push('producteur-saisi')
           if (producteurChoisi?.id === p.id) classes.push('producteur-choisi')
           const saisissable = p.type === 0 ? { 'data-cliquable': true } : { 'data-saisissable': true, 'data-genre': 'producteur' }
@@ -784,7 +735,6 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
             </button>
           </div>
         )}
-
       </div>
 
       {/* LES COMMANDES par-dessus la carte : elles ne glissent pas avec elle. */}
@@ -796,7 +746,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
           <div className="stocks">
             {stocksVus.map((s) => (
               <button key={s} type="button" className={`stock${s % FORMES === 0 && couleurDe(s) < PRIMAIRES ? ' stock-mienne' : ''}`} onClick={versMarche} title={nomSortePluriel(s)}>
-                <GlypheSorte sorte={s} />
+                <SymboleSorte sorte={s} />
                 <Compteur valeur={j.matiere[s] ?? 0} format={abrege} duree={300} />
               </button>
             ))}
@@ -808,7 +758,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
             {boutiqueVisible && (
               <button
                 type="button"
-                className={(raffineries.length === 0 && peutPayer(j, coutR1)) || (ateliers.length === 0 && raffineries.length > 0 && peutPayer(j, coutA1)) ? 'respire' : ''}
+                className={(raffineries.length === 0 && peutPayer(j, coutR1)) || (j.modules.length === 0 && fabricable) ? 'respire' : ''}
                 onClick={() => {
                   setBulle(null)
                   setBoutique(true)
@@ -837,11 +787,19 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
           {production > 0 && <span className="carte-auto petit sourd">{parSeconde(production)} de ronds par vos horloges</span>}
         </div>
       </div>
-      {boutique && <Boutique partie={partie} agir={agir} onFermer={() => setBoutique(false)} onProducteur={(p) => naitre('producteur', p.id, p.x, p.y)} />}
-      {/* LA FEUILLE d'un générateur (sa roue) : son réglage (ce qu'il travaille), son niveau (une source), ce qui lui manque. Une feuille plutôt qu'une bulle : six couleurs et trois formes, ça ne tient pas au-dessus d'une pièce. */}
+      {boutique && (
+        <Boutique
+          partie={partie}
+          agir={agir}
+          onFermer={() => setBoutique(false)}
+          onProducteur={(p) => naitre('producteur', p.id, p.x, p.y)}
+          onModule={() => versLaSoute(null, '')}
+        />
+      )}
+      {/* LA FEUILLE d'un générateur (sa roue) : son réglage (ce qu'il travaille), son niveau (une source), ce qui lui manque. */}
       {producteurChoisi !== undefined && (
         <Feuille titre={nomProducteur(producteurChoisi)} onFermer={() => setBulle(null)}>
-          <BulleProducteur m={m} j={j} p={producteurChoisi} agir={agir} onAcheter={acheterPourIci} onAmeliorer={ameliorerSourceIci} />
+          <FeuilleProducteur m={m} j={j} p={producteurChoisi} agir={agir} onAcheter={acheterPourIci} onAmeliorer={ameliorerSourceIci} />
         </Feuille>
       )}
       {souteOuverte && (
@@ -866,12 +824,8 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
   )
 }
 
-/** Ce qui manque à un générateur pour son prochain coup, sorte par sorte : la fournée d'un atelier, le lot d'un transformateur. */
+/** Ce qui manque à un transformateur pour son prochain coup, sorte par sorte : son lot de chaque entrée. */
 function manquesDe(j: Joueur, p: Producteur): { sorte: number; quantite: number }[] {
-  if (estAtelier(p)) {
-    const manque = entree(j, p) - stockPour(j, p)
-    return manque > 0 ? [{ sorte: sortie(p), quantite: Math.ceil(manque) }] : []
-  }
   const lot = Math.max(1, Math.ceil(lotDeBase(p)))
   return entrees(p)
     .map((s) => ({ sorte: s, quantite: Math.ceil(lot - (j.matiere[s] ?? 0)) }))
@@ -880,8 +834,7 @@ function manquesDe(j: Joueur, p: Producteur): { sorte: number; quantite: number 
 
 /** Le texte sur la pièce d'un générateur : ce qu'il est, ce qu'il fait, ce qui le bloque. */
 function TexteProducteur({ j, p, b, actif }: { j: Joueur; p: Producteur; b: ReturnType<typeof bilanProducteur>; actif: boolean }): ReactElement {
-  const genre = genreDe(p)
-  if (genre === 'source') {
+  if (estSource(p)) {
     return (
       <>
         {p.type === 0 ? (
@@ -892,7 +845,7 @@ function TexteProducteur({ j, p, b, actif }: { j: Joueur; p: Producteur; b: Retu
           <b>{LETTRE_PRODUCTEUR[p.type]}</b>
         )}
         <span className="producteur-unite">
-          <Glyphe couleur={p.couleur} forme={0} />
+          <Symbole couleur={p.couleur} forme={0} />
         </span>
         <span className="producteur-colonne">
           {b.frequence > 0 && <small className="gain">{parSeconde(b.debit)}</small>}
@@ -904,74 +857,38 @@ function TexteProducteur({ j, p, b, actif }: { j: Joueur; p: Producteur; b: Retu
     )
   }
   const sorte = sortie(p)
-  const manque = genre === 'atelier' ? entree(j, p) - stockPour(j, p) : lotDeBase(p) - disponible(j, p)
+  const manque = lotDeBase(p) - disponible(j, p)
   const e = entrees(p)
   return (
     <>
       <span className="atelier-forme">
-        {genre === 'atelier' ? (
-          <Glyphe couleur={p.couleur} forme={p.forme} classe="glyphe-moyen" />
-        ) : (
-          <>
-            {e.map((s, k) => (
-              <span key={s} className="transfo-entree">
-                {k > 0 && <span className="fleche">+</span>}
-                <GlypheSorte sorte={s} classe="glyphe-moyen" />
-              </span>
-            ))}
-            <span className="fleche">→</span>
-            <GlypheSorte sorte={sorte} classe="glyphe-moyen" />
-          </>
-        )}
+        {e.map((s, k) => (
+          <span key={s} className="transfo-entree">
+            {k > 0 && <span className="fleche">+</span>}
+            <SymboleSorte sorte={s} classe="symbole-moyen" />
+          </span>
+        ))}
+        <span className="fleche">→</span>
+        <SymboleSorte sorte={sorte} classe="symbole-moyen" />
       </span>
       <span className="producteur-colonne">
         <small>
-          <b className="atelier-nom">{LETTRE_PRODUCTEUR[p.type]}</b> ·{' '}
-          {genre === 'atelier' ? (
-            <>
-              {abrege(entree(j, p))} <GlypheSorte sorte={sorte} /> → 1 module
-            </>
-          ) : (
-            <>
-              {abregeFin(b.tape)} {nomSortePluriel(sorte)} par coup
-            </>
-          )}
+          <b className="atelier-nom">{LETTRE_PRODUCTEUR[p.type]}</b> · {abregeFin(b.tape)} {nomSortePluriel(sorte)} par coup
         </small>
-        {genre === 'atelier' && atelierEnAttente(j, p) ? (
-          <small className="limite">en attente : {NOM_SOUTE.toLowerCase()} pleine de cette sorte</small>
-        ) : manque > 0 ? (
-          <small className="manque">
-            il manque {genre === 'atelier' ? abrege(manque) : 'des'} {genre === 'atelier' ? nomSortePluriel(sorte) : e.map((s) => nomSortePluriel(s)).join(' ou ')} · sa roue
-          </small>
+        {manque > 0 ? (
+          <small className="manque">il manque des {e.map((s) => nomSortePluriel(s)).join(' ou ')} · sa roue</small>
         ) : actif ? (
-          <small className="gain">
-            tourne seul ·{' '}
-            {genre === 'atelier' ? (b.frequence * 3600 >= 1 ? `${(b.frequence * 3600).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} fournées/h` : 'lentement') : parSeconde(b.debit)}
-          </small>
+          <small className="gain">tourne seul · {parSeconde(b.debit)}</small>
         ) : (
-          <small className="gain">prêt : tapez pour {genre === 'atelier' ? 'lancer la fournée' : 'convertir'}</small>
+          <small className="gain">prêt : tapez pour convertir</small>
         )}
       </span>
     </>
   )
 }
 
-/** Les boutons d'un réglage : pour chaque valeur possible, un glyphe et le stock de la sorte qui compte. */
-function Choix({ valeurs, choisie, glyphe, nom, stockDe, onChoisir }: { valeurs: number[]; choisie: number; glyphe: (v: number) => ReactElement; nom: (v: number) => string; stockDe: (v: number) => number; onChoisir: (v: number) => void }): ReactElement {
-  return (
-    <div className={`choix-forme${valeurs.length > 4 ? ' choix-couleur' : ''}`}>
-      {valeurs.map((v) => (
-        <button key={v} type="button" className={v === choisie ? 'actif' : ''} aria-label={nom(v)} onClick={() => onChoisir(v)}>
-          {glyphe(v)}
-          <small>{abrege(stockDe(v))}</small>
-        </button>
-      ))}
-    </div>
-  )
-}
-
-/** La bulle d'un générateur, selon sa famille. */
-function BulleProducteur({
+/** La feuille d'un générateur, selon sa famille. */
+function FeuilleProducteur({
   m,
   j,
   p,
@@ -1006,11 +923,11 @@ function BulleProducteur({
     ) : null
 
   if (genre === 'source') {
-    const apres = bilan(lotDeBase({ ...p, niveau: p.niveau + 1 }), modulesDe(j, p), multiplicateurPrestige(j), genre)
+    const apres = bilan(lotDeBase({ ...p, niveau: p.niveau + 1 }), modulesDe(j, p), multiplicateurPrestige(j))
     return (
       <div className="reglage">
         <p>
-          <Glyphe couleur={p.couleur} forme={0} /> <b>Niveau {p.niveau}</b>
+          <Symbole couleur={p.couleur} forme={0} /> <b>Niveau {p.niveau}</b>
           <span className="petit sourd"> · produit des {nomSortePluriel(sortie(p))} à chaque coup : lot de base {abregeFin(t.lot)} × niveau {p.niveau}.</span>
         </p>
         <span className="petit">
@@ -1036,7 +953,7 @@ function BulleProducteur({
         <span className="petit sourd">
           Fait des {nomSortePluriel(sortie(p))} : {abregeFin(b.tape)} {nomSortePluriel(sorteDe(c[0], 0))} + {abregeFin(b.tape)} {nomSortePluriel(sorteDe(c[1], 0))} → {abregeFin(b.tape)} par coup.
         </span>
-        <Choix valeurs={melanges} choisie={p.couleur} glyphe={(k) => <Glyphe couleur={k} forme={0} />} nom={(k) => NOM_COULEUR[k] ?? ''} stockDe={(k) => j.matiere[sorteDe(k, 0)] ?? 0} onChoisir={(k) => reglerIci(k, 0)} />
+        <Choix valeurs={melanges} choisie={p.couleur} signe={(k) => <Symbole couleur={k} forme={0} />} nom={(k) => NOM_COULEUR[k] ?? ''} stockDe={(k) => j.matiere[sorteDe(k, 0)] ?? 0} onChoisir={(k) => reglerIci(k, 0)} />
         <span className="petit">
           En stock : {abrege(j.matiere[sorteDe(c[0], 0)] ?? 0)} {nomSortePluriel(sorteDe(c[0], 0))}, {abrege(j.matiere[sorteDe(c[1], 0)] ?? 0)} {nomSortePluriel(sorteDe(c[1], 0))}
           {b.frequence > 0 && <span className="sourd"> · tourne seul : {parSeconde(b.debit)}</span>}
@@ -1048,81 +965,31 @@ function BulleProducteur({
   const couleurs = Array.from({ length: COULEURS }, (_, k) => k)
   const formesPossibles = Array.from({ length: FORMES - 1 }, (_, k) => k + 1)
   const sorte = sortie(p)
-  if (genre === 'raffinerie') {
-    return (
-      <div className="reglage">
-        <span className="petit sourd">
-          Donne une forme aux {nomSortePluriel(sorteDe(p.couleur, 0))} : {abregeFin(b.tape)} ronds → {abregeFin(b.tape)} {nomSortePluriel(sorte)} par coup.
-        </span>
-        <span className="petit sourd">La couleur (le stock de ronds dessous) :</span>
-        <Choix valeurs={couleurs} choisie={p.couleur} glyphe={(k) => <Glyphe couleur={k} forme={0} />} nom={(k) => NOM_COULEUR[k] ?? ''} stockDe={(k) => j.matiere[sorteDe(k, 0)] ?? 0} onChoisir={(k) => reglerIci(k, p.forme)} />
-        <span className="petit sourd">La forme (ce que vous en avez déjà) :</span>
-        <Choix valeurs={formesPossibles} choisie={p.forme} glyphe={(f) => <Glyphe couleur={p.couleur} forme={f} />} nom={(f) => NOMS_FORMES[f] ?? ''} stockDe={(f) => j.matiere[sorteDe(p.couleur, f)] ?? 0} onChoisir={(f) => reglerIci(p.couleur, f)} />
-        <span className="petit">
-          En stock : {abrege(j.matiere[sorteDe(p.couleur, 0)] ?? 0)} {nomSortePluriel(sorteDe(p.couleur, 0))} · {abrege(j.matiere[sorte] ?? 0)} {nomSortePluriel(sorte)}
-          {b.frequence > 0 && <span className="sourd"> · tourne seul : {parSeconde(b.debit)}</span>}
-        </span>
-        {boutonAchat}
-      </div>
-    )
-  }
   return (
     <div className="reglage">
       <span className="petit sourd">
-        {p.fournees} fournée{p.fournees > 1 ? 's' : ''} déjà faite{p.fournees > 1 ? 's' : ''}. Travaille les {nomSortePluriel(sorte)} : chaque fournée en fait un module « {majuscule(nomSorte(sorte))} », qui {explicationModule(p.couleur, p.forme).replace(/^deux effets/, 'porte deux effets')}.
+        Donne une forme aux {nomSortePluriel(sorteDe(p.couleur, 0))} : {abregeFin(b.tape)} ronds → {abregeFin(b.tape)} {nomSortePluriel(sorte)} par coup.
       </span>
-      <span className="petit sourd">La couleur (le stock de cette forme dessous) :</span>
-      <Choix valeurs={couleurs} choisie={p.couleur} glyphe={(k) => <Glyphe couleur={k} forme={p.forme} />} nom={(k) => NOM_COULEUR[k] ?? ''} stockDe={(k) => j.matiere[sorteDe(k, p.forme)] ?? 0} onChoisir={(k) => reglerIci(k, p.forme)} />
-      <span className="petit sourd">La forme :</span>
-      <Choix valeurs={formesPossibles} choisie={p.forme} glyphe={(f) => <Glyphe couleur={p.couleur} forme={f} />} nom={(f) => NOMS_FORMES[f] ?? ''} stockDe={(f) => j.matiere[sorteDe(p.couleur, f)] ?? 0} onChoisir={(f) => reglerIci(p.couleur, f)} />
+      <span className="petit sourd">La couleur (le stock de ronds dessous) :</span>
+      <Choix valeurs={couleurs} choisie={p.couleur} signe={(k) => <Symbole couleur={k} forme={0} />} nom={(k) => NOM_COULEUR[k] ?? ''} stockDe={(k) => j.matiere[sorteDe(k, 0)] ?? 0} onChoisir={(k) => reglerIci(k, p.forme)} />
+      <span className="petit sourd">La forme (ce que vous en avez déjà) :</span>
+      <Choix valeurs={formesPossibles} choisie={p.forme} signe={(f) => <Symbole couleur={p.couleur} forme={f} />} nom={(f) => NOMS_FORMES[f] ?? ''} stockDe={(f) => j.matiere[sorteDe(p.couleur, f)] ?? 0} onChoisir={(f) => reglerIci(p.couleur, f)} />
       <span className="petit">
-        Fournée : {abrege(entree(j, p))} {nomSortePluriel(sorte)} · en stock {abrege(stockPour(j, p))}
-        {t.duree > 0 && <span className="sourd"> · {heures(t.duree)} de votre production de cette sorte</span>}
-      </span>
-      <span className="petit chances">
-        {chancesDe(p).map((c, r) =>
-          c > 0 ? (
-            <span key={r} className={`rarete-${r}`}>
-              {NOM_RARETE[r]} {pourcent(c)}
-            </span>
-          ) : null,
-        )}
+        En stock : {abrege(j.matiere[sorteDe(p.couleur, 0)] ?? 0)} {nomSortePluriel(sorteDe(p.couleur, 0))} · {abrege(j.matiere[sorte] ?? 0)} {nomSortePluriel(sorte)}
+        {b.frequence > 0 && <span className="sourd"> · tourne seul : {parSeconde(b.debit)}</span>}
       </span>
       {boutonAchat}
-      {atelierEnAttente(j, p) && <span className="petit limite">Ses horloges attendent : la {NOM_SOUTE.toLowerCase()} a déjà des modules de cette sorte. Une tape lance quand même.</span>}
     </div>
   )
 }
 
-/** Ce que le niveau suivant du module ferait au générateur qui le porte : sa production, ses fournées, ou son lot s'il n'a pas d'horloge. */
+/** Ce que le niveau suivant du module ferait au générateur qui le porte : sa production, ou sa tape s'il n'a pas d'horloge. */
 function BilanDuPorteur({ j, porteur, module }: { j: Joueur; porteur: Producteur; module: Module }): ReactElement {
   const mods = modulesDe(j, porteur)
   const lot0 = lotDeBase(porteur)
   const prestige = multiplicateurPrestige(j)
-  const genre = genreDe(porteur)
-  const avant = bilan(lot0, mods, prestige, genre)
-  const apres = bilan(lot0, mods.map((mo) => (mo === module ? { ...mo, niveau: mo.niveau + 1 } : mo)), prestige, genre)
-  if (genre === 'atelier') {
-    const parH = (b: typeof avant): string => `${(b.lotMoyen * fourneesParSeconde(j, porteur, b.frequence) * 3600).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} modules/h`
-    return (
-      <span className="petit sourd">
-        {nomProducteur(porteur)} :{' '}
-        {apres.frequence > 0 ? (
-          <>
-            {parH(avant)} → <span className="gain">{parH(apres)}</span>
-            {fourneesParSeconde(j, porteur, apres.frequence) < apres.frequence && ' · au plus, la matière manque'}
-          </>
-        ) : (
-          <>
-            {abregeFin(avant.tape)} → <span className="gain">{abregeFin(apres.tape)}</span> module{apres.tape >= 2 ? 's' : ''} par fournée tapée
-            {module.couleur === 0 && module.forme === 3 && ` · ${pourcent(avant.chanceCritique)} → ${pourcent(apres.chanceCritique)} de rareté en plus`}
-          </>
-        )}
-        {' · vaut '}
-        {abrege(valeurMoyenne(porteur))} {NOM_OR} le module en moyenne
-      </span>
-    )
-  }
+  const avant = bilan(lot0, mods, prestige)
+  const apres = bilan(lot0, mods.map((mo) => (mo === module ? { ...mo, niveau: mo.niveau + 1 } : mo)), prestige)
   return (
     <span className="petit sourd">
       {nomProducteur(porteur)} :{' '}

@@ -2,12 +2,12 @@
  * UNE SAISON DU SYSTÈME ABSTRAIT : huit joueurs simulés, sept jours, un
  * marché commun à vingt-quatre sortes. On mesure ce que les chiffres de
  * `logic/clic/donnees.ts` produisent avant de les servir à des amis : l'ordre
- * de grandeur gagné par jour, les prix, les modules fabriqués par rareté et
- * par couleur, la part branchée, les prestiges.
+ * de grandeur gagné par jour, les prix, les modules fabriqués par rareté, par
+ * sorte et par qualité, la part branchée, les prestiges.
  * `node simulation/clic.ts [graine] [--suivre=Nom] [--csv]`.
  */
 import {
-  ACHAT, ATELIERS, COULEURS, EFFETS, FORMES, MARCHE, MELANGE, MELANGEURS, NIVEAU, NIVEAU_SOURCE, PRESTIGE, RAFFINERIES, RARETES, SAISON_H, SORTES, SOURCES, couleurDe, formeDe, sorteDe,
+  ACHAT, COULEURS, EFFETS, FABRICATION, FORMES, MARCHE, MELANGE, MELANGEURS, NIVEAU, NIVEAU_SOURCE, PRESTIGE, RAFFINERIES, RARETES, SAISON_H, SORTES, SOURCES, couleurDe, formeDe, sorteDe,
 } from '../src/logic/clic/donnees.ts'
 import { avancer, couleurDominanteDe, debitTotal, genreDe, modulesDe, nouveauMonde, prixCourant, sortie, soute, typeDe, type Joueur, type Monde } from '../src/logic/clic/moteur.ts'
 import { visiter } from '../src/logic/clic/bots.ts'
@@ -38,10 +38,11 @@ if (process.env.QC_MULT !== undefined) (EFFETS as { multiplicateur: number }).mu
 if (process.env.QC_CHANCE !== undefined) (EFFETS as { chance: number }).chance = Number(process.env.QC_CHANCE)
 // `QC_PART=0.7` la part de chaque effet d'un module mélangé.
 if (process.env.QC_PART !== undefined) (MELANGE as { part: number }).part = Number(process.env.QC_PART)
-// LES ATELIERS : `QC_ENTREE=0.5` divise le plancher de matière par fournée par deux ; `QC_DUREE=0.5` divise le temps de production par fournée par deux ; `QC_ATELIER=0.5` divise leur prix par deux ; `QC_RAFF=0.5` celui des raffineries et des mélangeurs.
-if (process.env.QC_ENTREE !== undefined) for (const a of ATELIERS) (a as { entree: number }).entree *= Number(process.env.QC_ENTREE)
-if (process.env.QC_DUREE !== undefined) for (const a of ATELIERS) (a as { duree: number }).duree *= Number(process.env.QC_DUREE)
-if (process.env.QC_ATELIER !== undefined) for (const a of ATELIERS) (a.cout as { quantite: number }).quantite *= Number(process.env.QC_ATELIER)
+// LA FABRICATION : `QC_FAB=0.4` la part de la valeur d'un module que coûte le premier ; `QC_FABX=1.15` ce que coûte chaque module de plus de la sorte ; `QC_QUAL=1,5,25,125` les multiplicateurs des qualités ; `QC_RAFF=0.5` divise le prix des raffineries et des mélangeurs par deux.
+if (process.env.QC_FAB !== undefined) (FABRICATION as { part: number }).part = Number(process.env.QC_FAB)
+if (process.env.QC_FABX !== undefined) (FABRICATION as { croissance: number }).croissance = Number(process.env.QC_FABX)
+if (process.env.QC_FABT !== undefined) (FABRICATION as { croissanceTotale: number }).croissanceTotale = Number(process.env.QC_FABT)
+if (process.env.QC_QUAL !== undefined) process.env.QC_QUAL.split(',').forEach((v, k) => { const q = FABRICATION.qualites[k]; if (q !== undefined) (q as { mult: number }).mult = Number(v) })
 if (process.env.QC_RAFF !== undefined) for (const a of [...RAFFINERIES, ...MELANGEURS]) (a.cout as { quantite: number }).quantite *= Number(process.env.QC_RAFF)
 // LE MARCHÉ : `QC_DEMANDE=200` la demande minimale, `QC_TAMPON=2` les heures de production qui font la demande, `QC_DEMIVIE=2`.
 if (process.env.QC_DEMANDE !== undefined) (MARCHE as { demandeMin: number }).demandeMin = Number(process.env.QC_DEMANDE)
@@ -70,7 +71,7 @@ const LETTRES_FORME = 'OCTL'
 const LETTRES_COULEUR = 'rvbjcm'
 const code = (sorte: number): string => `${LETTRES_FORME[formeDe(sorte)]}${LETTRES_COULEUR[couleurDe(sorte)]}`
 
-/** Les générateurs avec leurs modules : « S0r[Cb12r Cv8 Tv5E] » = la source rouge de départ qui porte un carré bleu niveau 12 rare, un carré vert niveau 8, un triangle vert niveau 5 épique ; « R1→Cb », « M1→Om », « A1→Tr ». */
+/** Les générateurs avec leurs modules : « S0r[Cb12r Cv8 Tv5E] » = la source rouge de départ qui porte un carré bleu niveau 12 rare, un carré vert niveau 8, un triangle vert niveau 5 épique ; « R1→Cb », « M1→Om ». */
 function resume(m: Monde, j: Joueur): string {
   const prods = j.producteurs
     .map((p) => {
@@ -84,7 +85,7 @@ function resume(m: Monde, j: Joueur): string {
   const s = soute(j)
   const stock = j.matiere.map((q, k) => (q >= 1 ? `${code(k)}${abrege(q)}` : '')).filter((x) => x !== '').join(' ')
   const raretes = RARETES.noms.map((_, r) => j.modules.filter((mo) => mo.rarete === r).length).join('/')
-  return `${abrege(j.or)} or | ${abrege(debitTotal(j))}/s | stock ${stock} | ${prods}${s.length > 0 ? ` +${s.length} en soute` : ''} | modules c/p/r/E/L ${raretes} | fournées ${j.journal.fournees}, fusions ${j.journal.fusions} | pts ${j.points} (×${j.prestiges}) | total ${abrege(j.total)}`
+  return `${abrege(j.or)} or | ${abrege(debitTotal(j))}/s | stock ${stock} | ${prods}${s.length > 0 ? ` +${s.length} en soute` : ''} | modules c/p/r/E/L ${raretes} | fabriqués ${j.journal.fabrications}, fusions ${j.journal.fusions} | pts ${j.points} (×${j.prestiges}) | total ${abrege(j.total)}`
 }
 
 /** Les prix : par couleur, les quatre formes (rond/carré/triangle/losange). */
@@ -139,5 +140,5 @@ const branches = modules.filter((mo) => mo.parent !== null).length
 console.log(`\nmodules existants : ${modules.length}, branchés ${branches} (${Math.round((100 * branches) / Math.max(1, modules.length))} %) ; par rareté ${RARETES.noms.map((n, r) => `${n} ${modules.filter((mo) => mo.rarete === r).length}`).join(', ')}`)
 console.log(`par sorte : ${Array.from({ length: SORTES }, (_, s) => [s, modules.filter((mo) => sorteDe(mo.couleur, mo.forme) === s).length] as const).filter(([, n]) => n > 0).map(([s, n]) => `${code(s)} ${n}`).join(', ')}`)
 const generateurs = m.joueurs.flatMap((j) => j.producteurs)
-console.log(`générateurs : ${['source', 'raffinerie', 'melangeur', 'atelier'].map((g) => `${g} ${generateurs.filter((p) => genreDe(p) === g).length}`).join(', ')} ; niveaux de source ${generateurs.filter((p) => genreDe(p) === 'source').reduce((s, p) => s + p.niveau - 1, 0)}`)
-console.log(`fournées : ${m.joueurs.reduce((s, j) => s + j.journal.fournees, 0)}, fusions : ${m.joueurs.reduce((s, j) => s + j.journal.fusions, 0)}, ventes : ${abrege(m.joueurs.reduce((s, j) => s + j.journal.orVentes, 0))} or, achats : ${abrege(m.joueurs.reduce((s, j) => s + j.journal.orAchats, 0))} or`)
+console.log(`générateurs : ${['source', 'raffinerie', 'melangeur'].map((g) => `${g} ${generateurs.filter((p) => genreDe(p) === g).length}`).join(', ')} ; niveaux de source ${generateurs.filter((p) => genreDe(p) === 'source').reduce((s, p) => s + p.niveau - 1, 0)}`)
+console.log(`fabrications : ${m.joueurs.reduce((s, j) => s + j.journal.fabrications, 0)}, fusions : ${m.joueurs.reduce((s, j) => s + j.journal.fusions, 0)}, ventes : ${abrege(m.joueurs.reduce((s, j) => s + j.journal.orVentes, 0))} or, achats : ${abrege(m.joueurs.reduce((s, j) => s + j.journal.orAchats, 0))} or`)

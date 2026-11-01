@@ -46,9 +46,9 @@ function Accueil({ onCommencer }: { onCommencer: (nom: string) => void }): React
       <h1>Quintessence</h1>
       <p className="sourd petit">Prototype, habillé par les mots seulement.</p>
       <p>
-        Trois sources produisent trois couleurs de {NOM_MATIERE} brute : rouge, vert, bleu. Des raffineries leur donnent une forme, des mélangeurs les mélangent, des ateliers en font des modules de
-        rareté tirée, qui s’emboîtent sur vos générateurs : la couleur dit ce qu’un module touche, la forme ce qu’il fait. Tout se construit en {NOM_MATIERE} ; le marché, commun à tous, échange
-        toutes les sortes.
+        Trois sources produisent trois couleurs de {NOM_MATIERE} brute : rouge, vert, bleu. Des raffineries leur donnent une forme, des mélangeurs les mélangent. Avec la {NOM_MATIERE} formée, vous
+        fabriquez des modules de rareté tirée, qui s’emboîtent sur vos générateurs : la couleur dit ce qu’un module touche, la forme ce qu’il fait. Tout se construit en {NOM_MATIERE} ; le marché,
+        commun à tous, échange toutes les sortes.
       </p>
       <label>
         Votre nom

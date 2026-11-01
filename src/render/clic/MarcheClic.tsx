@@ -9,15 +9,15 @@
  * forme ou de couleur »).
  */
 import { useState, type ReactElement } from 'react'
-import { COULEURS, FORMES, MARCHE, sorteDe } from '../../logic/clic/donnees.ts'
-import { acheter, coutAchat, entree, estAtelier, gainVente, prixCourant, production, quantitePour, sortie, vendre, venteRaisonnable } from '../../logic/clic/moteur.ts'
+import { COULEURS, FORMES, MARCHE, formeDe, sorteDe } from '../../logic/clic/donnees.ts'
+import { acheter, coutAchat, coutFabrication, gainVente, prixCourant, production, quantitePour, vendre, venteRaisonnable } from '../../logic/clic/moteur.ts'
 import { joueur } from '../../logic/clic/partie.ts'
 import { abrege } from '../../ui/format.ts'
 import { vibrer } from '../../ui/haptique.ts'
 import { NOM_COULEUR, NOM_MATIERE, NOM_OR, NOMS_FORMES, nomSorte, nomSortePluriel } from '../../ui/noms-clic.ts'
 import { effetDepense, effetVente } from '../effets.ts'
 import { Feuille } from '../Feuille.tsx'
-import { GlypheSorte } from './Glyphe.tsx'
+import { SymboleSorte } from './Glyphe.tsx'
 import type { PagePropsClic } from './props.ts'
 
 /** Le nombre d'heures de courbe montrées. */
@@ -72,7 +72,7 @@ function Ligne({ c, partie, onChoisir }: { c: number; partie: PagePropsClic['par
         const produit = production(j, s) > 0
         return (
           <button key={f} type="button" className={`marche-case${stock >= 1 ? ' marche-case-stock' : ''}${produit ? ' marche-case-produite' : ''}`} onClick={() => onChoisir(s)} aria-label={nomSorte(s)}>
-            <GlypheSorte sorte={s} />
+            <SymboleSorte sorte={s} classe="symbole-grand" />
             <b>{prix.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b>
             <small className={stock >= 1 ? 'creme' : 'sourd'}>{stock >= 1 ? abrege(stock) : '·'}</small>
           </button>
@@ -92,9 +92,9 @@ function Detail({ partie, agir, sorte: s }: PagePropsClic & { sorte: number }): 
   const points = (m.marche.historique[s] ?? []).slice(-HEURES)
   const raisonnable = venteRaisonnable(m, s, PLANCHER)
   const prod = production(j, s) * 3600
-  // Les quantités à acheter : une fournée du plus petit atelier réglé sur cette sorte, et trois ; sinon dix et cent.
-  const cible = j.producteurs.filter((p) => estAtelier(p) && sortie(p) === s).sort((a, b) => entree(j, a) - entree(j, b))[0]
-  const achats = cible === undefined ? [10, 100] : [entree(j, cible), entree(j, cible) * 3]
+  // Les quantités à acheter : de quoi fabriquer un module de cette sorte (une formée), dix et cent.
+  const module = formeDe(s) === 0 ? null : coutFabrication(j, s, 0).quantite
+  const achats = module === null ? [10, 100] : [module, 100]
   const quarts = [0.25, 0.5, 1].map((part) => Math.floor(stock * part))
 
   const vendreIci = (q: number, bouton: HTMLElement): void => {
@@ -122,7 +122,7 @@ function Detail({ partie, agir, sorte: s }: PagePropsClic & { sorte: number }): 
       <div className="ligne ligne-sans-trait">
         <span className="unite-texte">
           <span>
-            <GlypheSorte sorte={s} /> <b>{nomSortePluriel(s)}</b>
+            <SymboleSorte sorte={s} /> <b>{nomSortePluriel(s)}</b>
           </span>
           <span className="sourd petit">{prod > 0 ? `vous en produisez ${abrege(prod)} par heure` : 'vous n’en produisez pas'}</span>
         </span>
@@ -154,7 +154,7 @@ function Detail({ partie, agir, sorte: s }: PagePropsClic & { sorte: number }): 
           const payable = j.or + 1e-9 >= c
           return (
             <button key={k} type="button" disabled={!payable} onClick={(e) => acheterIci(q, e.currentTarget)}>
-              {cible === undefined ? abrege(q) : k === 0 ? '1 fournée' : '3 fournées'} · {abrege(q)} pour {abrege(c)} {NOM_OR}
+              {module !== null && k === 0 ? 'un module' : abrege(q)} · {abrege(q)} pour {abrege(c)} {NOM_OR}
             </button>
           )
         })}

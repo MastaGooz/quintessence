@@ -3,7 +3,7 @@
  * 01/11 : « revenons au système abstrait »). Une matière se nomme par sa forme
  * et sa couleur (« carré rouge », « rond bleu ») ; l'habillage viendra après.
  */
-import { PRIMAIRES, PRODUCTEURS, RARETES, couleurDe, formeDe, partsDe, type Genre, type Trait } from '../logic/clic/donnees.ts'
+import { FABRICATION, PRIMAIRES, PRODUCTEURS, RARETES, couleurDe, formeDe, partsDe, type Genre, type Trait } from '../logic/clic/donnees.ts'
 import { rangDe } from '../logic/clic/moteur.ts'
 
 /** La ressource, en un mot. */
@@ -39,8 +39,8 @@ export const NOM_OPERATION: readonly string[] = ['', 'ajoute', 'multiplie', 'don
 
 /** Ce que fait un module d'une couleur de base et d'une forme, en une ligne. */
 const EXPLICATIONS: readonly (readonly string[])[] = [
-  ['', 'ajoute à chaque tape', 'multiplie chaque tape, critique comprise : le super-critique', 'donne à chaque tape une chance d’être critique (×10 ; sur un atelier : une rareté de plus)'],
-  ['', 'grossit chaque lot', 'multiplie chaque lot', 'donne à chaque lot une chance d’être gros (×3 ; sur un atelier : trois fois plus de modules)'],
+  ['', 'ajoute à chaque tape', 'multiplie chaque tape, critique comprise : le super-critique', 'donne à chaque tape une chance d’être critique (×10)'],
+  ['', 'grossit chaque lot', 'multiplie chaque lot', 'donne à chaque lot une chance d’être gros (×3)'],
   ['', 'déclenche le générateur tout seul : l’horloge', 'multiplie la cadence des horloges', 'donne à chaque tic une chance d’en entraîner un second'],
 ]
 
@@ -51,11 +51,11 @@ export function explicationModule(couleur: number, forme: number): string {
   return `deux effets à ${Math.round((parts[0]?.[1] ?? 0) * 100)} % : ${parts.map(([c]) => EXPLICATIONS[c]?.[forme] ?? '').join(' ; ')}`
 }
 
-export const NOM_GENRE: Record<Genre, string> = { source: 'source', raffinerie: 'raffinerie', melangeur: 'mélangeur', atelier: 'atelier' }
-const MAJUSCULE: Record<Genre, string> = { source: 'Source', raffinerie: 'Raffinerie', melangeur: 'Mélangeur', atelier: 'Atelier' }
-const LETTRE: Record<Genre, string> = { source: 'S', raffinerie: 'R', melangeur: 'M', atelier: 'A' }
+export const NOM_GENRE: Record<Genre, string> = { source: 'source', raffinerie: 'raffinerie', melangeur: 'mélangeur' }
+const MAJUSCULE: Record<Genre, string> = { source: 'Source', raffinerie: 'Raffinerie', melangeur: 'Mélangeur' }
+const LETTRE: Record<Genre, string> = { source: 'S', raffinerie: 'R', melangeur: 'M' }
 
-/** Chaque type de générateur : « Source », « Source 2 », « Raffinerie 1 », « Mélangeur 1 », « Atelier 1 ». */
+/** Chaque type de générateur : « Source », « Source 2 », « Raffinerie 1 », « Mélangeur 1 ». */
 export const NOM_TYPE: readonly string[] = PRODUCTEURS.map((t, i) => (t.genre === 'source' ? (i === 0 ? 'Source' : `Source ${rangDe(i) + 1}`) : `${MAJUSCULE[t.genre]} ${rangDe(i) + 1}`))
 export const LETTRE_PRODUCTEUR: readonly string[] = PRODUCTEURS.map((t, i) => (t.genre === 'source' && i === 0 ? 'S' : `${LETTRE[t.genre]}${rangDe(i) + 1}`))
 
@@ -67,6 +67,10 @@ export function nomProducteur(p: { type: number; couleur: number }): string {
 }
 
 export const NOM_RARETE: readonly string[] = RARETES.noms
+/** Les qualités de fabrication d'un module, dans l'ordre de `FABRICATION.qualites`. */
+const NOMS_QUALITES: Record<string, string> = { simple: 'simple', soignee: 'soignée', fine: 'fine', maitresse: 'maîtresse' }
+export const NOM_QUALITE: readonly string[] = FABRICATION.qualites.map((q) => NOMS_QUALITES[q.id] ?? q.id)
+export const NOM_FABRICATION = 'Fabriquer'
 export const NOM_TRAIT: Record<Trait, string> = { voisin: 'Voisin', solide: 'Solide', econome: 'Économe', rapide: 'Rapide' }
 export const EXPLICATION_TRAIT: Record<Trait, string> = {
   voisin: 'les modules d’à côté ont un effet ×1,25',

@@ -4,7 +4,7 @@ import { couleurDominanteDe, debitTotal } from '../../logic/clic/moteur.ts'
 import { classement, joueur } from '../../logic/clic/partie.ts'
 import { abrege, parSeconde } from '../../ui/format.ts'
 import { NOM_POINT } from '../../ui/noms-clic.ts'
-import { Glyphe } from './Glyphe.tsx'
+import { Symbole } from './Glyphe.tsx'
 import type { PagePropsClic } from './props.ts'
 
 export function RivauxClic({ partie }: PagePropsClic): ReactElement {
@@ -13,13 +13,13 @@ export function RivauxClic({ partie }: PagePropsClic): ReactElement {
   return (
     <div className="page">
       <h1>Rivaux</h1>
-      <p className="sourd">Sept autres joueurs, tous au même marché ; la pastille dit la couleur que chacun produit le plus. Le classement compte les ronds produits depuis le début de la saison.</p>
+      <p className="sourd">Sept autres joueurs, tous au même marché ; le rond dit la couleur que chacun produit le plus. Le classement compte les ronds produits depuis le début de la saison.</p>
       <section>
         {rangs.map((r, i) => (
           <div key={r.id} className={`ligne${r === moi ? ' ligne-moi' : ''}`}>
             <span className="unite-texte">
               <span>
-                {i + 1}. <b>{r.nom}</b> {r.total > 0 && <Glyphe couleur={couleurDominanteDe(r)} forme={0} />}
+                {i + 1}. <b>{r.nom}</b> {r.total > 0 && <Symbole couleur={couleurDominanteDe(r)} forme={0} />}
                 {r.points > 0 && (
                   <span className="sourd petit">
                     {' '}

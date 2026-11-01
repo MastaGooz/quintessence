@@ -2,20 +2,20 @@
  * LES BOTS du système abstrait : des joueurs simulés qui passent quelques fois
  * par jour. À chaque visite : le départ (prestige) si ça vaut le coup, quelques
  * dizaines de tapes sur la source de leur couleur, le réglage de leurs
- * raffineries, mélangeurs et ateliers sur les sortes de modules qui leur
- * manquent, des conversions à la main pour nourrir les ateliers, les fournées,
- * la fusion des triplés, le branchement de chaque module là où il rapporte le
- * plus, le marché (vendre le surplus sans brader, acheter ce que leurs
- * raffineries ne font pas), puis des achats gloutons : l'option qui rapporte
- * le plus de valeur par or de matière dépensée, la matière manquante achetée
- * au marché si l'or le permet. Ils ne font rien qu'un vrai joueur ne pourrait
- * faire.
+ * raffineries et mélangeurs sur les sortes de modules qui leur manquent, des
+ * conversions à la main, la fabrication des modules qui manquent (et quelques-
+ * uns de plus pour la fusion quand la matière abonde), la fusion des triplés,
+ * le branchement de chaque module là où il rapporte le plus, le marché (vendre
+ * le surplus sans brader, acheter ce que leurs raffineries ne font pas), puis
+ * des achats gloutons : l'option qui rapporte le plus de valeur par or de
+ * matière dépensée, la matière manquante achetée au marché si l'or le permet.
+ * Ils ne font rien qu'un vrai joueur ne pourrait faire.
  */
-import { PRIMAIRES, PRODUCTEURS, PRESTIGE, SORTES, couleurDe, formeDe, sorteDe, type Cout } from './donnees.ts'
+import { FABRICATION, PRIMAIRES, PRODUCTEURS, PRESTIGE, SORTES, couleurDe, formeDe, sorteDe, type Cout } from './donnees.ts'
 import {
-  acheter, acheterProducteur, ameliorer, ameliorerSource, besoins, brancherAuMieux, completerAuMarche, coutAchat, coutNiveau, coutNiveauSource, coutProducteur, declencher, disponible, entree, entrees, estAtelier,
-  estSource, fabriquer, fondre, force, fusibles, genreDe, manquePour, meilleureSource, modulesDe, multiplicateurPrestige, peutFabriquer, peutPayer, pointsSi, prestiger, prisesLibres, production, regler,
-  sortePourPayer, sortie, sortesFormees, soute, typeDe, valeurCout, valeurDe, vendre, venteRaisonnable, visibleProducteur,
+  acheter, acheterProducteur, ameliorer, ameliorerSource, besoins, brancherAuMieux, completerAuMarche, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, declencher, disponible,
+  entrees, esperanceEffet, estSource, fabriquerModule, fondre, force, fusibles, genreDe, manquePour, meilleureSource, modulesDe, multiplicateurPrestige, peutFabriquer, peutPayer, pointsSi, prestiger,
+  prisesLibres, production, regler, sortePourPayer, sortie, sortesFormees, soute, typeDe, valeurCout, valeurDe, vendre, venteRaisonnable, visibleProducteur, visibleQualite,
   type Joueur, type Monde, type Producteur,
 } from './moteur.ts'
 
@@ -41,30 +41,22 @@ interface Option {
   faire: () => boolean
 }
 
-/** Au plus tant de fournées lancées à la main par atelier et par visite. */
-const FOURNEES_MAX = 12
 /** Au plus tant de conversions à la main par transformateur et par visite. */
 const CONVERSIONS_MAX = 60
-/** Un bot garde de quoi lancer tant de fournées de ce que ses ateliers consomment. */
-const RESERVE_FOURNEES = 2
+/** Au plus tant de modules fabriqués pour la fusion, par sorte et par visite. */
+const FUSION_MAX = 6
+/** Un bot garde de quoi fabriquer tant de modules de chaque sorte qu'il veut. */
+const RESERVE_MODULES = 2
 /** Un bot ne met pas plus que cette part de son or dans la matière d'une visite. */
 const PART_MATIERE = 1 / 2
 /** Un bot ne vend pas sous cette part du prix plein. */
 const PLANCHER = 0.35
-/** Un bot garde tant d'heures de sa production de chaque ronde avant d'en vendre : c'est avec elle qu'il construit. */
+/** Un bot garde tant d'heures de sa production de chaque sorte avant d'en vendre : c'est avec elle qu'il construit. */
 const GARDE_H = 6
 /** Sa propre couleur pèse tant de plus dans ses achats. */
 const PREFERENCE = 1.5
-
-/** Ce qu'un bot veut avoir en stock d'une sorte : deux fournées de chaque atelier qui la consomme ; pour une ronde mélangée, ce que ses raffineries réglées dessus doivent faire. */
-function besoinStock(j: Joueur, sorte: number): number {
-  let q = 0
-  for (const p of j.producteurs) {
-    if (estAtelier(p) && sortie(p) === sorte) q += entree(j, p) * RESERVE_FOURNEES
-    else if (genreDe(p) === 'raffinerie' && entrees(p).includes(sorte) && couleurDe(sorte) >= PRIMAIRES) q += besoinStock(j, sortie(p))
-  }
-  return q
-}
+/** La matière d'une sorte abonde quand elle vaut tant de fabrications simples : les modules de plus vont à la fusion. */
+const ABONDANCE = 12
 
 /** Les sortes de modules qui manquent, par gain décroissant ; sans mélangeur, les couleurs mélangées n'y sont pas. */
 function sortesVoulues(m: Monde, j: Joueur): number[] {
@@ -75,6 +67,15 @@ function sortesVoulues(m: Monde, j: Joueur): number[] {
     .sort((s, t) => (b[t] ?? 0) - (b[s] ?? 0))
 }
 
+/** Ce qu'un bot veut avoir en stock d'une sorte : de quoi fabriquer deux modules s'il la veut ; pour une ronde mélangée, ce que ses raffineries réglées dessus doivent faire. */
+function besoinStock(j: Joueur, sorte: number, voulues: readonly number[]): number {
+  if (formeDe(sorte) !== 0) return voulues.includes(sorte) ? coutFabrication(j, sorte, 0).quantite * RESERVE_MODULES : 0
+  if (couleurDe(sorte) < PRIMAIRES) return 0
+  let q = 0
+  for (const p of j.producteurs) if (genreDe(p) === 'raffinerie' && entrees(p).includes(sorte)) q += besoinStock(j, sortie(p), voulues)
+  return q
+}
+
 /** La couleur de base dont le bot a le plus de rondes. */
 function couleurAbondante(j: Joueur, preferee?: number): number {
   if (preferee !== undefined) return preferee
@@ -83,25 +84,13 @@ function couleurAbondante(j: Joueur, preferee?: number): number {
   return c
 }
 
-/**
- * Règle les transformateurs sur ce qui manque : les sortes voulues à tour de
- * rôle sur les raffineries et les ateliers (sa couleur en carrés quand rien ne
- * manque), les couleurs mélangées voulues sur les mélangeurs.
- */
-function reglerLesTransformateurs(m: Monde, j: Joueur, s: Strategie): void {
-  const voulues = sortesVoulues(m, j)
+/** Règle les transformateurs sur ce qui manque : les sortes voulues à tour de rôle sur les raffineries (sa couleur en carrés quand rien ne manque), les couleurs mélangées de ces raffineries sur les mélangeurs. */
+function reglerLesTransformateurs(m: Monde, j: Joueur, s: Strategie, voulues: readonly number[]): void {
   const defaut = sorteDe(couleurAbondante(j, s.couleur), 1)
-  // Les ateliers prennent les sortes voulues à tour de rôle ; chaque raffinerie nourrit un atelier (la k-ième le k-ième), les raffineries de trop font les sortes voulues suivantes.
-  const ateliers = j.producteurs.filter(estAtelier)
-  ateliers.forEach((p, k) => {
-    const sorte = voulues.length === 0 ? defaut : voulues[k % voulues.length]!
-    if (sortie(p) !== sorte) regler(p, couleurDe(sorte), formeDe(sorte))
-  })
   let k = 0
   for (const p of j.producteurs) {
     if (genreDe(p) !== 'raffinerie') continue
-    const atelier = ateliers[k]
-    const sorte = atelier !== undefined ? sortie(atelier) : voulues.length === 0 ? defaut : voulues[k % voulues.length]!
+    const sorte = voulues.length === 0 ? defaut : voulues[k % voulues.length]!
     k++
     if (sortie(p) !== sorte) regler(p, couleurDe(sorte), formeDe(sorte))
   }
@@ -113,69 +102,78 @@ function reglerLesTransformateurs(m: Monde, j: Joueur, s: Strategie): void {
     n++
     if (p.couleur !== c) regler(p, c, 0)
   }
+  void m
 }
 
 /** Convertit à la main, mélangeurs d'abord, jusqu'à ce que la sortie couvre le besoin ou que l'entrée manque. */
-function convertirLeNecessaire(m: Monde, j: Joueur): void {
+function convertirLeNecessaire(m: Monde, j: Joueur, voulues: readonly number[]): void {
   const ordre = [...j.producteurs].sort((a, b) => (genreDe(a) === 'melangeur' ? 0 : 1) - (genreDe(b) === 'melangeur' ? 0 : 1))
   for (const p of ordre) {
-    const g = genreDe(p)
-    if (g !== 'raffinerie' && g !== 'melangeur') continue
+    if (estSource(p)) continue
     const sorte = sortie(p)
+    const besoin = besoinStock(j, sorte, voulues)
     for (let n = 0; n < CONVERSIONS_MAX; n++) {
-      if ((j.matiere[sorte] ?? 0) >= besoinStock(j, sorte) || disponible(j, p) <= 0) break
+      if ((j.matiere[sorte] ?? 0) >= besoin || disponible(j, p) <= 0) break
       if (declencher(m, j, p).gain <= 0) break
     }
   }
 }
 
-/** Achète au marché la matière que ses ateliers n'ont pas, pour une ou deux fournées, dans un budget. */
-function acheterPourLesAteliers(m: Monde, j: Joueur): void {
+/** Achète au marché la matière des sortes voulues que rien ne produit chez lui, pour un module, dans un budget. */
+function acheterPourFabriquer(m: Monde, j: Joueur, voulues: readonly number[]): void {
   const budget = j.or * PART_MATIERE
   let depense = 0
-  for (const p of j.producteurs) {
-    if (!estAtelier(p)) continue
-    const sorte = sortie(p)
-    const voulu = entree(j, p) * RESERVE_FOURNEES - (j.matiere[sorte] ?? 0)
+  for (const sorte of voulues) {
+    if (production(j, sorte) > 0 || j.producteurs.some((p) => sortie(p) === sorte)) continue
+    const voulu = coutFabrication(j, sorte, 0).quantite - (j.matiere[sorte] ?? 0)
     if (voulu <= 0) continue
     const cout = coutAchat(m, sorte, voulu)
     if (depense + cout <= budget) depense += acheter(m, j, sorte, voulu)
-    else {
-      const une = entree(j, p) - (j.matiere[sorte] ?? 0)
-      if (une > 0 && depense + coutAchat(m, sorte, une) <= budget) depense += acheter(m, j, sorte, une)
-    }
   }
 }
 
-/** Vend le surplus de chaque sorte : au-delà de ce qu'on garde (le besoin des ateliers, des heures de production pour construire), sans brader. */
-function vendreLeSurplus(m: Monde, j: Joueur): void {
+/** Vend le surplus de chaque sorte : au-delà de ce qu'on garde (le besoin, des heures de production pour construire), sans brader. */
+function vendreLeSurplus(m: Monde, j: Joueur, voulues: readonly number[]): void {
   for (let s = 0; s < SORTES; s++) {
     const stock = j.matiere[s] ?? 0
     if (stock < 1) continue
-    const garde = Math.max(besoinStock(j, s) * 2, production(j, s) * 3600 * GARDE_H)
+    const garde = Math.max(besoinStock(j, s, voulues) * 2, production(j, s) * 3600 * GARDE_H)
     const surplus = Math.min(stock - garde, venteRaisonnable(m, s, PLANCHER))
     if (surplus > 1) vendre(m, j, s, surplus)
   }
 }
 
-/**
- * Les fournées utiles d'un atelier : autant que sa forme a de creux libres que
- * la soute ne remplit pas déjà, au moins une par visite si la matière abonde ;
- * au-delà, les modules s'entasseraient et la matière vaut mieux ailleurs.
- */
-function fourneesUtiles(j: Joueur, p: Producteur): number {
-  const libres = prisesLibres(j).filter((pr) => pr.forme === p.forme).length
-  const enAttente = soute(j).filter((mo) => mo.forme === p.forme).length
-  let utiles = Math.max(0, libres - enAttente)
-  if ((j.matiere[sortie(p)] ?? 0) >= entree(j, p) * 10) utiles = Math.max(utiles, 3)
-  return Math.min(FOURNEES_MAX, utiles)
+/** La meilleure qualité que ce bot se paie pour une sorte : la plus haute visible dont le coût tient dans le tiers de son stock ; la simple sinon. */
+function qualiteChoisie(j: Joueur, sorte: number): number {
+  let q = 0
+  for (let k = 1; k < FABRICATION.qualites.length; k++) {
+    if (!visibleQualite(j, sorte, k)) break
+    if (coutFabrication(j, sorte, k).quantite * 3 <= (j.matiere[sorte] ?? 0)) q = k
+  }
+  return q
 }
 
-function lancerLesFournees(m: Monde, j: Joueur): void {
-  for (const p of j.producteurs) {
-    if (!estAtelier(p)) continue
-    const utiles = fourneesUtiles(j, p)
-    for (let n = 0; n < utiles && peutFabriquer(j, p); n++) fabriquer(m, j, p, true)
+/**
+ * Fabrique les modules qui manquent : un par creux libre de la forme que la
+ * soute ne remplit pas déjà ; puis, quand la matière d'une sorte abonde,
+ * quelques-uns de plus pour la fusion (des raretés : ce qu'un joueur ferait de
+ * sa matière).
+ */
+function fabriquerLesModules(m: Monde, j: Joueur, voulues: readonly number[]): void {
+  for (const sorte of voulues) {
+    const forme = formeDe(sorte)
+    const libres = prisesLibres(j).filter((pr) => pr.forme === forme).length
+    const enAttente = soute(j).filter((mo) => mo.forme === forme).length
+    for (let n = enAttente; n < libres; n++) {
+      const q = qualiteChoisie(j, sorte)
+      if (!peutFabriquer(j, sorte, q) || fabriquerModule(m, j, sorte, q) === null) break
+    }
+  }
+  for (const sorte of sortesFormees()) {
+    for (let n = 0; n < FUSION_MAX; n++) {
+      if ((j.matiere[sorte] ?? 0) < ABONDANCE * coutFabrication(j, sorte, 0).quantite) break
+      if (fabriquerModule(m, j, sorte, qualiteChoisie(j, sorte)) === null) break
+    }
   }
 }
 
@@ -215,12 +213,11 @@ function modulesPourNeuf(j: Joueur, i: number): { couleur: number; forme: number
 
 function options(m: Monde, j: Joueur, s: Strategie): Option[] {
   const liste: Option[] = []
-  const prestige = multiplicateurPrestige(j)
   const aRaffinerie = j.producteurs.some((p) => genreDe(p) === 'raffinerie')
-  const ateliers = j.producteurs.filter(estAtelier)
   const aMelangeur = j.producteurs.some((p) => genreDe(p) === 'melangeur')
+  const b = besoins(m, j)
   const voulue = sortesVoulues(m, j)[0] ?? sorteDe(couleurAbondante(j, s.couleur), 1)
-  const achat = (i: number, couleur: number, gain: number, apres?: () => void): Option => {
+  const achat = (i: number, couleur: number, gain: number): Option => {
     const c = coutProducteur(j, i, couleur)
     return {
       cout: valeurCout(m, j, c),
@@ -229,27 +226,39 @@ function options(m: Monde, j: Joueur, s: Strategie): Option[] {
       portee: aPortee(j, c),
       faire: () => {
         if (!completerAuMarche(m, j, c)) return false
-        const p = acheterProducteur(j, i, couleur)
-        if (p === null) return false
-        apres?.()
+        if (acheterProducteur(j, i, couleur) === null) return false
         rangerLaSoute(m, j)
         return true
       },
     }
   }
-  const neufDe = (i: number, couleur: number, forme: number): Producteur => ({ id: -1, type: i, x: 0, y: 0, couleur, forme, niveau: 1, progres: 0, fournees: 0 })
-  // UNE PREMIÈRE RAFFINERIE, puis UN PREMIER ATELIER avant tout : sans eux, pas de modules.
+  const neufDe = (i: number, couleur: number, forme: number): Producteur => ({ id: -1, type: i, x: 0, y: 0, couleur, forme, niveau: 1 })
+  // UNE PREMIÈRE RAFFINERIE avant tout : sans elle, pas de matière formée, pas de modules.
   if (!aRaffinerie) {
     const i = PRODUCTEURS.findIndex((t) => t.genre === 'raffinerie')
     if (visibleProducteur(j, i)) liste.push(achat(i, 0, 1e6))
     return liste
   }
-  if (ateliers.length === 0) {
-    const i = PRODUCTEURS.findIndex((t) => t.genre === 'atelier')
-    if (visibleProducteur(j, i)) liste.push(achat(i, 0, 1e6))
-    return liste
+  // UN MODULE de chaque sorte voulue, à chaque qualité visible : son gain est celui d'un commun, fois l'effet moyen de la qualité.
+  for (const sorte of sortesFormees()) {
+    if ((b[sorte] ?? 0) <= 0) continue
+    for (let q = 0; q < FABRICATION.qualites.length; q++) {
+      if (!visibleQualite(j, sorte, q)) break
+      const c = coutFabrication(j, sorte, q)
+      liste.push({
+        cout: valeurCout(m, j, c),
+        gain: (b[sorte] ?? 0) * esperanceEffet(q),
+        payable: payable(m, j, c),
+        portee: aPortee(j, c),
+        faire: () => {
+          if (!completerAuMarche(m, j, c) || fabriquerModule(m, j, sorte, q) === null) return false
+          rangerLaSoute(m, j)
+          return true
+        },
+      })
+    }
   }
-  // UN NIVEAU DE PLUS sur un module emboîté.
+  // UN NIVEAU DE PLUS sur un module emboîté, ou sur une source.
   for (const p of j.producteurs) {
     const mods = modulesDe(j, p)
     const avant = valeurDe(m, j, p, mods)
@@ -258,7 +267,6 @@ function options(m: Monde, j: Joueur, s: Strategie): Option[] {
       const c = coutNiveau(mo)
       liste.push({ cout: valeurCout(m, j, c), gain: apres - avant, payable: payable(m, j, c), portee: aPortee(j, c), faire: () => completerAuMarche(m, j, c) && ameliorer(j, mo) })
     }
-    // UN NIVEAU DE PLUS sur une source : son lot grandit.
     if (estSource(p)) {
       const apres = valeurDe(m, j, { ...p, niveau: p.niveau + 1 }, mods)
       const c = coutNiveauSource(p)
@@ -281,13 +289,9 @@ function options(m: Monde, j: Joueur, s: Strategie): Option[] {
       case 'raffinerie':
         liste.push(achat(i, 0, valeurDe(m, j, neufDe(i, couleurDe(voulue), formeDe(voulue)), mods) / (1 + deja)))
         break
-      case 'melangeur':
-        // Le premier mélangeur ouvre les modules à deux effets : on le prend dès qu'on a deux ateliers ; les suivants valent ce qu'ils convertissent.
-        liste.push(achat(i, 0, !aMelangeur && ateliers.length >= 2 ? 1e5 : valeurDe(m, j, neufDe(i, PRIMAIRES, 0), mods) / (1 + deja)))
-        break
       default:
-        // Les gros ateliers valent par leurs raretés plus que par leur cadence : on compte leur valeur moyenne, et on les préfère au-delà d'un seul.
-        liste.push(achat(i, 0, (valeurDe(m, j, neufDe(i, couleurDe(voulue), formeDe(voulue)), mods) * prestige) / (1 + deja)))
+        // Le premier mélangeur ouvre les modules à deux effets : on le prend dès qu'on a deux raffineries ; les suivants valent ce qu'ils convertissent.
+        liste.push(achat(i, 0, !aMelangeur && j.producteurs.filter((p) => genreDe(p) === 'raffinerie').length >= 2 ? 1e5 : valeurDe(m, j, neufDe(i, PRIMAIRES, 0), mods) / (1 + deja)))
     }
   })
   return liste
@@ -302,7 +306,6 @@ function acheterAuMieux(m: Monde, j: Joueur, s: Strategie): void {
     const meilleure = possibles[0]!
     const payable = possibles.find((o) => o.payable)
     if (payable === undefined) break
-    // On épargne pour la meilleure option si elle vaut nettement mieux que ce qu'on peut payer, et qu'elle est à portée.
     if (payable !== meilleure && meilleure.portee && meilleure.gain / meilleure.cout > 1.5 * (payable.gain / payable.cout)) break
     if (!payable.faire()) break
   }
@@ -334,18 +337,21 @@ export function visiter(m: Monde, j: Joueur, s: Strategie): void {
   }
   const source = sourceATaper(m, j, s)
   for (let k = 0; k < s.tapes; k++) declencher(m, j, source)
-  // LES TRANSFORMATEURS : réglés sur ce qui manque, puis la matière convertie à la main pour nourrir les ateliers.
-  reglerLesTransformateurs(m, j, s)
-  convertirLeNecessaire(m, j)
+  // LES TRANSFORMATEURS : réglés sur ce qui manque, puis la matière convertie à la main.
+  let voulues = sortesVoulues(m, j)
+  reglerLesTransformateurs(m, j, s, voulues)
+  convertirLeNecessaire(m, j, voulues)
   // LE MARCHÉ : le surplus vendu, l'or achète ce que les raffineries ne font pas.
-  vendreLeSurplus(m, j)
-  acheterPourLesAteliers(m, j)
-  lancerLesFournees(m, j)
+  vendreLeSurplus(m, j, voulues)
+  acheterPourFabriquer(m, j, voulues)
+  // LES MODULES : fabriqués, fondus, branchés.
+  fabriquerLesModules(m, j, voulues)
   rangerLaSoute(m, j)
   // LES ACHATS GLOUTONS, puis les creux neufs se règlent et se remplissent.
   acheterAuMieux(m, j, s)
-  reglerLesTransformateurs(m, j, s)
-  convertirLeNecessaire(m, j)
-  lancerLesFournees(m, j)
+  voulues = sortesVoulues(m, j)
+  reglerLesTransformateurs(m, j, s, voulues)
+  convertirLeNecessaire(m, j, voulues)
+  fabriquerLesModules(m, j, voulues)
   rangerLaSoute(m, j)
 }

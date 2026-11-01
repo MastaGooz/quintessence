@@ -2,29 +2,32 @@
  * LE MOTEUR du système abstrait : pur, le temps en heures injecté, le hasard
  * tiré d'une graine (le monde a la sienne, chaque joueur compte ses tirages).
  * Tout ce qu'un joueur peut faire passe par ici (déclencher un générateur,
- * régler une raffinerie ou un atelier, vendre, acheter, emboîter, améliorer,
- * fondre, déplacer, repartir de zéro) ; `avancer` fait vivre le monde.
+ * régler une raffinerie, fabriquer un module, vendre, acheter, emboîter,
+ * améliorer, fondre, déplacer, repartir de zéro) ; `avancer` fait vivre le
+ * monde.
  *
  * LES COULEURS ET LES FORMES (Keko, 01/11) : une matière est une couleur et une
  * forme. Les SOURCES produisent les trois couleurs de base, rondes ; les
  * RAFFINERIES donnent une forme à une ronde ; les MÉLANGEURS font les trois
- * couleurs mélangées ; les ATELIERS font d'une matière formée un MODULE de sa
- * couleur et de sa forme, de rareté tirée. Un module est une pièce à une
- * bosse, qui s'emboîte dans un creux de sa forme (n'importe quelle couleur) et
- * AGIT sur le générateur : sa couleur dit la cible (rouge la tape, vert le
- * lot, bleu le temps), sa forme l'opération (carré ajoute, triangle multiplie,
- * losange donne une chance). Un module s'améliore niveau par niveau (en
- * matière de sa sorte), se déplace d'un générateur à l'autre, attend dans la
- * SOUTE quand il n'est branché nulle part ; trois modules de même sorte et
- * même rareté se fondent en un de la rareté au-dessus.
+ * couleurs mélangées. Les MODULES se fabriquent dans la boutique avec la
+ * matière formée de leur sorte, rareté tirée (Keko : « les générateurs et
+ * transformateurs ne peuvent pas produire de modules, on doit les fabriquer
+ * comme le reste puis les placer »). Un module est une pièce à une bosse, qui
+ * s'emboîte dans un creux de sa forme (n'importe quelle couleur) et AGIT sur
+ * le générateur : sa couleur dit la cible (rouge la tape, vert le lot, bleu le
+ * temps), sa forme l'opération (carré ajoute, triangle multiplie, losange
+ * donne une chance). Un module s'améliore niveau par niveau (en matière de sa
+ * sorte), se déplace d'un générateur à l'autre, attend dans la SOUTE quand il
+ * n'est branché nulle part ; trois modules de même sorte et même rareté se
+ * fondent en un de la rareté au-dessus.
  *
  * Tout se paie en matière ; LE MARCHÉ est commun, un prix par sorte, et l'or
  * n'y sert qu'à échanger.
  */
 import {
-  ACHAT, CASE, COULEURS, EFFETS, EMPLACEMENTS, FAMILLES, FORMES, FUSION, MARCHE, MELANGE, MODULE, NIVEAU, NIVEAU_SOURCE, PIECE, PRESTIGE, PRIMAIRES, PRODUCTEUR, PRODUCTEURS, RARETES,
-  SORTES, TRAITS, VALEUR_MODULE, aDuBleu, couleurDe, formeDe, partsDe, sorteDe,
-  type Cout, type Genre, type Trait, type TypeProducteur,
+  ACHAT, CASE, COULEURS, EFFETS, EMPLACEMENTS, FABRICATION, FAMILLES, FORMES, FUSION, MARCHE, MELANGE, MODULE, NIVEAU, NIVEAU_SOURCE, PIECE, PRESTIGE, PRIMAIRES, PRODUCTEUR, PRODUCTEURS,
+  RARETES, SORTES, TRAITS, VALEUR_MODULE, aDuBleu, couleurDe, formeDe, partsDe, sorteDe,
+  type Cout, type Genre, type Qualite, type Trait, type TypeProducteur,
 } from './donnees.ts'
 import { graineDe, rngDe } from '../rng.ts'
 
@@ -35,16 +38,12 @@ export interface Producteur {
   type: number
   x: number
   y: number
-  /** Source : sa couleur (de base). Raffinerie, atelier : la couleur qu'il travaille. Mélangeur : la couleur mélangée qu'il fait. */
+  /** Source : sa couleur (de base). Raffinerie : la couleur qu'elle travaille. Mélangeur : la couleur mélangée qu'il fait. */
   couleur: number
-  /** Raffinerie, atelier : la forme qu'il fait (1 à 3). Source, mélangeur : 0. */
+  /** Raffinerie : la forme qu'elle fait (1 à 3). Source, mélangeur : 0. */
   forme: number
   /** Source : son niveau, qui multiplie son lot de base. */
   niveau: number
-  /** Atelier : les fournées accumulées par ses horloges, pas encore lancées (une fraction). */
-  progres: number
-  /** Atelier : les fournées déjà faites. */
-  fournees: number
 }
 
 /** UN MODULE : une pièce d'une couleur et d'une forme, d'une rareté, emboîtée sur un générateur ou dans la soute. */
@@ -77,8 +76,12 @@ export interface Joueur {
   prochainId: number
   /** Les exemplaires achetés de chaque type de générateur : c'est eux que le coût suit. */
   achetes: number[]
+  /** Les modules fabriqués de chaque sorte depuis le dernier prestige : c'est eux que le coût de fabrication suit. */
+  fabriques: number[]
   /** Par famille (l'ordre de `GENRES`), combien de modèles le joueur a déjà vus : le dévoilement survit au prestige. */
   connus: number[]
+  /** Combien de qualités de fabrication le joueur a déjà vues. */
+  connusQualites: number
   /** Les points de prestige acquis. */
   points: number
   prestiges: number
@@ -89,10 +92,10 @@ export interface Joueur {
   total: number
   /** Les tirages faits : le hasard du joueur en découle, rejouable. */
   tirages: number
-  /** Les fournées depuis le dernier rare, le dernier épique : la garantie. */
+  /** Les fabrications depuis le dernier rare, le dernier épique : la garantie. */
   sansRare: number
   sansEpique: number
-  journal: { tapes: number; fournees: number; ventes: number; achats: number; orVentes: number; orAchats: number; fusions: number }
+  journal: { tapes: number; fabrications: number; ventes: number; achats: number; orVentes: number; orAchats: number; fusions: number }
 }
 
 /** LE MARCHÉ : par sorte, le volume net vendu récemment, la demande suivie, et le prix de chaque heure passée. */
@@ -114,7 +117,7 @@ export interface Monde {
 const PAS_Y = 3 * CASE
 
 function sourcesDeDepart(): Producteur[] {
-  return Array.from({ length: PRIMAIRES }, (_, c) => ({ id: c + 1, type: 0, x: 0, y: (c - 1) * PAS_Y, couleur: c, forme: 0, niveau: 1, progres: 0, fournees: 0 }))
+  return Array.from({ length: PRIMAIRES }, (_, c) => ({ id: c + 1, type: 0, x: 0, y: (c - 1) * PAS_Y, couleur: c, forme: 0, niveau: 1 }))
 }
 
 export function nouveauJoueur(id: number, nom: string): Joueur {
@@ -127,7 +130,9 @@ export function nouveauJoueur(id: number, nom: string): Joueur {
     modules: [],
     prochainId: PRIMAIRES + 1,
     achetes: PRODUCTEURS.map(() => 0),
-    connus: [1, 1, 0, 0],
+    fabriques: Array.from({ length: SORTES }, () => 0),
+    connus: [1, 1, 0],
+    connusQualites: 1,
     points: 0,
     prestiges: 0,
     produit: Array.from({ length: PRIMAIRES }, () => 0),
@@ -136,7 +141,7 @@ export function nouveauJoueur(id: number, nom: string): Joueur {
     tirages: 0,
     sansRare: 0,
     sansEpique: 0,
-    journal: { tapes: 0, fournees: 0, ventes: 0, achats: 0, orVentes: 0, orAchats: 0, fusions: 0 },
+    journal: { tapes: 0, fabrications: 0, ventes: 0, achats: 0, orVentes: 0, orAchats: 0, fusions: 0 },
   }
 }
 
@@ -166,10 +171,6 @@ export function typeDe(p: { type: number }): TypeProducteur {
 
 export function genreDe(p: { type: number }): Genre {
   return typeDe(p).genre
-}
-
-export function estAtelier(p: { type: number }): boolean {
-  return genreDe(p) === 'atelier'
 }
 
 export function estSource(p: { type: number }): boolean {
@@ -210,12 +211,12 @@ export function sorteModule(mo: { couleur: number; forme: number }): number {
   return sorteDe(mo.couleur, mo.forme)
 }
 
-/** La sorte qui sort d'un générateur : une ronde (source, mélangeur), une matière formée (raffinerie), la sorte des modules (atelier). */
+/** La sorte qui sort d'un générateur : une ronde (source, mélangeur), une matière formée (raffinerie). */
 export function sortie(p: Producteur): number {
   return sorteDe(p.couleur, p.forme)
 }
 
-/** Ce qu'un déclenchement consomme, par unité de lot : rien (source), la ronde de sa couleur (raffinerie), une ronde de chaque couleur de base du mélange (mélangeur) ; un atelier consomme sa fournée (voir `entree`). */
+/** Ce qu'un déclenchement consomme, par unité de lot : rien (source), la ronde de sa couleur (raffinerie), une ronde de chaque couleur de base du mélange (mélangeur). */
 export function entrees(p: Producteur): number[] {
   switch (genreDe(p)) {
     case 'raffinerie':
@@ -423,7 +424,7 @@ export function effetsDe(mo: { couleur: number; forme: number }, f: number): [nu
 
 /** Ce qu'un générateur donne avec ses modules. */
 export interface Bilan {
-  /** Le lot d'un déclenchement automatique : de la matière (source, raffinerie, mélangeur), ou des modules par fournée (atelier). */
+  /** Le lot d'un déclenchement automatique : de la matière produite (source) ou convertie (raffinerie, mélangeur). */
   lot: number
   /** Le lot moyen, gros lots compris. */
   lotMoyen: number
@@ -431,13 +432,13 @@ export interface Bilan {
   tape: number
   /** La tape moyenne, critiques et gros lots compris. */
   tapeMoyenne: number
-  /** La chance qu'une tape soit critique (× `coup` ; sur un atelier, la rareté monte). */
+  /** La chance qu'une tape soit critique (× `coup`). */
   chanceCritique: number
   /** La chance qu'un déclenchement rende un gros lot (× `grosLot`). */
   chanceGrosLot: number
   /** Les déclenchements par seconde des horloges, triangles et losanges bleus compris. */
   frequence: number
-  /** Le lot moyen fois la fréquence : de la matière par seconde, ou des modules par seconde. */
+  /** Le lot moyen fois la fréquence : de la matière par seconde. */
   debit: number
 }
 
@@ -447,7 +448,7 @@ export interface Bilan {
  * chances des losanges se composent. Le lot vaut pour tout déclenchement ; la
  * tape y ajoute le rouge ; le temps fait la fréquence des horloges.
  */
-export function bilan(lot0: number, mods: readonly ModuleAgissant[], prestige: number, genre: Genre): Bilan {
+export function bilan(lot0: number, mods: readonly ModuleAgissant[], prestige: number): Bilan {
   const ajout = [0, 0, 0]
   const mult = [1, 1, 1]
   const sans = [1, 1, 1]
@@ -466,7 +467,7 @@ export function bilan(lot0: number, mods: readonly ModuleAgissant[], prestige: n
   const chanceCritique = 1 - (sans[0] ?? 1)
   const chanceGrosLot = 1 - (sans[1] ?? 1)
   const chanceRafale = 1 - (sans[2] ?? 1)
-  const lot = lot0 * (genre === 'atelier' ? 1 : prestige) * (1 + (ajout[1] ?? 0)) * (mult[1] ?? 1)
+  const lot = lot0 * prestige * (1 + (ajout[1] ?? 0)) * (mult[1] ?? 1)
   const gros = 1 + (EFFETS.grosLot - 1) * chanceGrosLot
   const lotMoyen = lot * gros
   const tape = lot * (1 + (ajout[0] ?? 0)) * (mult[0] ?? 1)
@@ -482,10 +483,10 @@ export function lotDeBase(p: Producteur): number {
 
 /** Le bilan d'un générateur tel qu'il est équipé. */
 export function bilanProducteur(j: Joueur, p: Producteur): Bilan {
-  return bilan(lotDeBase(p), modulesDe(j, p), multiplicateurPrestige(j), genreDe(p))
+  return bilan(lotDeBase(p), modulesDe(j, p), multiplicateurPrestige(j))
 }
 
-/** La production du joueur, en matière ronde par seconde : ses sources, par leurs horloges. C'est elle qui mesure le temps de production d'une fournée. */
+/** La production du joueur, en matière ronde par seconde : ses sources, par leurs horloges. */
 export function debitTotal(j: Joueur): number {
   let d = 0
   for (const p of j.producteurs) if (estSource(p)) d += bilanProducteur(j, p).debit
@@ -495,17 +496,17 @@ export function debitTotal(j: Joueur): number {
 /** Une tape par minute : ce qu'on compte à un générateur sans horloge, et au flux d'une sorte que rien ne produit. */
 const TAPE_NOMINALE = 1 / 60
 
-/** Ce que le joueur produit d'une sorte, en unités par seconde, par ses horloges (les ateliers ne comptent pas : ils font des modules). */
+/** Ce que le joueur produit d'une sorte, en unités par seconde, par ses horloges. */
 export function production(j: Joueur, sorte: number): number {
   let d = 0
-  for (const p of j.producteurs) if (!estAtelier(p) && sortie(p) === sorte) d += bilanProducteur(j, p).debit
+  for (const p of j.producteurs) if (sortie(p) === sorte) d += bilanProducteur(j, p).debit
   return d
 }
 
 /** Le flux d'une sorte chez le joueur : sa production, plus une tape par minute sur le meilleur générateur qui la fait (au moins une unité par minute : on peut toujours l'acheter). */
 export function flux(j: Joueur, sorte: number): number {
   let meilleure = 0
-  for (const p of j.producteurs) if (!estAtelier(p) && sortie(p) === sorte) meilleure = Math.max(meilleure, bilanProducteur(j, p).tapeMoyenne)
+  for (const p of j.producteurs) if (sortie(p) === sorte) meilleure = Math.max(meilleure, bilanProducteur(j, p).tapeMoyenne)
   return production(j, sorte) + Math.max(1, meilleure) * TAPE_NOMINALE
 }
 
@@ -552,31 +553,23 @@ function convertir(j: Joueur, p: Producteur, q: number): number {
   return fait
 }
 
-/** Ce qu'une tape a fait : la matière gagnée (ou convertie), les modules sortis, et si le coup fut critique ou gros. */
+/** Ce qu'une tape a fait : la matière gagnée (ou convertie), et si le coup fut critique ou gros. */
 export interface Coup {
   gain: number
   critique: boolean
   grosLot: boolean
   sorte: number
-  modules: Module[]
 }
 
 /**
  * Déclenche un générateur (une tape) : une source produit sa tape, une
- * raffinerie ou un mélangeur convertit ce qu'il peut, un atelier lance une
- * fournée. `alea` (de 0 à 1) décide du critique et du gros lot ; sans lui, la
- * moyenne (les bots, qui ne tirent rien). Une tape sans matière à convertir
- * ne fait rien.
+ * raffinerie ou un mélangeur convertit ce qu'il peut. `alea` (de 0 à 1) décide
+ * du critique et du gros lot ; sans lui, la moyenne (les bots, qui ne tirent
+ * rien). Une tape sans matière à convertir ne fait rien.
  */
 export function declencher(m: Monde, j: Joueur, p: Producteur, alea?: number): Coup {
   const b = bilanProducteur(j, p)
-  const rien: Coup = { gain: 0, critique: false, grosLot: false, sorte: sortie(p), modules: [] }
-  if (estAtelier(p)) {
-    const f = fabriquer(m, j, p, true)
-    if (f.modules.length === 0) return rien
-    j.journal.tapes += 1
-    return { gain: f.modules.length, critique: f.critique, grosLot: f.grosLot, sorte: sortie(p), modules: f.modules }
-  }
+  const rien: Coup = { gain: 0, critique: false, grosLot: false, sorte: sortie(p) }
   const critique = alea !== undefined && alea < b.chanceCritique
   const grosLot = alea !== undefined && (alea * 7919) % 1 < b.chanceGrosLot
   const q = alea === undefined ? b.tapeMoyenne : b.tape * (critique ? EFFETS.coup : 1) * (grosLot ? EFFETS.grosLot : 1)
@@ -585,7 +578,8 @@ export function declencher(m: Monde, j: Joueur, p: Producteur, alea?: number): C
   else gain = convertir(j, p, q)
   if (gain <= 0) return rien
   j.journal.tapes += 1
-  return { gain, critique, grosLot, sorte: sortie(p), modules: [] }
+  void m
+  return { gain, critique, grosLot, sorte: sortie(p) }
 }
 
 /** Une tape sur la meilleure source. */
@@ -593,109 +587,10 @@ export function taper(m: Monde, j: Joueur, alea?: number): number {
   return declencher(m, j, meilleureSource(m, j), alea).gain
 }
 
-// ---------------------------------------------------------------------------
-// LES FOURNÉES : la matière devient des modules
-
-/** La matière qu'une fournée de cet atelier consomme : un temps de ce que le joueur produit de cette sorte (ses raffineries, par leurs horloges), au moins le plancher de son modèle. */
-export function entree(j: Joueur, p: Producteur): number {
-  const t = typeDe(p)
-  return Math.ceil(Math.max(t.entree, production(j, sortie(p)) * 3600 * t.duree))
-}
-
-/** Le stock de la sorte que travaille cet atelier. */
-export function stockPour(j: Joueur, p: Producteur): number {
-  return j.matiere[sortie(p)] ?? 0
-}
-
-export function peutFabriquer(j: Joueur, p: Producteur): boolean {
-  return estAtelier(p) && stockPour(j, p) + 1e-9 >= entree(j, p)
-}
-
-/** Les chances de chaque rareté pour cet atelier, normalisées. */
-export function chancesDe(p: { type: number }): number[] {
-  const c = typeDe(p).chances
-  const total = c.reduce((s, v) => s + v, 0)
-  return RARETES.noms.map((_, r) => (total > 0 ? (c[r] ?? 0) / total : r === 0 ? 1 : 0))
-}
-
-/** Tire une rareté selon des chances normalisées. */
-function tirerRarete(chances: readonly number[], alea: number): number {
-  let cumul = 0
-  for (let r = 0; r < chances.length; r++) {
-    cumul += chances[r] ?? 0
-    if (alea < cumul) return r
-  }
-  return chances.length - 1
-}
-
-/** Les traits qu'un module de cette couleur peut porter. */
-export function traitsPossibles(couleur: number): readonly Trait[] {
-  return TRAITS.noms.filter((t) => t !== 'rapide' || aDuBleu(couleur))
-}
-
-/** Fabrique un module de la sorte de l'atelier, de rareté tirée selon lui, la garantie, et le critique de la tape ; il va dans la soute. */
-function tirerModule(m: Monde, j: Joueur, p: Producteur, critique: boolean): Module {
-  let rarete = tirerRarete(chancesDe(p), tirer(m, j))
-  // LA GARANTIE : les fournées sans rare, sans épique, finissent par en donner un.
-  if (rarete < 3 && j.sansEpique + 1 >= RARETES.sansEpique) rarete = 3
-  else if (rarete < 2 && j.sansRare + 1 >= RARETES.sansRare) rarete = 2
-  // LE CRITIQUE d'une tape sur un atelier : la rareté monte d'un cran.
-  if (critique) rarete = Math.min(RARETES.noms.length - 1, rarete + 1)
-  j.sansRare = rarete >= 2 ? 0 : j.sansRare + 1
-  j.sansEpique = rarete >= 3 ? 0 : j.sansEpique + 1
-  let trait: Trait | null = null
-  if (rarete >= 1) {
-    const possibles = traitsPossibles(p.couleur)
-    trait = possibles[Math.floor(tirer(m, j) * possibles.length)] ?? null
-  }
-  const mo: Module = { id: j.prochainId++, couleur: p.couleur, forme: p.forme, rarete, trait, niveau: 1, parent: null, emplacement: 0 }
-  j.modules.push(mo)
-  return mo
-}
-
-/** Ce qu'une fournée a rendu : ses modules, et si la tape fut critique (une rareté de plus) ou le lot gros (des modules de plus). */
-export interface Fournee {
-  modules: Module[]
-  critique: boolean
-  grosLot: boolean
-}
-
-/** Une fournée : l'atelier consomme sa matière et rend ses modules (le lot entier, le reste en chance, un gros lot en fait plus). `tape` : le rouge agit, et un critique monte la rareté ; sinon, c'est une horloge. Rien si la matière manque. */
-export function fabriquer(m: Monde, j: Joueur, p: Producteur, tape: boolean): Fournee {
-  if (!peutFabriquer(j, p)) return { modules: [], critique: false, grosLot: false }
-  j.matiere[sortie(p)] = stockPour(j, p) - entree(j, p)
-  p.fournees += 1
-  const b = bilanProducteur(j, p)
-  const lot = tape ? b.tape : b.lot
-  let n = Math.floor(lot)
-  if (tirer(m, j) < lot - n) n += 1
-  const grosLot = tirer(m, j) < b.chanceGrosLot
-  if (grosLot) n *= EFFETS.grosLot
-  const critique = tape && tirer(m, j) < b.chanceCritique
-  const faits: Module[] = []
-  for (let k = 0; k < Math.max(1, n); k++) faits.push(tirerModule(m, j, p, critique))
-  j.journal.fournees += 1
-  // Le premier module dévoile les sources de plus.
-  j.connus[0] = Math.max(j.connus[0] ?? 1, 2)
-  return { modules: faits, critique, grosLot }
-}
-
-/** Ce que vaut en or un module de cette forme et de cette rareté au niveau 1 : la base de ses niveaux. */
-export function valeurModule(mo: { forme: number; rarete: number }): number {
-  return (VALEUR_MODULE[mo.forme] ?? 10) * (RARETES.valeur[mo.rarete] ?? 1)
-}
-
-/** Ce que vaut en moyenne un module qui sort de cet atelier. */
-export function valeurMoyenne(p: Producteur): number {
-  const chances = chancesDe(p)
-  return chances.reduce((s, c, r) => s + c * valeurModule({ forme: p.forme, rarete: r }), 0)
-}
-
-/** Les réglages qu'un générateur accepte : une raffinerie et un atelier, toute couleur et une forme de 1 à 3 ; un mélangeur, une couleur mélangée ; une source, rien. */
+/** Les réglages qu'un générateur accepte : une raffinerie, toute couleur et une forme de 1 à 3 ; un mélangeur, une couleur mélangée ; une source, rien. */
 export function peutRegler(p: Producteur, couleur: number, forme: number): boolean {
   switch (genreDe(p)) {
     case 'raffinerie':
-    case 'atelier':
       return couleur >= 0 && couleur < COULEURS && forme >= 1 && forme < FORMES
     case 'melangeur':
       return couleur >= PRIMAIRES && couleur < COULEURS && forme === 0
@@ -709,7 +604,6 @@ export function regler(p: Producteur, couleur: number, forme: number): boolean {
   if (!peutRegler(p, couleur, forme)) return false
   p.couleur = couleur
   p.forme = forme
-  p.progres = 0
   return true
 }
 
@@ -767,13 +661,13 @@ export function coutProducteur(j: Joueur, i: number, couleur = 0): Cout {
 }
 
 /** L'indice de la famille d'un genre dans `connus`. */
-const FAMILLE_INDEX: Record<Genre, number> = { source: 0, raffinerie: 1, melangeur: 2, atelier: 3 }
+const FAMILLE_INDEX: Record<Genre, number> = { source: 0, raffinerie: 1, melangeur: 2 }
 
 /**
  * Un modèle est visible dès qu'on l'a dévoilé — le suivant en possédant le
- * précédent ; la première raffinerie toujours ; le premier atelier avec la
- * première raffinerie ; le mélangeur et la seconde source avec le premier
- * atelier ou le premier module — ou, sauf les sources, dès qu'on peut le payer.
+ * précédent ; la première raffinerie toujours ; le mélangeur et la seconde
+ * source avec le premier module fabriqué — ou, sauf les sources, dès qu'on
+ * peut le payer.
  */
 export function visibleProducteur(j: Joueur, i: number): boolean {
   const t = PRODUCTEURS[i]
@@ -808,13 +702,6 @@ export function peutAcheterProducteur(j: Joueur, i: number, couleur = 0): boolea
   return visibleProducteur(j, i) && peutPayer(j, coutProducteur(j, i, couleur))
 }
 
-/** La sorte formée la plus abondante du joueur : ce qu'un atelier neuf travaille d'abord. */
-function sorteFormeeDominante(j: Joueur): number {
-  let meilleure = sorteDe(0, 1)
-  for (const s of sortesFormees()) if ((j.matiere[s] ?? 0) > (j.matiere[meilleure] ?? 0)) meilleure = s
-  return meilleure
-}
-
 /** La couleur de base la plus abondante en rondes : ce qu'une raffinerie neuve travaille d'abord. */
 function couleurDominante(j: Joueur): number {
   let meilleure = 0
@@ -825,8 +712,8 @@ function couleurDominante(j: Joueur): number {
 /**
  * Achète un générateur : il apparaît sur le plan, ses creux vides. Une source
  * a la couleur achetée ; une raffinerie travaille d'abord la couleur la plus
- * abondante, en carrés ; un mélangeur fait du jaune ; un atelier travaille la
- * matière formée la plus abondante. Rend le générateur, ou null.
+ * abondante, en carrés ; un mélangeur fait du jaune. Rend le générateur, ou
+ * null.
  */
 export function acheterProducteur(j: Joueur, i: number, couleur = 0): Producteur | null {
   if (!peutAcheterProducteur(j, i, couleur)) return null
@@ -834,36 +721,12 @@ export function acheterProducteur(j: Joueur, i: number, couleur = 0): Producteur
   payer(j, coutProducteur(j, i, couleur))
   const place = placeDApparition(j)
   j.achetes[i] = (j.achetes[i] ?? 0) + 1
-  let c = 0
-  let f = 0
-  switch (t.genre) {
-    case 'source':
-      c = couleur
-      break
-    case 'raffinerie':
-      c = couleurDominante(j)
-      f = 1
-      break
-    case 'melangeur':
-      c = PRIMAIRES
-      break
-    case 'atelier': {
-      const s = sorteFormeeDominante(j)
-      c = couleurDe(s)
-      f = formeDe(s)
-      break
-    }
-  }
-  const p: Producteur = { id: j.prochainId++, type: i, x: place.x, y: place.y, couleur: c, forme: f, niveau: 1, progres: 0, fournees: 0 }
+  const c = t.genre === 'source' ? couleur : t.genre === 'raffinerie' ? couleurDominante(j) : PRIMAIRES
+  const p: Producteur = { id: j.prochainId++, type: i, x: place.x, y: place.y, couleur: c, forme: t.genre === 'raffinerie' ? 1 : 0, niveau: 1 }
   j.producteurs.push(p)
-  // LE DÉVOILEMENT : le modèle suivant de la famille ; la raffinerie dévoile l'atelier ; l'atelier dévoile le mélangeur et la seconde source.
+  // LE DÉVOILEMENT : le modèle suivant de la famille.
   const fam = FAMILLE_INDEX[t.genre]
   j.connus[fam] = Math.max(j.connus[fam] ?? 0, Math.min(FAMILLES[t.genre].types.length, rangDe(i) + 2))
-  if (t.genre === 'raffinerie') j.connus[3] = Math.max(j.connus[3] ?? 0, 1)
-  if (t.genre === 'atelier') {
-    j.connus[2] = Math.max(j.connus[2] ?? 0, 1)
-    j.connus[0] = Math.max(j.connus[0] ?? 1, 2)
-  }
   return p
 }
 
@@ -897,6 +760,99 @@ export function ameliorerSource(j: Joueur, p: Producteur): boolean {
   if (!estSource(p) || !payer(j, coutNiveauSource(p))) return false
   p.niveau += 1
   return true
+}
+
+// ---------------------------------------------------------------------------
+// LA FABRICATION DES MODULES : dans la boutique, comme le reste
+
+/** Ce que vaut en or un module de cette forme et de cette rareté au niveau 1 : la base de sa fabrication et de ses niveaux. */
+export function valeurModule(mo: { forme: number; rarete: number }): number {
+  return (VALEUR_MODULE[mo.forme] ?? 10) * (RARETES.valeur[mo.rarete] ?? 1)
+}
+
+export function qualiteDe(q: number): Qualite {
+  return FABRICATION.qualites[q] ?? FABRICATION.qualites[0]!
+}
+
+/** Le coût du prochain module de cette sorte, à cette qualité : en matière de la sorte ; au moins un temps de ce que le joueur en produit. */
+export function coutFabrication(j: Joueur, sorte: number, q: number): Cout {
+  const forme = formeDe(sorte)
+  const total = j.fabriques.reduce((s, n) => s + n, 0)
+  const croissance = Math.pow(FABRICATION.croissance, j.fabriques[sorte] ?? 0) * Math.pow(FABRICATION.croissanceTotale, total)
+  const base = Math.max(valeurModule({ forme, rarete: 0 }) * FABRICATION.part * croissance, production(j, sorte) * 3600 * FABRICATION.duree)
+  return { forme, couleur: couleurDe(sorte), quantite: Math.ceil(base * qualiteDe(q).mult) }
+}
+
+/** Une qualité se voit dès qu'on a usé de la précédente, ou dès qu'on peut la payer pour cette sorte. */
+export function visibleQualite(j: Joueur, sorte: number, q: number): boolean {
+  if (q < 0 || q >= FABRICATION.qualites.length) return false
+  return q < j.connusQualites || peutPayer(j, coutFabrication(j, sorte, q))
+}
+
+export function peutFabriquer(j: Joueur, sorte: number, q: number): boolean {
+  return formeDe(sorte) !== 0 && visibleQualite(j, sorte, q) && peutPayer(j, coutFabrication(j, sorte, q))
+}
+
+/** Les chances de chaque rareté pour cette qualité, normalisées. */
+export function chancesDe(q: number): number[] {
+  const c = qualiteDe(q).chances
+  const total = c.reduce((s, v) => s + v, 0)
+  return RARETES.noms.map((_, r) => (total > 0 ? (c[r] ?? 0) / total : r === 0 ? 1 : 0))
+}
+
+/** L'effet moyen d'un module de cette qualité, en multiples d'un commun. */
+export function esperanceEffet(q: number): number {
+  return chancesDe(q).reduce((s, c, r) => s + c * (RARETES.effet[r] ?? 1), 0)
+}
+
+/** Ce que vaut en moyenne un module de cette forme à cette qualité. */
+export function valeurMoyenne(forme: number, q: number): number {
+  return chancesDe(q).reduce((s, c, r) => s + c * valeurModule({ forme, rarete: r }), 0)
+}
+
+/** Tire une rareté selon des chances normalisées. */
+function tirerRarete(chances: readonly number[], alea: number): number {
+  let cumul = 0
+  for (let r = 0; r < chances.length; r++) {
+    cumul += chances[r] ?? 0
+    if (alea < cumul) return r
+  }
+  return chances.length - 1
+}
+
+/** Les traits qu'un module de cette couleur peut porter. */
+export function traitsPossibles(couleur: number): readonly Trait[] {
+  return TRAITS.noms.filter((t) => t !== 'rapide' || aDuBleu(couleur))
+}
+
+/**
+ * Fabrique un module de cette sorte à cette qualité : la matière sort, la
+ * rareté se tire (la garantie aidant), le trait aussi dès peu commune ; le
+ * module va dans la soute. Rend le module, ou null si la matière manque.
+ */
+export function fabriquerModule(m: Monde, j: Joueur, sorte: number, q: number): Module | null {
+  if (!peutFabriquer(j, sorte, q) || !payer(j, coutFabrication(j, sorte, q))) return null
+  j.fabriques[sorte] = (j.fabriques[sorte] ?? 0) + 1
+  let rarete = tirerRarete(chancesDe(q), tirer(m, j))
+  // LA GARANTIE : les fabrications sans rare, sans épique, finissent par en donner un.
+  if (rarete < 3 && j.sansEpique + 1 >= RARETES.sansEpique) rarete = 3
+  else if (rarete < 2 && j.sansRare + 1 >= RARETES.sansRare) rarete = 2
+  j.sansRare = rarete >= 2 ? 0 : j.sansRare + 1
+  j.sansEpique = rarete >= 3 ? 0 : j.sansEpique + 1
+  const couleur = couleurDe(sorte)
+  let trait: Trait | null = null
+  if (rarete >= 1) {
+    const possibles = traitsPossibles(couleur)
+    trait = possibles[Math.floor(tirer(m, j) * possibles.length)] ?? null
+  }
+  const mo: Module = { id: j.prochainId++, couleur, forme: formeDe(sorte), rarete, trait, niveau: 1, parent: null, emplacement: 0 }
+  j.modules.push(mo)
+  j.journal.fabrications += 1
+  // LE DÉVOILEMENT : la qualité suivante ; le premier module dévoile le mélangeur et la seconde source.
+  j.connusQualites = Math.max(j.connusQualites, Math.min(FABRICATION.qualites.length, q + 2))
+  j.connus[2] = Math.max(j.connus[2] ?? 0, 1)
+  j.connus[0] = Math.max(j.connus[0] ?? 1, 2)
+  return mo
 }
 
 // ---------------------------------------------------------------------------
@@ -936,33 +892,25 @@ export function debrancher(mo: Module): void {
   mo.parent = null
 }
 
-/** Les déclenchements par seconde que ce générateur peut vraiment faire à cette fréquence : jamais plus que ses entrées n'en nourrissent. */
+/** Les conversions par seconde qu'un transformateur peut vraiment faire à cette fréquence et ce lot : jamais plus que ses entrées n'en nourrissent. */
 export function cadenceReelle(j: Joueur, p: Producteur, frequence: number, lot: number): number {
   if (estSource(p)) return frequence
-  const parDeclenchement = estAtelier(p) ? entree(j, p) : Math.max(1e-9, lot)
   let entrant = Infinity
-  for (const s of estAtelier(p) ? [sortie(p)] : entrees(p)) entrant = Math.min(entrant, flux(j, s))
-  return Math.min(frequence, entrant / Math.max(1e-9, parDeclenchement))
-}
-
-/** Les fournées par seconde que cet atelier peut vraiment faire à cette fréquence. */
-export function fourneesParSeconde(j: Joueur, p: Producteur, frequence: number): number {
-  return cadenceReelle(j, p, frequence, 1)
+  for (const s of entrees(p)) entrant = Math.min(entrant, flux(j, s))
+  return Math.min(frequence, entrant / Math.max(1e-9, lot))
 }
 
 /**
  * Ce que vaut un générateur, en or par seconde, à titre de comparaison : sa
  * production au prix courant (une source) ; ce que ses conversions ajoutent de
- * valeur, au moins un quart de la sortie (une raffinerie, un mélangeur) ; la
- * valeur des modules qu'il sort (un atelier). Ses horloges, plus une tape par
- * minute ; jamais plus que ses entrées ne le nourrissent.
+ * valeur, au moins un quart de la sortie (une raffinerie, un mélangeur). Ses
+ * horloges, plus une tape par minute ; jamais plus que ses entrées ne le
+ * nourrissent.
  */
 export function valeurDe(m: Monde, j: Joueur, p: Producteur, mods: readonly ModuleAgissant[]): number {
-  const genre = genreDe(p)
-  const b = bilan(lotDeBase(p), mods, multiplicateurPrestige(j), genre)
+  const b = bilan(lotDeBase(p), mods, multiplicateurPrestige(j))
   const prixSortie = prixCourant(m, sortie(p))
-  if (genre === 'source') return (b.lotMoyen * b.frequence + b.tapeMoyenne * TAPE_NOMINALE) * prixSortie
-  if (genre === 'atelier') return b.lotMoyen * fourneesParSeconde(j, p, b.frequence + TAPE_NOMINALE) * valeurMoyenne(p)
+  if (estSource(p)) return (b.lotMoyen * b.frequence + b.tapeMoyenne * TAPE_NOMINALE) * prixSortie
   const parSeconde = b.lotMoyen * b.frequence + b.tapeMoyenne * TAPE_NOMINALE
   const nourri = Math.min(parSeconde, cadenceReelle(j, p, b.frequence + TAPE_NOMINALE, b.lotMoyen) * b.lotMoyen)
   const coutEntrees = entrees(p).reduce((s, e) => s + prixCourant(m, e), 0)
@@ -1194,6 +1142,7 @@ export function prestiger(j: Joueur): boolean {
   j.or = 0
   j.matiere = Array.from({ length: SORTES }, () => 0)
   j.achetes = PRODUCTEURS.map(() => 0)
+  j.fabriques = Array.from({ length: SORTES }, () => 0)
   j.producteurs = sourcesDeDepart()
   j.prochainId = Math.max(j.prochainId, PRIMAIRES + 1)
   j.modules = []
@@ -1205,20 +1154,9 @@ export function prestiger(j: Joueur): boolean {
 // ---------------------------------------------------------------------------
 // LE TEMPS
 
-/** Au plus tant de fournées d'un atelier par pas de temps : au-delà, c'est une avalanche de modules que personne ne lira. */
-const FOURNEES_MAX_PAR_PAS = 60
+const ORDRE: Record<Genre, number> = { source: 0, melangeur: 1, raffinerie: 2 }
 
-/** Un atelier à horloges s'arrête quand la soute tient déjà tant de modules de sa sorte : sinon il mangerait toute la matière du joueur absent pour des pièces que rien n'attend. Une tape le relance toujours. */
-export const SOUTE_PLEINE = 3
-
-/** L'atelier tournerait-il tout seul : ses horloges, sa matière, et une soute qui n'est pas déjà pleine de sa sorte. */
-export function atelierEnAttente(j: Joueur, p: Producteur): boolean {
-  return estAtelier(p) && soute(j).filter((mo) => sorteModule(mo) === sortie(p)).length >= SOUTE_PLEINE
-}
-
-const ORDRE: Record<Genre, number> = { source: 0, melangeur: 1, raffinerie: 2, atelier: 3 }
-
-/** Fait vivre le monde `dt` heures : les sources produisent par leurs horloges, les mélangeurs puis les raffineries convertissent, les ateliers lancent leurs fournées, le marché respire. */
+/** Fait vivre le monde `dt` heures : les sources produisent par leurs horloges, les mélangeurs puis les raffineries convertissent, le marché respire. */
 export function avancer(m: Monde, dt: number): void {
   if (dt <= 0) return
   for (const j of m.joueurs) {
@@ -1226,26 +1164,8 @@ export function avancer(m: Monde, dt: number): void {
     for (const p of ordonnes) {
       const b = bilanProducteur(j, p)
       if (b.frequence <= 0) continue
-      switch (genreDe(p)) {
-        case 'source':
-          produire(j, sortie(p), b.debit * 3600 * dt)
-          break
-        case 'raffinerie':
-        case 'melangeur':
-          convertir(j, p, b.debit * 3600 * dt)
-          break
-        default: {
-          p.progres += b.frequence * 3600 * dt
-          let n = 0
-          while (p.progres >= 1 && n < FOURNEES_MAX_PAR_PAS && peutFabriquer(j, p) && !atelierEnAttente(j, p)) {
-            fabriquer(m, j, p, false)
-            p.progres -= 1
-            n++
-          }
-          // Sans matière, l'atelier n'accumule pas des fournées en retard : il attend, prêt à en lancer une.
-          p.progres = Math.min(p.progres, 1)
-        }
-      }
+      if (estSource(p)) produire(j, sortie(p), b.debit * 3600 * dt)
+      else convertir(j, p, b.debit * 3600 * dt)
     }
   }
   const avant = m.t

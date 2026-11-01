@@ -64,10 +64,10 @@ export function Soute({ partie, agir, onFermer, onBranche, onFondu }: PagePropsC
   return (
     <Feuille titre={`${NOM_SOUTE} · ${modules.length}`} onFermer={onFermer}>
       <p className="sourd petit">
-        Les modules sortis des ateliers attendent ici. « Brancher » pose un module sur un creux de sa forme où il rapporte le plus, à la place d’un plus faible s’il faut. {FUSION} modules de même
+        Les modules fabriqués attendent ici. « Brancher » pose un module sur un creux de sa forme où il rapporte le plus, à la place d’un plus faible s’il faut. {FUSION} modules de même
         sorte et même rareté se fondent en un de la rareté au-dessus, au meilleur de leurs niveaux.
       </p>
-      {modules.length === 0 && <p className="sourd">Rien en soute : lancez une fournée sur un atelier.</p>}
+      {modules.length === 0 && <p className="sourd">Rien en soute : fabriquez un module dans la boutique.</p>}
       {groupes.length > 1 && (
         <button type="button" className="bouton-principal" onClick={toutFondre}>
           Tout fondre

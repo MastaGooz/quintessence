@@ -1822,3 +1822,57 @@ span.rarete-4,
   opacity: 1;
   border-color: rgba(255, 198, 31, 0.55);
 }
+
+/* LES SYMBOLES des ressources : la forme pleine, de la couleur (Keko, 01/11 : les ressources ont leur forme, les modules sont des pièces). Sans couleur, un creux. */
+.symbole {
+  width: 1.15em;
+  height: 1.15em;
+  vertical-align: -0.2em;
+  overflow: visible;
+}
+
+.symbole path {
+  fill: hsl(var(--teinte, 45) 72% 60%);
+}
+
+.symbole-neutre path {
+  fill: rgba(255, 246, 226, 0.45);
+}
+
+.symbole-grand {
+  width: 1.7em;
+  height: 1.7em;
+}
+
+.symbole-moyen {
+  width: 56px;
+  height: 56px;
+}
+
+.stock .symbole {
+  width: 1.3em;
+  height: 1.3em;
+  vertical-align: -0.25em;
+}
+
+.bouton-cout .symbole {
+  width: 1.3em;
+  height: 1.3em;
+  vertical-align: -0.25em;
+}
+
+.marche-case .symbole {
+  vertical-align: 0;
+}
+
+.choix-forme button .symbole {
+  width: 1.5em;
+  height: 1.5em;
+}
+
+/* Le dernier module sorti de la fabrication, dans la boutique : son nom à la couleur de sa rareté. */
+.fabrication-sortie {
+  margin: 0.3rem 0 0;
+  padding: 0.3rem 0.6rem;
+  border-left: 4px solid var(--rarete);
+}

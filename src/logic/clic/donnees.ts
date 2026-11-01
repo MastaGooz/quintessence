@@ -9,12 +9,15 @@
  * spécialisation viendra dans l'amélioration : j'investis dans le rouge pour
  * augmenter sa prod »). Les RAFFINERIES donnent une forme à une matière ronde
  * (carré, triangle, losange) ; les MÉLANGEURS mélangent deux rondes en une
- * troisième couleur (rouge + bleu = violet : le système RGB). Les ATELIERS
- * transforment une matière formée en un MODULE de sa couleur et de sa forme,
- * de rareté tirée. Les générateurs, les transformateurs et les niveaux des
- * modules se PAIENT EN MATIÈRE (Keko : « les générateurs et les
+ * troisième couleur (rouge + bleu = violet : le système RGB). Les MODULES se
+ * FABRIQUENT dans la boutique, comme le reste, avec la matière formée de leur
+ * couleur et de leur forme, puis se placent (Keko : « les générateurs et les
  * transformateurs consomment ces ressources pour être fabriqués, les modules
- * aussi »). Le MARCHÉ, commun à tous, cote les vingt-quatre sortes (Keko : « le
+ * aussi » ; « les générateurs/transformateurs ne peuvent pas produire de
+ * modules, on doit les fabriquer comme le reste puis les placer ») ; leur
+ * rareté est tirée à la fabrication. Les générateurs, les transformateurs et
+ * les niveaux des modules se PAIENT EN MATIÈRE. Le MARCHÉ, commun à tous, cote
+ * les vingt-quatre sortes (Keko : « le
  * marché échange tout, ainsi un joueur peut se spécialiser dans un type de
  * forme ou de couleur ») ; l'or ne sert qu'à y échanger.
  *
@@ -88,24 +91,18 @@ export interface Cout {
   quantite: number
 }
 
-export const GENRES = ['source', 'raffinerie', 'melangeur', 'atelier'] as const
+export const GENRES = ['source', 'raffinerie', 'melangeur'] as const
 export type Genre = (typeof GENRES)[number]
 
 /** UN TYPE DE GÉNÉRATEUR : ce qu'il fait à chaque déclenchement, ce qu'il coûte, et les creux qu'il offre. */
 export interface TypeProducteur {
   id: string
-  /** Source : produit une matière ronde. Raffinerie : donne une forme à une ronde. Mélangeur : deux rondes de base font une ronde mélangée. Atelier : une matière formée fait un module. */
+  /** Source : produit une matière ronde. Raffinerie : donne une forme à une ronde. Mélangeur : deux rondes de base font une ronde mélangée. */
   genre: Genre
   /** Le coût du premier exemplaire (les trois sources de départ sont offertes). Pour une source, la couleur est celle qu'on achète. */
   cout: Cout
-  /** Source : la matière d'un déclenchement, avant les modules. Raffinerie, mélangeur : la matière convertie par déclenchement. Atelier : les modules d'une fournée (un). */
+  /** Source : la matière d'un déclenchement, avant les modules. Raffinerie, mélangeur : la matière convertie par déclenchement. */
   lot: number
-  /** Atelier : la matière qu'une fournée consomme au moins. */
-  entree: number
-  /** Atelier : une fournée consomme au moins ce temps de production du joueur (en heures de ce que ses sources font par leurs horloges). */
-  duree: number
-  /** Atelier : les chances de chaque rareté d'un module qui en sort (elles se normalisent). */
-  chances: readonly number[]
   /** La forme du creux de chaque emplacement (voir `EMPLACEMENTS`), ou null quand le bord est plein. Un creux prend n'importe quelle couleur de sa forme. */
   creux: readonly (number | null)[]
 }
@@ -120,15 +117,15 @@ export interface TypeProducteur {
  * (gauche, centre, droite), droite, bas (droite, centre, gauche), gauche.
  */
 export const SOURCES: readonly TypeProducteur[] = [
-  { id: 's0', genre: 'source', cout: { forme: 0, couleur: null, quantite: 0 }, lot: 1, entree: 0, duree: 0, chances: [], creux: [_, C, _, T, _, C, _, L] },
-  { id: 's1', genre: 'source', cout: { forme: 0, couleur: null, quantite: 40 }, lot: 4, entree: 0, duree: 0, chances: [], creux: [C, _, C, _, T, _, _, _] },
-  { id: 's2', genre: 'source', cout: { forme: 0, couleur: null, quantite: 600 }, lot: 16, entree: 0, duree: 0, chances: [], creux: [C, _, C, T, _, T, _, _] },
-  { id: 's3', genre: 'source', cout: { forme: 0, couleur: null, quantite: 9000 }, lot: 64, entree: 0, duree: 0, chances: [], creux: [_, C, _, T, C, _, T, L] },
-  { id: 's4', genre: 'source', cout: { forme: 0, couleur: null, quantite: 135000 }, lot: 256, entree: 0, duree: 0, chances: [], creux: [C, _, L, T, _, L, _, T] },
-  { id: 's5', genre: 'source', cout: { forme: 0, couleur: null, quantite: 2.025e6 }, lot: 1024, entree: 0, duree: 0, chances: [], creux: [C, C, C, T, _, L, _, T] },
-  { id: 's6', genre: 'source', cout: { forme: 0, couleur: null, quantite: 3.0375e7 }, lot: 4096, entree: 0, duree: 0, chances: [], creux: [C, _, C, C, T, _, L, C] },
-  { id: 's7', genre: 'source', cout: { forme: 0, couleur: null, quantite: 4.55625e8 }, lot: 16384, entree: 0, duree: 0, chances: [], creux: [C, C, L, T, C, _, L, T] },
-  { id: 's8', genre: 'source', cout: { forme: 0, couleur: null, quantite: 6.834375e9 }, lot: 65536, entree: 0, duree: 0, chances: [], creux: [C, C, C, T, L, T, L, C] },
+  { id: 's0', genre: 'source', cout: { forme: 0, couleur: null, quantite: 0 }, lot: 1, creux: [_, C, _, T, _, C, _, L] },
+  { id: 's1', genre: 'source', cout: { forme: 0, couleur: null, quantite: 40 }, lot: 4, creux: [C, _, C, _, T, _, _, _] },
+  { id: 's2', genre: 'source', cout: { forme: 0, couleur: null, quantite: 600 }, lot: 16, creux: [C, _, C, T, _, T, _, _] },
+  { id: 's3', genre: 'source', cout: { forme: 0, couleur: null, quantite: 9000 }, lot: 64, creux: [_, C, _, T, C, _, T, L] },
+  { id: 's4', genre: 'source', cout: { forme: 0, couleur: null, quantite: 135000 }, lot: 256, creux: [C, _, L, T, _, L, _, T] },
+  { id: 's5', genre: 'source', cout: { forme: 0, couleur: null, quantite: 2.025e6 }, lot: 1024, creux: [C, C, C, T, _, L, _, T] },
+  { id: 's6', genre: 'source', cout: { forme: 0, couleur: null, quantite: 3.0375e7 }, lot: 4096, creux: [C, _, C, C, T, _, L, C] },
+  { id: 's7', genre: 'source', cout: { forme: 0, couleur: null, quantite: 4.55625e8 }, lot: 16384, creux: [C, C, L, T, C, _, L, T] },
+  { id: 's8', genre: 'source', cout: { forme: 0, couleur: null, quantite: 6.834375e9 }, lot: 65536, creux: [C, C, C, T, L, T, L, C] },
 ]
 
 /**
@@ -137,9 +134,9 @@ export const SOURCES: readonly TypeProducteur[] = [
  * veut.
  */
 export const RAFFINERIES: readonly TypeProducteur[] = [
-  { id: 'f1', genre: 'raffinerie', cout: { forme: 0, couleur: null, quantite: 20 }, lot: 5, entree: 0, duree: 0, chances: [], creux: [_, C, _, _, _, T, _, _] },
-  { id: 'f2', genre: 'raffinerie', cout: { forme: 0, couleur: null, quantite: 1500 }, lot: 50, entree: 0, duree: 0, chances: [], creux: [C, _, C, T, _, T, _, _] },
-  { id: 'f3', genre: 'raffinerie', cout: { forme: 0, couleur: null, quantite: 100000 }, lot: 500, entree: 0, duree: 0, chances: [], creux: [C, C, C, T, _, L, _, T] },
+  { id: 'f1', genre: 'raffinerie', cout: { forme: 0, couleur: null, quantite: 20 }, lot: 5, creux: [_, C, _, _, _, T, _, _] },
+  { id: 'f2', genre: 'raffinerie', cout: { forme: 0, couleur: null, quantite: 1500 }, lot: 50, creux: [C, _, C, T, _, T, _, _] },
+  { id: 'f3', genre: 'raffinerie', cout: { forme: 0, couleur: null, quantite: 100000 }, lot: 500, creux: [C, C, C, T, _, L, _, T] },
 ]
 
 /**
@@ -149,41 +146,51 @@ export const RAFFINERIES: readonly TypeProducteur[] = [
  * porte deux effets. Ils se paient en matière formée, de la sorte qu'on veut.
  */
 export const MELANGEURS: readonly TypeProducteur[] = [
-  { id: 'm1', genre: 'melangeur', cout: { forme: null, couleur: null, quantite: 80 }, lot: 5, entree: 0, duree: 0, chances: [], creux: [_, C, _, _, _, T, _, _] },
-  { id: 'm2', genre: 'melangeur', cout: { forme: null, couleur: null, quantite: 8000 }, lot: 50, entree: 0, duree: 0, chances: [], creux: [C, _, C, T, _, T, _, _] },
+  { id: 'm1', genre: 'melangeur', cout: { forme: null, couleur: null, quantite: 80 }, lot: 5, creux: [_, C, _, _, _, T, _, _] },
+  { id: 'm2', genre: 'melangeur', cout: { forme: null, couleur: null, quantite: 8000 }, lot: 50, creux: [C, _, C, T, _, T, _, _] },
 ]
 
 /**
- * LES ATELIERS : quatre modèles. Le plus petit est bon marché et sort des
- * communs sans faute : personne n'est bloqué. Les plus gros tirent mieux, et
- * chaque fournée leur demande plus de temps de production. UNE FOURNÉE COÛTE
- * UN TEMPS DE PRODUCTION (`duree`, en heures de ce que les sources du joueur
- * produisent par leurs horloges), au moins `entree` : le flux de modules reste
- * de quelques-uns par heure et par atelier quelle que soit l'échelle, et taper
- * paie des fournées de plus. Mesuré au proto précédent : à quantité fixe, un
- * atelier à horloges sortait des milliers de modules par jour ; à prix qui
- * montait à chaque fournée, les bots gardaient toute leur matière et la saison
- * restait à zéro. Ils se paient en matière formée. Les chances sont par
- * rareté : commune, peu commune, rare, épique, légendaire.
+ * LA FABRICATION DES MODULES, dans la boutique : un module d'une sorte coûte
+ * `part` fois la valeur de sa forme en matière de cette sorte, fois
+ * `croissance` par module de cette sorte déjà fabriqué (comme les
+ * générateurs : chacun coûte plus que le précédent), fois le multiplicateur de
+ * la QUALITÉ choisie. Les qualités remplacent les anciens ateliers : la simple
+ * est bon marché et sort des communs sans faute, les suivantes tirent mieux et
+ * coûtent beaucoup plus. Les chances sont par rareté : commune, peu commune,
+ * rare, épique, légendaire. La qualité suivante se dévoile en ayant usé de la
+ * précédente, ou dès qu'on peut la payer.
  */
-export const ATELIERS: readonly TypeProducteur[] = [
-  { id: 'a1', genre: 'atelier', cout: { forme: null, couleur: null, quantite: 30 }, lot: 1, entree: 10, duree: 0.5, chances: [78, 18, 4, 0, 0], creux: [_, C, _, _, _, T, _, _] },
-  { id: 'a2', genre: 'atelier', cout: { forme: null, couleur: null, quantite: 3000 }, lot: 1, entree: 300, duree: 1, chances: [55, 30, 12, 3, 0], creux: [C, _, C, T, _, T, _, _] },
-  { id: 'a3', genre: 'atelier', cout: { forme: null, couleur: null, quantite: 150000 }, lot: 1, entree: 3000, duree: 2, chances: [35, 35, 20, 8, 2], creux: [C, C, C, T, _, L, _, T] },
-  { id: 'a4', genre: 'atelier', cout: { forme: null, couleur: null, quantite: 7.5e6 }, lot: 1, entree: 30000, duree: 4, chances: [20, 32, 28, 15, 5], creux: [C, C, C, T, L, T, L, C] },
-]
+export interface Qualite {
+  id: string
+  mult: number
+  chances: readonly number[]
+}
+export const FABRICATION = {
+  part: 0.4,
+  croissance: 1.15,
+  /** Chaque module fabriqué, de quelque sorte, renchérit tous les suivants d'autant : le thermostat du nombre de modules d'une partie (mesuré : par sorte seule, les bots en fabriquaient 700 chacun dans la semaine et la saison finissait en 10¹³). */
+  croissanceTotale: 1.1,
+  /** Un module coûte au moins ce temps de ce que le joueur produit de sa sorte (en heures, par ses horloges) : le thermostat, mesuré au proto précédent (sans lui, les modules pleuvent et la semaine finit en 10¹³). */
+  duree: 0.5,
+  qualites: [
+    { id: 'simple', mult: 1, chances: [78, 18, 4, 0, 0] },
+    { id: 'soignee', mult: 5, chances: [55, 30, 12, 3, 0] },
+    { id: 'fine', mult: 25, chances: [35, 35, 20, 8, 2] },
+    { id: 'maitresse', mult: 125, chances: [20, 32, 28, 15, 5] },
+  ] as readonly Qualite[],
+}
 
 /** Tous les types de générateurs, par famille. `type` d'un producteur est un indice ici. */
-export const PRODUCTEURS: readonly TypeProducteur[] = [...SOURCES, ...RAFFINERIES, ...MELANGEURS, ...ATELIERS]
+export const PRODUCTEURS: readonly TypeProducteur[] = [...SOURCES, ...RAFFINERIES, ...MELANGEURS]
 /** Les types d'une famille, dans l'ordre de `PRODUCTEURS`, et l'indice du premier. */
 export const FAMILLES: Record<Genre, { types: readonly TypeProducteur[]; premier: number }> = {
   source: { types: SOURCES, premier: 0 },
   raffinerie: { types: RAFFINERIES, premier: SOURCES.length },
   melangeur: { types: MELANGEURS, premier: SOURCES.length + RAFFINERIES.length },
-  atelier: { types: ATELIERS, premier: SOURCES.length + RAFFINERIES.length + MELANGEURS.length },
 }
 
-/** Ce que vaut, en or, un module commun de niveau 1 de chaque forme (le rond n'est pas un module) : la base de ses niveaux et de la valeur d'un atelier. */
+/** Ce que vaut, en or, un module commun de niveau 1 de chaque forme (le rond n'est pas un module) : la base de sa fabrication et de ses niveaux. */
 export const VALEUR_MODULE: readonly number[] = [0, 25, 50, 40]
 
 /**
@@ -221,9 +228,8 @@ export type Trait = (typeof TRAITS.noms)[number]
  * Le carré ajoute `ajout` fois le lot de base à sa cible ; le carré bleu, lui,
  * déclenche le générateur toutes les `periode` secondes. Le triangle multiplie
  * sa cible par 1 + `multiplicateur`. Le losange donne une chance `chance`
- * (composée : 1 − (1 − c)^f) : le rouge que la tape soit un critique (× `coup` ;
- * sur un atelier, une rareté de plus), le vert que le lot soit gros (×
- * `grosLot` ; sur un atelier, autant de modules de plus), le bleu qu'un tic en
+ * (composée : 1 − (1 − c)^f) : le rouge que la tape soit un critique (×
+ * `coup`), le vert que le lot soit gros (× `grosLot`), le bleu qu'un tic en
  * entraîne un second. Mesuré au proto précédent : à 0,25 par niveau, quatre
  * modules sur la base donnaient ×16 et la semaine finissait en 10²⁵ ; à 0,1,
  * la montée tient sept jours.
