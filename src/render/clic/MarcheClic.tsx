@@ -1,19 +1,23 @@
 /**
- * LE MARCHÉ COMMUN : un prix par sorte de matière, sa courbe des dernières
- * heures, et les boutons pour vendre son surplus ou acheter la matière des
- * autres sortes. Le prix baisse avec ce que tous vendent et monte avec ce que
- * tous achètent : un gros lot vendu d'un coup rapporte moins que le même
- * étalé, et une sorte que personne ne produit s'envole dès qu'on l'achète.
+ * LE MARCHÉ COMMUN : un prix par sorte, les vingt-quatre en grille (une ligne
+ * par couleur, une colonne par forme). Une case tapée ouvre sa feuille : la
+ * courbe des dernières heures, et les boutons pour vendre son surplus ou
+ * acheter. Le prix baisse avec ce que tous vendent et monte avec ce que tous
+ * achètent : un gros lot vendu d'un coup rapporte moins que le même étalé, et
+ * une sorte que personne ne produit s'envole dès qu'on l'achète (Keko : « le
+ * marché échange tout, ainsi un joueur peut se spécialiser dans un type de
+ * forme ou de couleur »).
  */
-import type { ReactElement } from 'react'
-import { FORMES, MARCHE } from '../../logic/clic/donnees.ts'
-import { acheter, coutAchat, entree, estAtelier, gainVente, prixCourant, quantitePour, vendre, venteRaisonnable } from '../../logic/clic/moteur.ts'
+import { useState, type ReactElement } from 'react'
+import { COULEURS, FORMES, MARCHE, sorteDe } from '../../logic/clic/donnees.ts'
+import { acheter, coutAchat, entree, estAtelier, gainVente, prixCourant, production, quantitePour, sortie, vendre, venteRaisonnable } from '../../logic/clic/moteur.ts'
 import { joueur } from '../../logic/clic/partie.ts'
 import { abrege } from '../../ui/format.ts'
 import { vibrer } from '../../ui/haptique.ts'
-import { ADJECTIF_SORTE, NOM_MATIERE, NOM_MODULE, NOM_OR, NOM_SORTE } from '../../ui/noms-clic.ts'
+import { NOM_COULEUR, NOM_MATIERE, NOM_OR, NOMS_FORMES, nomSorte, nomSortePluriel } from '../../ui/noms-clic.ts'
 import { effetDepense, effetVente } from '../effets.ts'
-import { Glyphe } from './Glyphe.tsx'
+import { Feuille } from '../Feuille.tsx'
+import { GlypheSorte } from './Glyphe.tsx'
 import type { PagePropsClic } from './props.ts'
 
 /** Le nombre d'heures de courbe montrées. */
@@ -21,12 +25,79 @@ const HEURES = 48
 /** Sous cette part du prix plein, on brade. */
 const PLANCHER = 0.5
 
+const majuscule = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1)
+
 export function MarcheClic({ partie, agir }: PagePropsClic): ReactElement {
+  const [choisie, setChoisie] = useState<number | null>(null)
+
+  return (
+    <div className="page">
+      <h1>Marché</h1>
+      <p className="sourd">
+        Tout le monde vend et achète au même marché, une sorte de {NOM_MATIERE} par case. Le prix baisse avec ce que tous en vendent et remonte avec le temps ; il monte avec ce que tous en achètent.
+        Touchez une case pour vendre ou acheter.
+      </p>
+      <div className="marche-grille">
+        <span className="marche-coin" />
+        {Array.from({ length: FORMES }, (_, f) => (
+          <span key={f} className="marche-tete petit sourd">
+            {NOMS_FORMES[f]}
+          </span>
+        ))}
+        {Array.from({ length: COULEURS }, (_, c) => (
+          <Ligne key={c} c={c} partie={partie} onChoisir={setChoisie} />
+        ))}
+      </div>
+      <p className="sourd petit">Les rondes sont la matière brute, les trois autres formes font des modules. Ce qui se vend beaucoup baisse ; ce que personne ne produit s’envole.</p>
+      {choisie !== null && (
+        <Feuille titre={majuscule(nomSorte(choisie))} onFermer={() => setChoisie(null)}>
+          <Detail partie={partie} agir={agir} sorte={choisie} />
+        </Feuille>
+      )}
+    </div>
+  )
+}
+
+/** Une ligne de la grille : la couleur, puis une case par forme. */
+function Ligne({ c, partie, onChoisir }: { c: number; partie: PagePropsClic['partie']; onChoisir: (s: number) => void }): ReactElement {
   const m = partie.monde
   const j = joueur(partie)
-  const sortes = Array.from({ length: FORMES }, (_, s) => s).sort((a, b) => (a === j.sorte ? -1 : b === j.sorte ? 1 : a - b))
+  return (
+    <>
+      <span className="marche-tete petit sourd">{NOM_COULEUR[c]}</span>
+      {Array.from({ length: FORMES }, (_, f) => {
+        const s = sorteDe(c, f)
+        const prix = prixCourant(m, s)
+        const stock = j.matiere[s] ?? 0
+        const produit = production(j, s) > 0
+        return (
+          <button key={f} type="button" className={`marche-case${stock >= 1 ? ' marche-case-stock' : ''}${produit ? ' marche-case-produite' : ''}`} onClick={() => onChoisir(s)} aria-label={nomSorte(s)}>
+            <GlypheSorte sorte={s} />
+            <b>{prix.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b>
+            <small className={stock >= 1 ? 'creme' : 'sourd'}>{stock >= 1 ? abrege(stock) : '·'}</small>
+          </button>
+        )
+      })}
+    </>
+  )
+}
 
-  const vendreIci = (s: number, q: number, bouton: HTMLElement): void => {
+/** La feuille d'une sorte : sa courbe, son prix, son stock, vendre et acheter. */
+function Detail({ partie, agir, sorte: s }: PagePropsClic & { sorte: number }): ReactElement {
+  const m = partie.monde
+  const j = joueur(partie)
+  const prix = prixCourant(m, s)
+  const ratio = prix / MARCHE.prix
+  const stock = j.matiere[s] ?? 0
+  const points = (m.marche.historique[s] ?? []).slice(-HEURES)
+  const raisonnable = venteRaisonnable(m, s, PLANCHER)
+  const prod = production(j, s) * 3600
+  // Les quantités à acheter : une fournée du plus petit atelier réglé sur cette sorte, et trois ; sinon dix et cent.
+  const cible = j.producteurs.filter((p) => estAtelier(p) && sortie(p) === s).sort((a, b) => entree(j, a) - entree(j, b))[0]
+  const achats = cible === undefined ? [10, 100] : [entree(j, cible), entree(j, cible) * 3]
+  const quarts = [0.25, 0.5, 1].map((part) => Math.floor(stock * part))
+
+  const vendreIci = (q: number, bouton: HTMLElement): void => {
     if (q <= 0) return
     const g = gainVente(m, s, q)
     effetVente(bouton.getBoundingClientRect(), g)
@@ -35,7 +106,7 @@ export function MarcheClic({ partie, agir }: PagePropsClic): ReactElement {
       vendre(m, j, s, q)
     })
   }
-  const acheterIci = (s: number, q: number, bouton: HTMLElement): void => {
+  const acheterIci = (q: number, bouton: HTMLElement): void => {
     if (q <= 0) return
     const c = coutAchat(m, s, q)
     if (j.or + 1e-9 < c) return
@@ -47,84 +118,54 @@ export function MarcheClic({ partie, agir }: PagePropsClic): ReactElement {
   }
 
   return (
-    <div className="page">
-      <h1>Marché</h1>
-      <p className="sourd">
-        Tout le monde vend et achète au même marché. Le prix d’une sorte baisse avec ce que tous en vendent et remonte avec le temps ; il monte avec ce que tous en achètent. Vous ne produisez que la{' '}
-        {NOM_SORTE[j.sorte ?? 0]} : les autres s’achètent ici.
+    <>
+      <div className="ligne ligne-sans-trait">
+        <span className="unite-texte">
+          <span>
+            <GlypheSorte sorte={s} /> <b>{nomSortePluriel(s)}</b>
+          </span>
+          <span className="sourd petit">{prod > 0 ? `vous en produisez ${abrege(prod)} par heure` : 'vous n’en produisez pas'}</span>
+        </span>
+        <span className="marche-prix">
+          <b className="prix-grand">{prix.toLocaleString('fr-FR', { maximumFractionDigits: 2 })}</b> <span className="sourd petit">{NOM_OR} l’unité</span>
+        </span>
+      </div>
+      <Courbe points={points} />
+      <p className="petit sourd">
+        en stock : <b className="creme">{abrege(stock)}</b> · {Math.round(ratio * 100)} % du prix plein
+        {stock > 0 && raisonnable < stock && ` · au-delà de ${abrege(raisonnable)} vendus d’un coup, le prix tombe sous la moitié`}
       </p>
-      {sortes.map((s) => {
-        const prix = prixCourant(m, s)
-        const ratio = prix / MARCHE.prix
-        const stock = j.matiere[s] ?? 0
-        const mienne = s === j.sorte
-        const points = (m.marche.historique[s] ?? []).slice(-HEURES)
-        const raisonnable = venteRaisonnable(m, s, PLANCHER)
-        // Les quantités à acheter : une fournée du plus petit atelier réglé sur cette sorte (sinon du plus petit atelier), et trois.
-        const ateliers = j.producteurs.filter(estAtelier)
-        const cible = ateliers.filter((p) => p.forme === s).sort((a, b) => entree(j, a) - entree(j, b))[0] ?? ateliers.sort((a, b) => entree(j, a) - entree(j, b))[0]
-        const fournee = cible === undefined ? 10 : entree(j, cible)
-        const achats = [fournee, fournee * 3]
-        const quarts = [0.25, 0.5, 1].map((part) => Math.floor(stock * part))
-        return (
-          <section key={s} className={`carte-aide marche-sorte${mienne ? ' marche-mienne' : ''}`}>
-            <div className="ligne ligne-sans-trait">
-              <span className="unite-texte">
-                <span>
-                  <Glyphe forme={s} /> <b>{NOM_SORTE[s]}</b>
-                  {mienne && <span className="sourd petit"> · la vôtre</span>}
-                </span>
-                <span className="sourd petit">fait des modules {NOM_MODULE[s]?.toLowerCase()}</span>
-              </span>
-              <span className="marche-prix">
-                <b className="prix-grand">{prix.toLocaleString('fr-FR', { maximumFractionDigits: 2 })}</b> <span className="sourd petit">{NOM_OR} l’unité</span>
-              </span>
-            </div>
-            <Courbe points={points} />
-            <div className="ligne ligne-sans-trait">
-              <span className="petit sourd">
-                en stock : <b className="creme">{abrege(stock)}</b> · {Math.round(ratio * 100)} % du prix plein
-                {stock > 0 && raisonnable < stock && ` · au-delà de ${abrege(raisonnable)} vendus d’un coup, le prix tombe sous la moitié`}
-              </span>
-            </div>
-            {stock >= 1 && (
-              <div className="quantites quantites-petites">
-                <span className="petit sourd">Vendre</span>
-                {quarts.map((q, k) =>
-                  q >= 1 ? (
-                    <button key={k} type="button" className={k === 2 ? 'bouton-principal' : ''} onClick={(e) => vendreIci(s, q, e.currentTarget)}>
-                      {k === 0 ? '¼' : k === 1 ? '½' : 'tout'} · {abrege(q)} → {abrege(gainVente(m, s, q))} {NOM_OR}
-                    </button>
-                  ) : null,
-                )}
-              </div>
-            )}
-            {!mienne && (
-              <div className="quantites quantites-petites">
-                <span className="petit sourd">Acheter</span>
-                {achats.map((q, k) => {
-                  const c = coutAchat(m, s, q)
-                  const payable = j.or + 1e-9 >= c
-                  return (
-                    <button key={k} type="button" disabled={!payable} onClick={(e) => acheterIci(s, q, e.currentTarget)}>
-                      {k === 0 ? '1 fournée' : '3 fournées'} · {abrege(q)} pour {abrege(c)} {NOM_OR}
-                    </button>
-                  )
-                })}
-                {j.or >= 1 && (
-                  <button type="button" onClick={(e) => acheterIci(s, Math.floor(quantitePour(m, s, j.or / 2)), e.currentTarget)}>
-                    la moitié de l’{NOM_OR} · {abrege(Math.floor(quantitePour(m, s, j.or / 2)))}
-                  </button>
-                )}
-              </div>
-            )}
-          </section>
-        )
-      })}
-      <p className="sourd petit">
-        Chaque joueur produit une seule sorte de {NOM_MATIERE} ({ADJECTIF_SORTE.join(', ')}). Ce qui se vend beaucoup baisse ; ce que personne ne produit s’envole.
-      </p>
-    </div>
+      {stock >= 1 && (
+        <div className="quantites quantites-petites">
+          <span className="petit sourd">Vendre</span>
+          {quarts.map((q, k) =>
+            q >= 1 ? (
+              <button key={k} type="button" className={k === 2 ? 'bouton-principal' : ''} onClick={(e) => vendreIci(q, e.currentTarget)}>
+                {k === 0 ? '¼' : k === 1 ? '½' : 'tout'} · {abrege(q)} → {abrege(gainVente(m, s, q))} {NOM_OR}
+              </button>
+            ) : null,
+          )}
+        </div>
+      )}
+      <div className="quantites quantites-petites">
+        <span className="petit sourd">Acheter</span>
+        {achats.map((q, k) => {
+          const c = coutAchat(m, s, q)
+          const payable = j.or + 1e-9 >= c
+          return (
+            <button key={k} type="button" disabled={!payable} onClick={(e) => acheterIci(q, e.currentTarget)}>
+              {cible === undefined ? abrege(q) : k === 0 ? '1 fournée' : '3 fournées'} · {abrege(q)} pour {abrege(c)} {NOM_OR}
+            </button>
+          )
+        })}
+        {j.or >= 1 && (
+          <button type="button" onClick={(e) => acheterIci(Math.floor(quantitePour(m, s, j.or / 2)), e.currentTarget)}>
+            la moitié de l’{NOM_OR} · {abrege(Math.floor(quantitePour(m, s, j.or / 2)))}
+          </button>
+        )}
+      </div>
+      {j.or < 1 && <p className="sourd petit">Pas d’{NOM_OR} : vendez d’abord du surplus.</p>}
+    </>
   )
 }
 

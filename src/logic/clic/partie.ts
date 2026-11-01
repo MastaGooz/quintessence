@@ -9,23 +9,23 @@ import { avancer, nouveauMonde, type Joueur, type Monde } from './moteur.ts'
 import { visiter, type Strategie } from './bots.ts'
 import { graineDe, rngDe } from '../rng.ts'
 
-/** Sept rivaux : des rythmes de visite différents, des tapes plus ou moins assidues, et les quatre sortes de matière couvertes (deux bots par sorte, sauf la ronde : un, et le joueur s'il la prend). */
+/** Sept rivaux : des rythmes de visite différents, des tapes plus ou moins assidues, et les trois couleurs de base investies (deux bots par couleur, et un opportuniste qui suit le marché). */
 export const BOTS: (Strategie & { visites: number })[] = [
-  { nom: 'Agrippa', tapes: 80, seuilPrestige: 2, visites: 4, sorte: 1 },
-  { nom: 'Hypatie', tapes: 120, seuilPrestige: 1.8, visites: 6, sorte: 2 },
-  { nom: 'Flamel', tapes: 60, seuilPrestige: 2.5, visites: 3, sorte: 3 },
-  { nom: 'Zosime', tapes: 40, seuilPrestige: 2, visites: 2, sorte: 0 },
-  { nom: 'Paracelse', tapes: 100, seuilPrestige: 2, visites: 4, sorte: 1 },
-  { nom: 'Cléopâtre', tapes: 60, seuilPrestige: 1.6, visites: 5, sorte: 2 },
-  { nom: 'Cagliostro', tapes: 200, seuilPrestige: 3, visites: 4, sorte: 3 },
+  { nom: 'Agrippa', tapes: 80, seuilPrestige: 2, visites: 4, couleur: 0 },
+  { nom: 'Hypatie', tapes: 120, seuilPrestige: 1.8, visites: 6, couleur: 1 },
+  { nom: 'Flamel', tapes: 60, seuilPrestige: 2.5, visites: 3, couleur: 2 },
+  { nom: 'Zosime', tapes: 40, seuilPrestige: 2, visites: 2 },
+  { nom: 'Paracelse', tapes: 100, seuilPrestige: 2, visites: 4, couleur: 0 },
+  { nom: 'Cléopâtre', tapes: 60, seuilPrestige: 1.6, visites: 5, couleur: 1 },
+  { nom: 'Cagliostro', tapes: 200, seuilPrestige: 3, visites: 4, couleur: 2 },
 ]
 
 /** Le pas de la production hors ligne. */
 export const PAS = 0.25
 
 export interface Partie {
-  /** 6 : les quatre sortes, les ateliers, la soute, le marché par sorte ; une sauvegarde plus ancienne est abandonnée. */
-  version: 6
+  /** 7 : les couleurs et les formes, les raffineries et les mélangeurs, tout payé en matière ; une sauvegarde plus ancienne est abandonnée. */
+  version: 7
   graine: number
   monde: Monde
   /** Par bot, l'instant de sa dernière visite jouée. */
@@ -33,7 +33,7 @@ export interface Partie {
 }
 
 export function nouvellePartie(graine: number, nomDuJoueur: string): Partie {
-  return { version: 6, graine, monde: nouveauMonde([nomDuJoueur, ...BOTS.map((b) => b.nom)], graine), dernieresVisites: BOTS.map(() => -1) }
+  return { version: 7, graine, monde: nouveauMonde([nomDuJoueur, ...BOTS.map((b) => b.nom)], graine), dernieresVisites: BOTS.map(() => -1) }
 }
 
 export function joueur(p: Partie): Joueur {
@@ -89,7 +89,7 @@ export function serialiser(p: Partie): string {
 export function deserialiser(texte: string): Partie | null {
   try {
     const p = JSON.parse(texte) as Partie
-    if (p === null || typeof p !== 'object' || p.version !== 6) return null
+    if (p === null || typeof p !== 'object' || p.version !== 7) return null
     if (!Array.isArray(p.monde?.joueurs) || p.monde.joueurs.length !== BOTS.length + 1) return null
     if (!Array.isArray(p.dernieresVisites)) return null
     return p

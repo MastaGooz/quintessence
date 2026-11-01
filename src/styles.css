@@ -1050,11 +1050,16 @@ select {
   filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.45));
 }
 
+/* LES SOURCES : le trait de leur couleur ; les trois de départ luisent. */
+.producteur-source .producteur-forme path {
+  stroke: hsl(var(--teinte) 60% 62% / 0.8);
+}
+
 .producteur-base .producteur-forme path {
-  fill: url(#base-fond);
-  stroke: rgba(255, 198, 31, 0.8);
+  fill: #3b2a4c;
+  stroke: hsl(var(--teinte) 70% 64% / 0.9);
   stroke-width: 6;
-  filter: drop-shadow(0 0 28px rgba(255, 198, 31, 0.28));
+  filter: drop-shadow(0 0 28px hsl(var(--teinte) 70% 60% / 0.3));
 }
 
 .producteur-texte {
@@ -1175,15 +1180,14 @@ select {
 
 /* La roue de réglage d'un atelier : un vrai bouton, hors de la carte (`data-hud`), au coin de la pièce. */
 .atelier-reglage {
-  position: absolute;
-  right: -8px;
-  top: -8px;
+  flex: none;
   min-height: 0;
-  width: 56px;
-  height: 56px;
+  width: 52px;
+  height: 52px;
+  margin-left: -6px;
   padding: 0;
   border-radius: 50%;
-  font-size: 30px;
+  font-size: 28px;
   line-height: 1;
   background: rgba(20, 8, 28, 0.85);
   border: 2px solid rgba(255, 246, 226, 0.4);
@@ -1257,7 +1261,10 @@ span.rarete-4,
   top: 0.7rem;
   right: 0.9rem;
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 0.35rem;
+  max-width: 72%;
 }
 
 .stock {
@@ -1345,9 +1352,26 @@ span.rarete-4,
   background: rgba(255, 198, 31, 0.15);
 }
 
-.bulle-atelier {
-  width: 290px;
-  margin-left: -145px;
+/* Le réglage d'un générateur, dans sa feuille : des lignes espacées, les choix en rangées. */
+.reglage {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.reglage .choix-forme {
+  max-width: 28rem;
+}
+
+/* Six couleurs à choisir : des boutons plus serrés. */
+.choix-couleur button {
+  padding: 0.25rem 0.1rem;
+  font-size: 0.7rem;
+}
+
+.choix-couleur button .glyphe-forme {
+  width: 1.8em;
+  height: 1.4em;
 }
 
 .bouton-discret {
@@ -1621,17 +1645,15 @@ span.rarete-4,
   opacity: 0.8;
 }
 
+/* L'indice : au-dessus des commandes, dans leur colonne (en haut, il recouvrait la source du haut). */
 .carte-indice {
-  position: absolute;
-  top: 3.2rem;
-  left: 50%;
-  transform: translateX(-50%);
   margin: 0;
   padding: 0.3rem 0.8rem;
   border-radius: 0.6rem;
-  background: rgba(20, 8, 28, 0.6);
+  background: rgba(20, 8, 28, 0.7);
   font-size: 0.85rem;
-  white-space: nowrap;
+  text-align: center;
+  max-width: min(92vw, 36rem);
   pointer-events: none;
 }
 
@@ -1670,4 +1692,133 @@ span.rarete-4,
   padding: 0.2rem 0.6rem;
   border-radius: 0.5rem;
   background: rgba(20, 8, 28, 0.55);
+}
+
+/* ---------------------------------------------------------------------------
+   LES COULEURS ET LES FORMES (01/11) : six couleurs de matière, quatre formes.
+   Un glyphe sans couleur dit un creux (il prend n'importe quelle couleur). */
+.glyphe-neutre path {
+  fill: rgba(255, 246, 226, 0.45);
+}
+
+/* Les « +N » d'une tape prennent la couleur de la matière. */
+.flottant-couleur {
+  color: hsl(var(--teinte-flottant, 45) 85% 70%);
+}
+
+.flottant-couleur-0 {
+  --teinte-flottant: 4;
+}
+
+.flottant-couleur-1 {
+  --teinte-flottant: 130;
+}
+
+.flottant-couleur-2 {
+  --teinte-flottant: 215;
+}
+
+.flottant-couleur-3 {
+  --teinte-flottant: 52;
+}
+
+.flottant-couleur-4 {
+  --teinte-flottant: 182;
+}
+
+.flottant-couleur-5 {
+  --teinte-flottant: 282;
+}
+
+/* Un transformateur montre ce qui entre, une flèche, ce qui sort. */
+.transfo-entree {
+  display: inline-flex;
+  align-items: center;
+}
+
+.fleche {
+  color: rgba(255, 246, 226, 0.55);
+  font-size: 34px;
+  margin: 0 4px;
+}
+
+.producteur-transfo .atelier-forme {
+  align-items: center;
+}
+
+.producteur-transfo .atelier-forme .glyphe-moyen {
+  width: 64px;
+  height: 50px;
+}
+
+/* Un module mélangé porte deux valeurs : plus petites. */
+.module-mixte b {
+  font-size: 22px;
+}
+
+/* Un coût en matière : la quantité et le glyphe de la sorte qui paierait. */
+.bouton-cout .glyphe-forme {
+  width: 1.7em;
+  height: 1.35em;
+  vertical-align: -0.4em;
+}
+
+.boutons-couleurs {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.bouton-couleur {
+  min-width: 0;
+  padding: 0.3rem 0.5rem;
+}
+
+/* LE MARCHÉ en grille : une ligne par couleur, une colonne par forme. */
+.marche-grille {
+  display: grid;
+  grid-template-columns: 4.2rem repeat(4, 1fr);
+  gap: 0.3rem;
+  align-items: stretch;
+  margin: 0.6rem 0;
+}
+
+.marche-tete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.marche-case {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  min-height: 3.6rem;
+  padding: 0.3rem 0.1rem;
+  font-size: 0.8rem;
+  line-height: 1.15;
+  opacity: 0.75;
+}
+
+.marche-case .glyphe-forme {
+  width: 2em;
+  height: 1.5em;
+  vertical-align: 0;
+}
+
+.marche-case b {
+  font-variant-numeric: tabular-nums;
+}
+
+.marche-case-stock {
+  opacity: 1;
+  border-color: rgba(255, 246, 226, 0.45);
+}
+
+.marche-case-produite {
+  opacity: 1;
+  border-color: rgba(255, 198, 31, 0.55);
 }

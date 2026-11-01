@@ -3,8 +3,8 @@
  * chaque côté porte des bosses, des creux ou rien, à des emplacements répartis
  * le long du côté ; la bosse et le creux d'une même forme ont la même
  * silhouette, pour que l'une remplisse l'autre quand deux pièces se touchent.
- * Les quatre formes : rond, carré, triangle, trapèze (une queue d'aronde). Les
- * coordonnées sont centrées sur la pièce.
+ * Les quatre formes : rond, carré, triangle, losange. Les coordonnées sont
+ * centrées sur la pièce.
  */
 import { PIECE } from '../../logic/clic/donnees.ts'
 import type { Decoupe } from '../../logic/clic/moteur.ts'
@@ -59,8 +59,8 @@ export function cheminDecoupe(largeur: number, hauteur: number, cotes: readonly 
           d += ` L ${p(m - demi, 0)} L ${p(m, s)} L ${p(m + demi, 0)}`
           break
         default:
-          // TRAPÈZE : une queue d'aronde, plus large au bout qu'au col.
-          d += ` L ${p(m - demi * 0.55, 0)} L ${p(m - demi, s)} L ${p(m + demi, s)} L ${p(m + demi * 0.55, 0)}`
+          // LOSANGE : un col étroit, le plus large à mi-hauteur, une pointe au bout.
+          d += ` L ${p(m - demi * 0.35, 0)} L ${p(m - demi, s * 0.5)} L ${p(m, s)} L ${p(m + demi, s * 0.5)} L ${p(m + demi * 0.35, 0)}`
       }
     })
     d += ` L ${n(fin.x)} ${n(fin.y)}`

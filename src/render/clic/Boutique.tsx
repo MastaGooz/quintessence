@@ -1,146 +1,141 @@
 /**
- * LA BOUTIQUE : ce qui s'achète en or. Les sources, qui produisent la matière
- * du joueur ; les ateliers, qui transforment de la matière en modules ; le
- * départ (le prestige). Les modules ne s'achètent pas : ils sortent des
- * ateliers. Les niveaux se prennent sur la carte, dans la bulle du module
- * (Keko, 30/10 : « cliquer sur les modules existants et les améliorer
- * individuellement »).
+ * LA BOUTIQUE : ce qui se construit, en matière. Les raffineries, qui donnent
+ * une forme aux rondes ; les mélangeurs, qui font les couleurs mélangées ; les
+ * ateliers, qui transforment la matière formée en modules ; les sources, dans
+ * la couleur qu'on veut, payées en rondes de cette couleur ; le départ (le
+ * prestige). Les modules ne s'achètent pas : ils sortent des ateliers. Les
+ * niveaux se prennent sur la carte, dans la bulle du module ou de la source.
  */
 import { useState, type ReactElement } from 'react'
-import { ATELIERS, PREMIER_ATELIER, PRESTIGE, SOURCES } from '../../logic/clic/donnees.ts'
+import { ATELIERS, FAMILLES, MELANGEURS, PRESTIGE, PRIMAIRES, RAFFINERIES, SOURCES, sorteDe, type Cout, type Genre } from '../../logic/clic/donnees.ts'
 import {
-  acheterProducteur, chancesDe, coutProducteur, multiplicateurPrestige, peutAcheterProducteur, pointsSi, prestiger, visibleProducteur, type Producteur,
+  acheterProducteur, chancesDe, coutProducteur, manquePour, multiplicateurPrestige, peutPayer, pointsSi, prestiger, sortePourPayer, visibleProducteur, type Joueur, type Producteur,
 } from '../../logic/clic/moteur.ts'
 import { joueur } from '../../logic/clic/partie.ts'
 import { abrege } from '../../ui/format.ts'
-import { ADJECTIF_SORTE, NOM_ATELIER, NOM_MATIERE, NOM_OR, NOM_POINT, NOM_PRESTIGE, NOM_PRODUCTEUR, NOM_RARETE, NOM_SOURCE } from '../../ui/noms-clic.ts'
+import { NOM_COULEUR, NOM_COULEUR_F, NOM_MATIERE, NOM_OR, NOM_POINT, NOM_PRESTIGE, NOM_RARETE, NOM_TYPE, nomSortePluriel } from '../../ui/noms-clic.ts'
 import { vibrer } from '../../ui/haptique.ts'
 import { sonBatir } from '../../ui/sons.ts'
 import { eclater, effetDepense, flotter } from '../effets.ts'
 import { Feuille } from '../Feuille.tsx'
-import { Glyphe } from './Glyphe.tsx'
+import { Glyphe, GlypheForme, GlypheSorte } from './Glyphe.tsx'
 import type { PagePropsClic } from './props.ts'
-import { abregeFin, pourcent } from './texte.ts'
+import { abregeFin, heures, pourcent } from './texte.ts'
+
+/** Un bouton qui paie un coût en matière : la quantité et la sorte qui paierait ; éteint tant qu'elle manque. */
+export function BoutonCout({ j, cout, classe = '', onClick, texte }: { j: Joueur; cout: Cout; classe?: string; onClick: (e: React.MouseEvent<HTMLButtonElement>) => void; texte?: string }): ReactElement {
+  const s = sortePourPayer(j, cout)
+  const payable = peutPayer(j, cout)
+  const manque = manquePour(j, cout)
+  return (
+    <button type="button" className={`bouton-cout ${payable ? 'bouton-principal' : ''} ${classe}`} disabled={!payable} onClick={onClick} title={`${abrege(cout.quantite)} ${nomSortePluriel(s)}${manque > 0 ? ` · il en manque ${abrege(manque)}` : ''}`}>
+      {texte !== undefined && <span>{texte} · </span>}
+      {abrege(cout.quantite)} <GlypheSorte sorte={s} />
+    </button>
+  )
+}
 
 export function Boutique({ partie, agir, onFermer, onProducteur }: PagePropsClic & { onFermer: () => void; onProducteur: (p: Producteur) => void }): ReactElement {
   const j = joueur(partie)
   const [confirmer, setConfirmer] = useState(false)
   const prestige = multiplicateurPrestige(j)
 
-  const acheterP = (i: number, bouton: HTMLElement): void => {
-    const cout = coutProducteur(j, i)
-    effetDepense(bouton.getBoundingClientRect(), cout)
+  const acheterP = (i: number, couleur: number, bouton: HTMLElement): void => {
+    const cout = coutProducteur(j, i, couleur)
+    effetDepense(bouton.getBoundingClientRect(), cout.quantite)
     const achat: { p: Producteur | null } = { p: null }
     agir(() => {
-      achat.p = acheterProducteur(j, i)
+      achat.p = acheterProducteur(j, i, couleur)
     })
     if (achat.p !== null) onProducteur(achat.p)
   }
 
   const gain = pointsSi(j)
   const prestigeVisible = gain >= 1 || j.points > 0 || j.produitRun >= PRESTIGE.base / 4
-  const sourcesVisibles = SOURCES.map((_, i) => i > 0 && visibleProducteur(j, i))
-  const prochaineSource = sourcesVisibles.findIndex((v, i) => i > 0 && !v)
-  const ateliersVisibles = ATELIERS.map((_, k) => visibleProducteur(j, PREMIER_ATELIER + k))
-  const prochainAtelier = ateliersVisibles.findIndex((v) => !v)
-  const sorte = j.sorte ?? 0
+  const visibles = (genre: Genre): boolean[] => FAMILLES[genre].types.map((_, k) => visibleProducteur(j, FAMILLES[genre].premier + k))
+  const prochain = (v: boolean[]): number => v.findIndex((x, k) => k > 0 && !x && v[k - 1] === true)
 
-  return (
-    <Feuille titre="Boutique" onFermer={onFermer}>
-      {/* LES ATELIERS */}
+  /** Une famille de la boutique : chaque modèle visible, son texte, et son bouton (ou ses trois boutons de couleur pour une source). */
+  const famille = (genre: Genre, titre: string, intro: string, ligne: (k: number) => ReactElement): ReactElement | null => {
+    const v = visibles(genre)
+    if (!v.some((x) => x)) return null
+    const premier = FAMILLES[genre].premier
+    const suivant = prochain(v)
+    return (
       <section>
-        <h2>Ateliers</h2>
-        <p className="sourd petit">
-          Un {NOM_ATELIER} transforme de la {NOM_MATIERE} en un module de la même forme, de rareté tirée. Une fournée coûte un temps de votre production, et une tape la lance ; une horloge la lance
-          toute seule. Il travaille d’abord votre {NOM_MATIERE} ; réglez-le sur une autre sorte pour d’autres modules, avec la {NOM_MATIERE} achetée au marché.
-        </p>
-        {ATELIERS.map((t, k) => {
-          const i = PREMIER_ATELIER + k
-          if (!ateliersVisibles[k]) return null
+        <h2>{titre}</h2>
+        <p className="sourd petit">{intro}</p>
+        {FAMILLES[genre].types.map((t, k) => {
+          if (!v[k]) return null
+          const i = premier + k
           const possedes = j.producteurs.filter((p) => p.type === i).length
-          const cout = coutProducteur(j, i)
-          const payable = peutAcheterProducteur(j, i)
           const creux = t.creux.filter((c): c is number => c !== null)
-          const chances = chancesDe({ id: 0, type: i, x: 0, y: 0, forme: sorte, progres: 0, fournees: 0 })
           return (
             <div key={t.id} className="unite">
               <div className="ligne ligne-sans-trait">
                 <span className="unite-texte">
                   <span>
-                    <b>{NOM_PRODUCTEUR[i]}</b> {possedes > 0 && <span className="sourd">× {possedes}</span>}
+                    <b>{NOM_TYPE[i]}</b> {possedes > 0 && <span className="sourd">× {possedes}</span>}
                   </span>
+                  {ligne(k)}
                   <span className="petit sourd">
-                    une fournée toutes les {t.duree < 1 ? `${Math.round(t.duree * 60)} min` : `${t.duree} h`} de production · {creux.length} creux :{' '}
+                    {creux.length} creux :{' '}
                     {creux.map((f, n) => (
-                      <Glyphe key={n} forme={f} />
+                      <GlypheForme key={n} forme={f} />
                     ))}
                   </span>
-                  <span className="petit chances">
-                    {chances.map((c, r) =>
-                      c > 0 ? (
-                        <span key={r} className={`rarete-${r}`}>
-                          {NOM_RARETE[r]} {pourcent(c)}
-                        </span>
-                      ) : null,
-                    )}
-                  </span>
                 </span>
-                <button type="button" className={payable ? 'bouton-principal' : ''} disabled={!payable} onClick={(e) => acheterP(i, e.currentTarget)}>
-                  {abrege(cout)} {NOM_OR}
-                </button>
+                {genre === 'source' ? (
+                  <span className="boutons-couleurs">
+                    {Array.from({ length: PRIMAIRES }, (_, c) => (
+                      <BoutonCout key={c} j={j} cout={coutProducteur(j, i, c)} classe="bouton-couleur" onClick={(e) => acheterP(i, c, e.currentTarget)} />
+                    ))}
+                  </span>
+                ) : (
+                  <BoutonCout j={j} cout={coutProducteur(j, i)} onClick={(e) => acheterP(i, 0, e.currentTarget)} />
+                )}
               </div>
             </div>
           )
         })}
-        {prochainAtelier > 0 && (
+        {suivant > 0 && (
           <p className="sourd petit verrou">
-            {NOM_PRODUCTEUR[PREMIER_ATELIER + prochainAtelier]} se dévoile avec {NOM_PRODUCTEUR[PREMIER_ATELIER + prochainAtelier - 1]?.toLowerCase()}, ou dès que vous pouvez le payer.
+            {NOM_TYPE[premier + suivant]} se dévoile avec {NOM_TYPE[premier + suivant - 1]?.toLowerCase()}
+            {genre === 'source' ? '.' : ', ou dès que vous pouvez le payer.'}
           </p>
         )}
       </section>
+    )
+  }
 
-      {/* LES SOURCES */}
-      {(sourcesVisibles.some((v) => v) || j.modules.length >= 2) && (
-        <section>
-          <h2>Sources</h2>
-          <p className="sourd petit">
-            Une {NOM_SOURCE} produit votre {NOM_MATIERE} {ADJECTIF_SORTE[sorte]} à chaque coup, une tape ou le tic d’une horloge. Elle apparaît avec ses creux vides : vos modules peuvent y déménager.
-          </p>
-          {SOURCES.map((t, i) => {
-            if (!sourcesVisibles[i]) return null
-            const possedes = j.producteurs.filter((p) => p.type === i).length
-            const cout = coutProducteur(j, i)
-            const payable = peutAcheterProducteur(j, i)
-            const creux = t.creux.filter((c): c is number => c !== null)
-            return (
-              <div key={t.id} className="unite">
-                <div className="ligne ligne-sans-trait">
-                  <span className="unite-texte">
-                    <span>
-                      <b>{NOM_PRODUCTEUR[i]}</b> {possedes > 0 && <span className="sourd">× {possedes}</span>}
-                    </span>
-                    <span className="petit sourd">
-                      {abregeFin(t.lot * prestige)} {NOM_MATIERE} par coup · {creux.length} creux :{' '}
-                      {creux.map((f, n) => (
-                        <Glyphe key={n} forme={f} />
-                      ))}
-                    </span>
-                  </span>
-                  <button type="button" className={payable ? 'bouton-principal' : ''} disabled={!payable} onClick={(e) => acheterP(i, e.currentTarget)}>
-                    {abrege(cout)} {NOM_OR}
-                  </button>
-                </div>
-              </div>
-            )
-          })}
-          {prochaineSource === 1 && <p className="sourd petit verrou">La première {NOM_SOURCE} se dévoile avec votre second module.</p>}
-          {prochaineSource > 1 && (
-            <p className="sourd petit verrou">
-              {NOM_PRODUCTEUR[prochaineSource]} se dévoile avec {NOM_PRODUCTEUR[prochaineSource - 1]?.toLowerCase()}, ou dès que vous pouvez la payer.
-            </p>
-          )}
-        </section>
-      )}
+  return (
+    <Feuille titre="Boutique" onFermer={onFermer}>
+      <p className="sourd petit">Tout se construit en {NOM_MATIERE} : le bouton dit la quantité et la sorte qui paierait, la plus abondante de celles qui conviennent.</p>
+      {famille('raffinerie', 'Raffineries', `Une raffinerie donne une forme aux ronds d’une couleur : carré, triangle ou losange. Une tape convertit un lot ; une horloge convertit toute seule. Se paie en ronds, de la couleur que vous voulez.`, (k) => (
+        <span className="petit sourd">{RAFFINERIES[k]!.lot} ronds → {RAFFINERIES[k]!.lot} formés par coup</span>
+      ))}
+      {famille('atelier', 'Ateliers', `Un atelier transforme de la ${NOM_MATIERE} formée en un module de sa couleur et de sa forme, de rareté tirée. Une fournée coûte un temps de ce que vous produisez de cette sorte ; une tape la lance, une horloge la lance toute seule. Se paie en ${NOM_MATIERE} formée.`, (k) => (
+        <>
+          <span className="petit sourd">une fournée toutes les {heures(ATELIERS[k]!.duree)} de production, au moins {ATELIERS[k]!.entree} formés</span>
+          <span className="petit chances">
+            {chancesDe({ type: FAMILLES.atelier.premier + k }).map((c, r) =>
+              c > 0 ? (
+                <span key={r} className={`rarete-${r}`}>
+                  {NOM_RARETE[r]} {pourcent(c)}
+                </span>
+              ) : null,
+            )}
+          </span>
+        </>
+      ))}
+      {famille('melangeur', 'Mélangeurs', `Un mélangeur fait d’un rond de chacune de deux couleurs de base un rond de leur mélange : ${NOM_COULEUR[0]} + ${NOM_COULEUR[1]} = ${NOM_COULEUR[3]}, ${NOM_COULEUR[1]} + ${NOM_COULEUR[2]} = ${NOM_COULEUR[4]}, ${NOM_COULEUR[0]} + ${NOM_COULEUR[2]} = ${NOM_COULEUR[5]}. Un module mélangé porte les deux effets de ses couleurs. Se paie en ${NOM_MATIERE} formée.`, (k) => (
+        <span className="petit sourd">{MELANGEURS[k]!.lot} + {MELANGEURS[k]!.lot} ronds → {MELANGEURS[k]!.lot} ronds mélangés par coup</span>
+      ))}
+      {famille('source', 'Sources', `Une source produit des ronds de sa couleur à chaque coup, une tape ou le tic d’une horloge, et se monte de niveau sur la carte. Elle se paie en ronds de la couleur que vous choisissez : c’est là qu’on investit dans sa couleur (${NOM_COULEUR_F.slice(0, PRIMAIRES).join(', ')}).`, (k) => (
+        <span className="petit sourd">
+          {abregeFin(SOURCES[k]!.lot * prestige)} ronds par coup · <Glyphe couleur={0} forme={0} /> <Glyphe couleur={1} forme={0} /> <Glyphe couleur={2} forme={0} />
+        </span>
+      ))}
 
       {/* REPARTIR DE ZÉRO */}
       {prestigeVisible && (
@@ -149,7 +144,7 @@ export function Boutique({ partie, agir, onFermer, onProducteur }: PagePropsClic
             <span className="unite-texte">
               <b>{NOM_PRESTIGE}</b>
               <span className="petit sourd">
-                Tout laisser (générateurs, modules, {NOM_MATIERE}, {NOM_OR}) et rechoisir votre {NOM_MATIERE}, avec des {NOM_POINT}s permanents : chaque {NOM_POINT} ajoute ×1 à tous vos lots.
+                Tout laisser (générateurs, modules, {NOM_MATIERE}, {NOM_OR}) pour des {NOM_POINT}s permanents : chaque {NOM_POINT} ajoute ×1 à tous vos lots.
                 {j.points > 0 && ` Vous avez ${j.points} ${NOM_POINT}${j.points > 1 ? 's' : ''} (×${abrege(prestige)}).`}
               </span>
               <span className="petit">
@@ -158,7 +153,7 @@ export function Boutique({ partie, agir, onFermer, onProducteur }: PagePropsClic
                     Maintenant : <b className="gain">+{gain} {NOM_POINT}{gain > 1 ? 's' : ''}</b>, ×{abrege(prestige)} → ×{abrege(prestige + gain)}
                   </>
                 ) : (
-                  <>Premier {NOM_POINT} à {abrege(PRESTIGE.base)} {NOM_MATIERE} produite dans cette partie ({abrege(j.produitRun)} pour l’instant).</>
+                  <>Premier {NOM_POINT} à {abrege(PRESTIGE.base)} ronds produits dans cette partie ({abrege(j.produitRun)} pour l’instant).</>
                 )}
               </span>
             </span>
@@ -171,8 +166,8 @@ export function Boutique({ partie, agir, onFermer, onProducteur }: PagePropsClic
       {confirmer && (
         <Feuille titre={NOM_PRESTIGE} onFermer={() => setConfirmer(false)}>
           <p>
-            Vous laissez vos {j.producteurs.length - 1} générateur{j.producteurs.length > 2 ? 's' : ''} et vos {j.modules.length} module{j.modules.length > 1 ? 's' : ''} avec leurs niveaux, votre{' '}
-            {NOM_MATIERE} et {abrege(j.or)} {NOM_OR}. Il ne reste que la base, nue, et vous rechoisissez votre {NOM_MATIERE}.
+            Vous laissez vos {j.producteurs.length - PRIMAIRES} générateur{j.producteurs.length - PRIMAIRES > 1 ? 's' : ''} et vos {j.modules.length} module{j.modules.length > 1 ? 's' : ''} avec leurs niveaux,
+            votre {NOM_MATIERE} et {abrege(j.or)} {NOM_OR}. Il ne reste que vos trois sources, nues.
           </p>
           <p>
             Vous gagnez <b className="gain">+{gain} {NOM_POINT}{gain > 1 ? 's' : ''}</b> : tous vos lots passent de ×{abrege(prestige)} à ×{abrege(prestige + gain)}, pour toujours. Ce que vous
@@ -194,10 +189,10 @@ export function Boutique({ partie, agir, onFermer, onProducteur }: PagePropsClic
                 setConfirmer(false)
                 onFermer()
                 requestAnimationFrame(() => {
-                  const r = document.querySelector('.choix-sorte h1')?.getBoundingClientRect()
+                  const r = document.querySelector('.carte')?.getBoundingClientRect()
                   if (r !== undefined) {
                     eclater(r.left + r.width / 2, r.top + r.height / 2, 30)
-                    flotter(r.left + r.width / 2, r.top, `+${gain} ${NOM_POINT}${gain > 1 ? 's' : ''}`, 'flottant-or', 1.8)
+                    flotter(r.left + r.width / 2, r.top + r.height / 2 - 40, `+${gain} ${NOM_POINT}${gain > 1 ? 's' : ''}`, 'flottant-or', 1.8)
                   }
                 })
               }}
@@ -208,8 +203,9 @@ export function Boutique({ partie, agir, onFermer, onProducteur }: PagePropsClic
         </Feuille>
       )}
       <p className="sourd petit centre marge-haute">
-        Total produit : {abrege(j.total)} {NOM_MATIERE}
+        Total produit : {abrege(j.total)} ronds · {Array.from({ length: PRIMAIRES }, (_, c) => `${abrege(j.produit[c] ?? 0)} ${NOM_COULEUR[c]}`).join(', ')} dans cette partie
       </p>
+      <p className="sourd petit centre">{abrege(j.matiere[sorteDe(0, 0)] ?? 0)} / {abrege(j.matiere[sorteDe(1, 0)] ?? 0)} / {abrege(j.matiere[sorteDe(2, 0)] ?? 0)} ronds en stock</p>
     </Feuille>
   )
 }
