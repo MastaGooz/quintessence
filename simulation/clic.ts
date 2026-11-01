@@ -1,15 +1,13 @@
 /**
- * UNE SAISON DU SYSTÈME ABSTRAIT : huit bots, sept jours, chacun sur sa
- * planète (la même carte). On mesure ce que les chiffres de
- * `logic/clic/donnees.ts` produisent avant de les servir à des amis : l'ordre
- * de grandeur gagné par jour, la part de la planète consumée, les zones
- * prospectées, les extracteurs à sec, les prestiges.
+ * UNE SAISON DU SYSTÈME ABSTRAIT : huit joueurs simulés, sept jours, un
+ * marché commun. On mesure ce que les chiffres de `logic/clic/donnees.ts`
+ * produisent avant de les servir à des amis : l'ordre de grandeur gagné par
+ * jour, les prix des quatre sortes, les modules fabriqués par rareté, la part
+ * branchée, les prestiges.
  * `node simulation/clic.ts [graine] [--suivre=Nom] [--csv]`.
  */
-import { ACHAT, EFFETS, NIVEAU, PLANETE, PRESTIGE, PRODUCTEURS, PROSPECTION, SAISON_H } from '../src/logic/clic/donnees.ts'
-import {
-  avancer, bilanPlanete, coutProspection, debit, extracteursASec, limiteParLaVeine, modulesDe, nouveauMonde, placeLibre, planeteDe, type Joueur, type Monde,
-} from '../src/logic/clic/moteur.ts'
+import { ACHAT, ATELIERS, EFFETS, FORMES, MARCHE, NIVEAU, PRESTIGE, RARETES, SAISON_H, SOURCES } from '../src/logic/clic/donnees.ts'
+import { avancer, debit, estAtelier, modulesDe, nouveauMonde, prixCourant, soute, typeDe, type Joueur, type Monde } from '../src/logic/clic/moteur.ts'
 import { visiter } from '../src/logic/clic/bots.ts'
 import { BOTS, PAS } from '../src/logic/clic/partie.ts'
 import { graineDe, rngDe } from '../src/logic/rng.ts'
@@ -20,38 +18,34 @@ const suivre = args.find((a) => a.startsWith('--suivre='))?.slice(9)
 const csv = args.includes('--csv')
 
 // LE BALAYAGE : des variables d'environnement pour essayer d'autres chiffres sans toucher aux données.
-// `QC_LOT=0.5` divise tous les lots par deux ; `QC_BASE=1e7` la base du prestige ; `QC_PAR=0.5` l'effet d'un point.
 const echelleLot = Number(process.env.QC_LOT ?? '1')
-for (const p of PRODUCTEURS) (p as { lot: number }).lot *= echelleLot
-// `QC_COUT=15` : chaque producteur coûte 15 fois le précédent (A garde son prix).
-if (process.env.QC_COUT !== undefined) PRODUCTEURS.forEach((p, i) => { if (i > 1) (p as { cout: number }).cout = (PRODUCTEURS[1]?.cout ?? 100) * Math.pow(Number(process.env.QC_COUT), i - 1) })
-// `QC_TIER=4` : le lot de chaque producteur vaut 4 fois le précédent (la base garde le sien), quels que soient les lots écrits.
-if (process.env.QC_TIER !== undefined) PRODUCTEURS.forEach((p, i) => { if (i > 0) (p as { lot: number }).lot = Math.round((PRODUCTEURS[0]?.lot ?? 1) * Math.pow(Number(process.env.QC_TIER), i)) })
+for (const p of SOURCES) (p as { lot: number }).lot *= echelleLot
+// `QC_COUT=15` : chaque source coûte 15 fois la précédente (A garde son prix) ; `QC_TIER=4` : le lot de chaque source vaut 4 fois la précédente.
+if (process.env.QC_COUT !== undefined) SOURCES.forEach((p, i) => { if (i > 1) (p as { cout: number }).cout = (SOURCES[1]?.cout ?? 100) * Math.pow(Number(process.env.QC_COUT), i - 1) })
+if (process.env.QC_TIER !== undefined) SOURCES.forEach((p, i) => { if (i > 0) (p as { lot: number }).lot = Math.round((SOURCES[0]?.lot ?? 1) * Math.pow(Number(process.env.QC_TIER), i)) })
 if (process.env.QC_BASE !== undefined) (PRESTIGE as { base: number }).base = Number(process.env.QC_BASE)
 if (process.env.QC_PAR !== undefined) (PRESTIGE as { parPoint: number }).parPoint = Number(process.env.QC_PAR)
-// `QC_PREMIER=0.5` le premier niveau en part du prix ; `QC_NIV=1.25` la croissance d'un niveau ; `QC_PIECE=3` celle d'une pièce de plus ; `QC_PERIODE=5` la période de l'horloge.
+// `QC_PREMIER=0.5` le premier niveau en part de la valeur ; `QC_NIV=1.25` la croissance d'un niveau ; `QC_PIECE=3` celle d'une pièce de plus ; `QC_PERIODE=5` la période de l'horloge.
 if (process.env.QC_PREMIER !== undefined) (NIVEAU as { premier: number }).premier = Number(process.env.QC_PREMIER)
 if (process.env.QC_NIV !== undefined) (NIVEAU as { croissance: number }).croissance = Number(process.env.QC_NIV)
 if (process.env.QC_PIECE !== undefined) (ACHAT as { croissance: number }).croissance = Number(process.env.QC_PIECE)
 if (process.env.QC_PERIODE !== undefined) (EFFETS as { periode: number }).periode = Number(process.env.QC_PERIODE)
-// `QC_AJOUT=0.5`, `QC_MULT=0.5`, `QC_CRIT=0.1` : la force des effets au niveau 1.
 if (process.env.QC_AJOUT !== undefined) (EFFETS as { ajout: number }).ajout = Number(process.env.QC_AJOUT)
 if (process.env.QC_MULT !== undefined) (EFFETS as { multiplicateur: number }).multiplicateur = Number(process.env.QC_MULT)
 if (process.env.QC_CRIT !== undefined) (EFFETS as { critique: number }).critique = Number(process.env.QC_CRIT)
-// LA PLANÈTE : `QC_ANNEAUX=5`, `QC_STERILE=0.3`, `QC_F1=2e3` et `QC_FX=12` (le débit d'une veine du premier anneau, par heure, et sa croissance par anneau), `QC_ECART=2`, `QC_DUREE=24` (les heures de minerai d'une veine à plein débit), `QC_DEPART=600` (le débit de la veine sous le robot).
-if (process.env.QC_ANNEAUX !== undefined) (PLANETE as { anneaux: number }).anneaux = Number(process.env.QC_ANNEAUX)
-if (process.env.QC_STERILE !== undefined) (PLANETE as { sterile: number }).sterile = Number(process.env.QC_STERILE)
-if (process.env.QC_DEPART !== undefined) (PLANETE.depart as { debit: number }).debit = Number(process.env.QC_DEPART)
-if (process.env.QC_F1 !== undefined) (PLANETE.debit as { premier: number }).premier = Number(process.env.QC_F1)
-if (process.env.QC_FX !== undefined) (PLANETE.debit as { croissance: number }).croissance = Number(process.env.QC_FX)
-if (process.env.QC_ECART !== undefined) (PLANETE.debit as { ecart: number }).ecart = Number(process.env.QC_ECART)
-if (process.env.QC_DUREE !== undefined) (PLANETE.duree as { heures: number }).heures = Number(process.env.QC_DUREE)
-// LA PROSPECTION : `QC_P1=60` le premier anneau, `QC_PX=12` la croissance par anneau.
-if (process.env.QC_P1 !== undefined) (PROSPECTION as { premier: number }).premier = Number(process.env.QC_P1)
-if (process.env.QC_PX !== undefined) (PROSPECTION as { croissance: number }).croissance = Number(process.env.QC_PX)
+// LES ATELIERS : `QC_ENTREE=0.5` divise le plancher de matière par fournée par deux ; `QC_DUREE=0.5` divise le temps de production par fournée par deux ; `QC_ATELIER=0.5` divise leur prix par deux.
+if (process.env.QC_ENTREE !== undefined) for (const a of ATELIERS) (a as { entree: number }).entree *= Number(process.env.QC_ENTREE)
+if (process.env.QC_DUREE !== undefined) for (const a of ATELIERS) (a as { duree: number }).duree *= Number(process.env.QC_DUREE)
+if (process.env.QC_ATELIER !== undefined) for (const a of ATELIERS) (a as { cout: number }).cout *= Number(process.env.QC_ATELIER)
+// LE MARCHÉ : `QC_DEMANDE=200` la demande minimale, `QC_TAMPON=2` les heures de production qui font la demande, `QC_DEMIVIE=2`.
+if (process.env.QC_DEMANDE !== undefined) (MARCHE as { demandeMin: number }).demandeMin = Number(process.env.QC_DEMANDE)
+if (process.env.QC_TAMPON !== undefined) (MARCHE as { tampon: number }).tampon = Number(process.env.QC_TAMPON)
+if (process.env.QC_DEMIVIE !== undefined) (MARCHE as { demiVie: number }).demiVie = Number(process.env.QC_DEMIVIE)
+// LES RARETÉS : `QC_RARETE=1,1.5,2.5,4,7` les multiplicateurs d'effet.
+if (process.env.QC_RARETE !== undefined) (RARETES as { effet: number[] }).effet = process.env.QC_RARETE.split(',').map(Number)
 
-/** Le premier joueur joue comme un humain assidu : quatre visites, cent tapes. */
-const JOUEURS = [{ nom: 'Keko', tapes: 100, seuilPrestige: 2, visites: 4 }, ...BOTS]
+/** Le premier joueur joue comme un humain assidu : quatre visites, cent tapes, la matière ronde. */
+const JOUEURS = [{ nom: 'Keko', tapes: 100, seuilPrestige: 2, visites: 4, sorte: 0 }, ...BOTS]
 
 function abrege(n: number): string {
   if (n < 1000) return n.toFixed(n < 10 ? 1 : 0)
@@ -64,31 +58,26 @@ function abrege(n: number): string {
   return `${n.toFixed(n < 10 ? 2 : n < 100 ? 1 : 0)} ${u[k]}`
 }
 
-/** Ce que la planète a coûté en prospection, et ce qu'il en reste. */
-function planete(j: Joueur): { zones: number; depense: number; consume: number; anneau: number } {
-  const p = planeteDe(j)
-  let depense = 0
-  let anneau = 0
-  for (const id of j.planete.revelees) {
-    const z = p.zones[id]
-    if (z === undefined || z.anneau === 0) continue
-    depense += coutProspection(z)
-    anneau = Math.max(anneau, z.anneau)
-  }
-  const b = bilanPlanete(j)
-  return { zones: j.planete.revelees.length - 1, depense, consume: 1 - b.restant / b.quantite, anneau }
+const LETTRES_RARETE = 'cprEL'
+const LETTRES_FORME = 'HAMC'
+
+/** Les générateurs avec leurs modules : « B[H12r A8 M5E] » = un B qui porte une horloge niveau 12 rare, un ajout niveau 8 commun, un multiplicateur niveau 5 épique ; un atelier « T1→H ». */
+function resume(m: Monde, j: Joueur): string {
+  const prods = j.producteurs
+    .map((p) => {
+      const t = typeDe(p)
+      const mods = modulesDe(j, p).map((mo) => `${LETTRES_FORME[mo.type]}${mo.niveau}${mo.rarete > 0 ? LETTRES_RARETE[mo.rarete] : ''}`).join(' ')
+      return `${estAtelier(p) ? `T${t.id.slice(1)}→${LETTRES_FORME[p.forme]}` : t.id.toUpperCase()}[${mods}]`
+    })
+    .join(' ')
+  const s = soute(j)
+  const stock = j.matiere.map((q, k) => `${LETTRES_FORME[k]}${abrege(q)}`).join(' ')
+  const raretes = RARETES.noms.map((_, r) => j.modules.filter((mo) => mo.rarete === r).length).join('/')
+  return `${abrege(j.or)} or | ${abrege(debit(j))}/s | stock ${stock} | ${prods}${s.length > 0 ? ` +${s.length} en soute` : ''} | modules c/p/r/E/L ${raretes} | fournées ${j.journal.fournees}, fusions ${j.journal.fusions} | pts ${j.points} (×${j.prestiges}) | total ${abrege(j.total)}`
 }
 
-/** Les producteurs avec leurs modules : « B[H12 A8 M5] » = un B qui porte une horloge niveau 12, un ajout niveau 8, un multiplicateur niveau 5 ; « × » : à sec ; « ≤ » : bridé par sa veine. */
-function resume(j: Joueur): string {
-  const lettres = 'HAMC'
-  const secs = new Set(extracteursASec(j).map((p) => p.id))
-  const prods = j.producteurs
-    .map((p) => `${(PRODUCTEURS[p.type]?.id ?? '?').toUpperCase()}[${modulesDe(j, p).map((mo) => `${lettres[mo.type]}${mo.niveau}`).join(' ')}]${secs.has(p.id) ? '×' : limiteParLaVeine(j, p) ? '≤' : ''}`)
-    .join(' ')
-  const poses = j.modules.filter((mo) => mo.parent === null).length
-  const pl = planete(j)
-  return `${abrege(j.or)} én | ${abrege(debit(j))}/s | ${prods}${poses > 0 ? ` +${poses} posés` : ''}${j.auto ? ' auto' : ''} | planète ${Math.round(pl.consume * 100)} % · ${pl.zones} zones (anneau ${pl.anneau}, ${abrege(pl.depense)} én) | pts ${j.points} (×${j.prestiges}) | total ${abrege(j.total)}`
+function prix(m: Monde): string {
+  return Array.from({ length: FORMES }, (_, s) => `${LETTRES_FORME[s]} ${prixCourant(m, s).toFixed(2)}`).join(' ')
 }
 
 export function jouerSaison(): Monde {
@@ -103,46 +92,37 @@ export function jouerSaison(): Monde {
   visites.sort((a, b) => a.t - b.t)
   let i = 0
   const lignes: string[] = []
-  // Le temps passé avec au moins un extracteur à sec, par joueur, en pas ; et la part de ce temps où une place libre existait (le joueur était juste absent).
-  const aSec = m.joueurs.map(() => 0)
-  const absent = m.joueurs.map(() => 0)
   while (m.t < SAISON_H - 1e-9) {
     while (i < visites.length && visites[i]!.t < m.t + PAS) {
       const v = visites[i]!
       const j = m.joueurs[v.bot]!
-      const avant = suivre === j.nom ? resume(j) : ''
+      const avant = suivre === j.nom ? resume(m, j) : ''
       visiter(m, j, JOUEURS[v.bot]!)
-      if (suivre === j.nom) console.log(`  ${(v.t / 24).toFixed(2)} j  ${avant}\n          → ${resume(j)}`)
+      if (suivre === j.nom) console.log(`  ${(v.t / 24).toFixed(2)} j  ${avant}\n          → ${resume(m, j)}\n          prix ${prix(m)}`)
       i++
     }
     avancer(m, PAS)
-    m.joueurs.forEach((j, k) => {
-      const secs = extracteursASec(j)
-      if (secs.length === 0) return
-      aSec[k] = (aSec[k] ?? 0) + 1
-      if (placeLibre(j, secs[0]!.id) !== null) absent[k] = (absent[k] ?? 0) + 1
-    })
     if (Math.abs(m.t - Math.round(m.t)) < 1e-6 && Math.round(m.t) % 24 === 0) {
       const jour = Math.round(m.t) / 24
+      if (!csv) console.error(`  … jour ${jour} (${Math.round(performance.now() / 1000)} s, ${m.joueurs.reduce((s, j) => s + j.modules.length, 0)} modules)`)
       const totaux = m.joueurs.map((j) => j.total).sort((a, b) => a - b)
       const median = totaux[Math.floor(totaux.length / 2)]!
-      const consumes = m.joueurs.map((j) => planete(j).consume).sort((a, b) => a - b)
       const keko = m.joueurs[0]!
       lignes.push(
         csv
-          ? [jour, median, totaux[0], totaux[totaux.length - 1], consumes[Math.floor(consumes.length / 2)]].join(';')
-          : `jour ${jour} | total médian ${abrege(median)} (min ${abrege(totaux[0]!)}, max ${abrege(totaux[totaux.length - 1]!)}) | planète consumée ${Math.round((consumes[Math.floor(consumes.length / 2)] ?? 0) * 100)} % (max ${Math.round((consumes[consumes.length - 1] ?? 0) * 100)} %) | Keko : ${resume(keko)}`,
+          ? [jour, median, totaux[0], totaux[totaux.length - 1]].join(';')
+          : `jour ${jour} | total médian ${abrege(median)} (min ${abrege(totaux[0]!)}, max ${abrege(totaux[totaux.length - 1]!)}) | prix ${prix(m)} | Keko : ${resume(m, keko)}`,
       )
     }
   }
   for (const l of lignes) console.log(l)
-  const pas = Math.round(SAISON_H / PAS)
-  console.log(
-    `\nà sec (part du temps avec un extracteur à sec, dont le temps où une place existait) : ${m.joueurs.map((j, k) => `${j.nom} ${Math.round(((aSec[k] ?? 0) / pas) * 100)} % (${Math.round(((absent[k] ?? 0) / pas) * 100)} %)`).join(', ')}`,
-  )
   return m
 }
 
 const m = jouerSaison()
 console.log('\nclassement final (total produit) :')
-for (const j of [...m.joueurs].sort((a, b) => b.total - a.total)) console.log(`  ${j.nom.padEnd(11)} ${abrege(j.total).padStart(9)}  ${resume(j)}`)
+for (const j of [...m.joueurs].sort((a, b) => b.total - a.total)) console.log(`  ${j.nom.padEnd(11)} ${abrege(j.total).padStart(9)}  sorte ${LETTRES_FORME[j.sorte ?? 0]}  ${resume(m, j)}`)
+const modules = m.joueurs.flatMap((j) => j.modules)
+const branches = modules.filter((mo) => mo.parent !== null).length
+console.log(`\nmodules existants : ${modules.length}, branchés ${branches} (${Math.round((100 * branches) / Math.max(1, modules.length))} %) ; par rareté ${RARETES.noms.map((n, r) => `${n} ${modules.filter((mo) => mo.rarete === r).length}`).join(', ')}`)
+console.log(`fournées : ${m.joueurs.reduce((s, j) => s + j.journal.fournees, 0)}, fusions : ${m.joueurs.reduce((s, j) => s + j.journal.fusions, 0)}, ventes : ${abrege(m.joueurs.reduce((s, j) => s + j.journal.orVentes, 0))} or, achats : ${abrege(m.joueurs.reduce((s, j) => s + j.journal.orAchats, 0))} or`)

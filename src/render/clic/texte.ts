@@ -11,8 +11,9 @@ export function abregeFin(n: number): string {
   return abrege(n)
 }
 
-export function texteEffet(type: number, niveau: number): string {
-  const e = effet(type, niveau)
+/** L'effet d'un module d'un type à une force donnée (le niveau d'un commun ; voir `force`). */
+export function texteEffet(type: number, f: number): string {
+  const e = effet(type, f)
   switch (type) {
     case 0:
       return e >= 1 ? `${fr(e, 1)}/s` : `${fr(e * 60, e * 60 < 10 ? 1 : 0)}/min`
@@ -23,4 +24,9 @@ export function texteEffet(type: number, niveau: number): string {
     default:
       return `${fr(e * 100, e < 0.1 ? 1 : 0)} %`
   }
+}
+
+/** Un pourcentage de chance : « 78 % », « 0,5 % ». */
+export function pourcent(p: number): string {
+  return `${fr(p * 100, p * 100 < 10 ? 1 : 0)} %`
 }

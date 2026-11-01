@@ -1128,168 +1128,263 @@ select {
   }
 }
 
-/* À sec (pas de veine sous lui) : terne ; bridé par sa veine : un liseré ambre. */
-.producteur-sec .producteur-forme path {
-  fill: #2d2436;
-  stroke: rgba(255, 246, 226, 0.3);
-  filter: none;
-}
-
-.producteur-sec b {
-  opacity: 0.5;
-}
-
-.producteur-bride .producteur-forme path {
-  stroke: rgba(255, 170, 60, 0.75);
-}
-
-/* Au maximum de sa veine : ambre, pas rouge — ce n'est pas une panne, c'est un plafond. */
+/* Au maximum : ambre, pas rouge — ce n'est pas une panne, c'est une attente. */
 .limite {
   color: #ffb14d;
 }
 
-/* LA PLANÈTE : les zones, en pixels-monde. Une zone révélée n'est qu'un cadre discret ; une zone « ? » touche le connu et se tape pour prospecter ; l'inconnu est voilé. */
-.zone {
-  position: absolute;
-  z-index: 0;
-  border-radius: 28px;
-  pointer-events: none;
+/* LES ATELIERS : la forme qu'ils travaillent les teinte ; prêts, ils luisent ; en attente, ils s'éteignent. */
+.producteur-atelier .producteur-forme path {
+  fill: #2f2a44;
+  stroke: hsl(var(--teinte) 55% 62% / 0.75);
 }
 
-.zone-connue {
-  border: 2px solid rgba(255, 246, 226, 0.07);
+.atelier-pret .producteur-forme path {
+  stroke: hsl(var(--teinte) 70% 68%);
+  filter: drop-shadow(0 0 22px hsl(var(--teinte) 70% 60% / 0.45));
 }
 
-.zone-inconnue {
-  background: rgba(6, 2, 10, 0.92);
+.atelier-attente .producteur-forme path {
+  fill: #2a2434;
+  stroke: rgba(255, 246, 226, 0.3);
 }
 
-.zone-frontiere {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(14, 6, 22, 0.8);
-  border: 4px dashed rgba(255, 246, 226, 0.22);
-  pointer-events: auto;
-  cursor: pointer;
-  transition: background 0.15s ease-out, border-color 0.15s ease-out;
+.producteur-choisi .producteur-forme path {
+  stroke: var(--or);
 }
 
-.zone-payable {
-  border-color: rgba(255, 198, 31, 0.45);
+.atelier-forme {
+  display: inline-flex;
 }
 
-.zone-frontiere.enfonce,
-.zone-choisie {
-  background: rgba(40, 20, 56, 0.7);
-  border-color: var(--or);
+.atelier-forme .glyphe-moyen {
+  width: 90px;
+  height: 70px;
 }
 
-.zone-texte {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  color: var(--creme);
-  opacity: 0.8;
-}
-
-.zone-texte b {
-  font-size: 160px;
-  line-height: 1;
-  font-weight: 800;
-}
-
-.zone-payable .zone-texte b {
+.atelier-nom {
+  font-size: 22px;
   color: var(--or);
 }
 
-.zone-texte small {
-  font-size: 34px;
-  font-weight: 600;
+.producteur-atelier small .glyphe-forme {
+  width: 1.6em;
+  height: 1.3em;
+  vertical-align: -0.4em;
 }
 
-/* LES VEINES : la tache de cases d'un gisement, qui pâlit en se vidant (`--plein`), grise une fois épuisée. */
-.gisement {
+/* La roue de réglage d'un atelier : un vrai bouton, hors de la carte (`data-hud`), au coin de la pièce. */
+.atelier-reglage {
   position: absolute;
-  z-index: 0;
-  pointer-events: none;
+  right: -8px;
+  top: -8px;
+  min-height: 0;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 30px;
+  line-height: 1;
+  background: rgba(20, 8, 28, 0.85);
+  border: 2px solid rgba(255, 246, 226, 0.4);
+  color: var(--creme);
 }
 
-.gisement svg {
+/* LES RARETÉS : une couleur chacune, lue sur le trait du module, dans les textes et les éclats. */
+.rarete-0 {
+  --rarete: #d9d2e6;
+}
+
+.rarete-1 {
+  --rarete: #7fe0a0;
+}
+
+.rarete-2 {
+  --rarete: #4fb3e8;
+}
+
+.rarete-3 {
+  --rarete: #c77dff;
+}
+
+.rarete-4 {
+  --rarete: #ffc61f;
+}
+
+span.rarete-0,
+span.rarete-1,
+span.rarete-2,
+span.rarete-3,
+span.rarete-4,
+.rarete-nom {
+  color: var(--rarete);
+  font-weight: 700;
+}
+
+.chances {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.7rem;
+}
+
+.flottant-rarete {
+  color: var(--rarete, var(--creme));
+}
+
+.flottant-rarete-0 {
+  --rarete: #d9d2e6;
+}
+
+.flottant-rarete-1 {
+  --rarete: #7fe0a0;
+}
+
+.flottant-rarete-2 {
+  --rarete: #4fb3e8;
+}
+
+.flottant-rarete-3 {
+  --rarete: #c77dff;
+}
+
+.flottant-rarete-4 {
+  --rarete: #ffc61f;
+}
+
+/* LES STOCKS, en haut de la carte : une pastille par sorte, la sienne en tête ; une tape ouvre le marché. */
+.stocks {
   position: absolute;
-  left: 0;
-  top: 0;
-  overflow: visible;
+  top: 0.7rem;
+  right: 0.9rem;
+  display: flex;
+  gap: 0.35rem;
 }
 
-.gisement rect {
-  fill: rgba(200, 155, 90, calc(0.16 + 0.34 * var(--plein, 1)));
-  stroke: rgba(200, 155, 90, calc(0.35 + 0.45 * var(--plein, 1)));
-  stroke-width: 3;
+.stock {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  min-height: 2rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.6rem;
+  background: rgba(20, 8, 28, 0.6);
+  border: 1px solid rgba(255, 246, 226, 0.15);
+  font-size: 0.85rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
-.gisement-vide rect {
-  fill: rgba(120, 110, 130, 0.14);
-  stroke: rgba(120, 110, 130, 0.35);
-  stroke-dasharray: 14 10;
+.stock .glyphe-forme {
+  width: 1.5em;
+  height: 1.2em;
+  vertical-align: -0.35em;
 }
 
-.gisement-texte {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+.stock-mienne {
+  border-color: rgba(255, 198, 31, 0.6);
+}
+
+/* LE CHOIX DE SA SORTE : quatre grands boutons, un glyphe chacun. */
+.choix-sorte-liste {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: 100%;
+  max-width: 26rem;
+}
+
+.choix-sorte-bouton {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  min-height: 4rem;
+  padding: 0.6rem 0.9rem;
+  text-align: left;
+}
+
+.glyphe-grand {
+  width: 3.4em;
+  height: 2.7em;
+  flex: none;
+}
+
+.glyphe-forme path {
+  fill: hsl(var(--teinte, 45) 70% 62%);
+}
+
+/* La soute : une ligne par module, le trait de sa rareté à gauche. */
+.module-ligne {
+  border-left: 4px solid var(--rarete);
+  padding-left: 0.6rem;
+}
+
+.module-ligne .trait {
+  color: var(--or);
+  font-size: 0.85rem;
+}
+
+/* Le réglage de la forme d'un atelier, dans sa bulle : quatre boutons, le stock de chaque sorte dessous. */
+.choix-forme {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.choix-forme button {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 8px 18px;
-  border-radius: 18px;
-  background: rgba(20, 8, 28, 0.55);
-  color: var(--creme);
-  white-space: nowrap;
+  gap: 0;
+  min-height: 3rem;
+  padding: 0.25rem 0.2rem;
+  font-size: 0.75rem;
 }
 
-.gisement-texte b {
-  font-size: 30px;
-  line-height: 1.1;
-  color: var(--terre);
+.choix-forme button.actif {
+  border-color: var(--or);
+  background: rgba(255, 198, 31, 0.15);
 }
 
-.gisement-vide .gisement-texte b {
-  color: rgba(255, 246, 226, 0.5);
+.bulle-atelier {
+  width: 290px;
+  margin-left: -145px;
 }
 
-.gisement-texte small {
-  font-size: 22px;
-  font-weight: 500;
+.bouton-discret {
+  min-height: 2.4rem;
+  font-size: 0.85rem;
   opacity: 0.8;
 }
 
-/* La jauge d'une veine, sur la page Planète. */
-.jauge-veine {
-  display: block;
-  width: 100%;
-  max-width: 14rem;
-  height: 0.35rem;
-  margin-top: 0.3rem;
-  border-radius: 0.2rem;
-  background: rgba(255, 246, 226, 0.12);
-  overflow: hidden;
+/* Le marché : la sorte du joueur se distingue, la courbe est basse, les boutons passent à la ligne au doigt. */
+.marche-sorte {
+  margin-bottom: 0.7rem;
 }
 
-.jauge-veine > span {
-  display: block;
-  height: 100%;
-  background: var(--terre);
+.marche-sorte .quantites {
+  flex-wrap: wrap;
+  margin: 0.3rem 0;
 }
 
-.ligne-eteinte {
-  opacity: 0.55;
+.marche-sorte .quantites button {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
 }
 
-/* LES CREUX où le module qu'on tient peut aller : des cases en pointillé ; celle que vise l'aimant s'allume. */
+.marche-mienne {
+  border: 1px solid rgba(255, 198, 31, 0.45);
+}
+
+.courbe-basse {
+  height: 2.6rem;
+}
+
+.creme {
+  color: var(--creme);
+}
+
+/* LES CREUX où le module qu'on tient peut aller : des cases en pointillé ; celle que vise l'aimant s'allume ; un creux occupé (à échanger) est ambre. */
 .prise {
   position: absolute;
   border-radius: 14px;
@@ -1297,6 +1392,11 @@ select {
   background: rgba(255, 246, 226, 0.06);
   pointer-events: none;
   transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+
+.prise-echange {
+  border-color: rgba(255, 177, 77, 0.7);
+  background: rgba(255, 177, 77, 0.1);
 }
 
 .prise-visee {
@@ -1329,15 +1429,29 @@ select {
 
 .module-forme path {
   fill: hsl(var(--teinte) 60% 58%);
-  stroke: rgba(255, 246, 226, 0.7);
+  stroke: var(--rarete, rgba(255, 246, 226, 0.7));
   stroke-width: 4;
   stroke-linejoin: round;
 }
 
-/* Posé sur le plan, il est terne : il n'agit sur rien. */
-.module-pose .module-forme path {
-  fill: hsl(var(--teinte) 28% 46%);
-  stroke: rgba(255, 246, 226, 0.4);
+/* Au-dessus de commun, le trait s'épaissit et luit de sa couleur. */
+.rarete-2 .module-forme path,
+.rarete-3 .module-forme path,
+.rarete-4 .module-forme path {
+  stroke-width: 6;
+}
+
+.rarete-3 .module-forme,
+.rarete-4 .module-forme {
+  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.45)) drop-shadow(0 0 16px var(--rarete));
+}
+
+.module-rarete {
+  color: var(--rarete);
+}
+
+.module-trait {
+  color: #3b2a4c;
 }
 
 .module-choisi .module-forme path {
@@ -1475,16 +1589,12 @@ select {
   margin-top: 0.15rem;
 }
 
-/* La petite pièce qui dit la forme d'un module, dans la boutique. */
+/* La petite pièce qui dit la forme d'un module (et la sorte de matière), teintée de sa forme. */
 .glyphe-forme {
   width: 2.3em;
   height: 1.8em;
   vertical-align: -0.55em;
   overflow: visible;
-}
-
-.glyphe-forme path {
-  fill: var(--or);
 }
 
 /* LES COMMANDES par-dessus la carte : elles ne glissent pas avec elle, et le doigt qui s'y pose ne la prend pas. */

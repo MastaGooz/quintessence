@@ -1,0 +1,116 @@
+/**
+ * LA SOUTE : les modules qui ne sont branchés nulle part. Groupés par forme,
+ * rareté et trait ; chacun se branche là où il rapporte le plus, et trois de
+ * même forme et même rareté se fondent en un de la rareté au-dessus (Keko,
+ * 01/11 : « stocker les modules »).
+ */
+import type { ReactElement } from 'react'
+import { FUSION, RARETES } from '../../logic/clic/donnees.ts'
+import { brancherAuMieux, fondre, force, fusibles, meilleurePrise, producteurDe, soute, type Module } from '../../logic/clic/moteur.ts'
+import { joueur } from '../../logic/clic/partie.ts'
+import { EXPLICATION_TRAIT, NOM_MODULE, NOM_PRODUCTEUR, NOM_RARETE, NOM_SOUTE, NOM_TRAIT } from '../../ui/noms-clic.ts'
+import { vibrer } from '../../ui/haptique.ts'
+import { sonBatir } from '../../ui/sons.ts'
+import { Feuille } from '../Feuille.tsx'
+import { Glyphe } from './Glyphe.tsx'
+import type { PagePropsClic } from './props.ts'
+import { texteEffet } from './texte.ts'
+
+export function Soute({ partie, agir, onFermer, onBranche, onFondu }: PagePropsClic & { onFermer: () => void; onBranche: (mo: Module) => void; onFondu: (mo: Module) => void }): ReactElement {
+  const j = joueur(partie)
+  const modules = [...soute(j)].sort((a, b) => b.rarete - a.rarete || a.type - b.type || force(b) - force(a))
+  const groupes = fusibles(j)
+
+  const brancher = (mo: Module): void => {
+    const fait: { ok: boolean } = { ok: false }
+    agir(() => {
+      fait.ok = brancherAuMieux(j, mo) !== null
+    })
+    if (!fait.ok) return
+    sonBatir()
+    vibrer([15, 30])
+    onBranche(mo)
+  }
+  const fondreIci = (type: number, rarete: number): void => {
+    const fait: { mo: Module | null } = { mo: null }
+    agir(() => {
+      fait.mo = fondre(partie.monde, j, type, rarete)
+    })
+    if (fait.mo === null) return
+    sonBatir()
+    vibrer([20, 30, 50])
+    onFondu(fait.mo)
+  }
+  const toutFondre = (): void => {
+    let dernier: Module | null = null
+    agir(() => {
+      for (let n = 0; n < 200; n++) {
+        const g = fusibles(j)[0]
+        if (g === undefined) break
+        const mo = fondre(partie.monde, j, g.type, g.rarete)
+        if (mo === null) break
+        dernier = mo
+      }
+    })
+    if (dernier === null) return
+    sonBatir()
+    vibrer([20, 30, 50, 30, 70])
+    onFondu(dernier)
+  }
+
+  return (
+    <Feuille titre={`${NOM_SOUTE} · ${modules.length}`} onFermer={onFermer}>
+      <p className="sourd petit">
+        Les modules sortis des ateliers attendent ici. « Brancher » pose un module sur le creux de sa forme où il rapporte le plus, à la place d’un plus faible s’il faut. {FUSION} modules de même
+        forme et même rareté se fondent en un de la rareté au-dessus, au meilleur de leurs niveaux.
+      </p>
+      {modules.length === 0 && <p className="sourd">Rien en soute : lancez une fournée sur un atelier.</p>}
+      {groupes.length > 1 && (
+        <button type="button" className="bouton-principal" onClick={toutFondre}>
+          Tout fondre
+        </button>
+      )}
+      {groupes.map((g) => (
+        <div key={`${g.type}:${g.rarete}`} className="ligne ligne-sans-trait">
+          <span className="unite-texte">
+            <span>
+              <Glyphe forme={g.type} /> {g.modules.length} {NOM_MODULE[g.type]?.toLowerCase()}s <span className={`rarete-${g.rarete}`}>{NOM_RARETE[g.rarete]}s</span>
+            </span>
+            <span className="petit sourd">
+              {FUSION} → 1 <span className={`rarete-${g.rarete + 1}`}>{NOM_RARETE[g.rarete + 1]}</span> (effet ×{RARETES.effet[g.rarete + 1]}, le trait est retiré)
+            </span>
+          </span>
+          <button type="button" onClick={() => fondreIci(g.type, g.rarete)}>
+            Fondre {FUSION}
+          </button>
+        </div>
+      ))}
+      <section>
+        {modules.map((mo) => {
+          const prise = meilleurePrise(j, mo)
+          const porteur = prise === null ? undefined : producteurDe(j, prise.parent)
+          return (
+            <div key={mo.id} className={`ligne module-ligne rarete-${mo.rarete}`}>
+              <span className="unite-texte">
+                <span>
+                  <Glyphe forme={mo.type} /> <b>{NOM_MODULE[mo.type]}</b> <span className="rarete-nom">{NOM_RARETE[mo.rarete]}</span>
+                  {mo.trait !== null && <span className="trait"> · {NOM_TRAIT[mo.trait]}</span>}
+                </span>
+                <span className="petit sourd">
+                  {texteEffet(mo.type, force(mo))} · niveau {mo.niveau}
+                  {mo.trait !== null && ` · ${EXPLICATION_TRAIT[mo.trait]}`}
+                </span>
+                <span className="petit sourd">
+                  {prise === null ? 'aucun creux où il ferait mieux' : `→ ${NOM_PRODUCTEUR[porteur?.type ?? 0]}${prise.occupant !== null ? ', à la place d’un plus faible' : ''}`}
+                </span>
+              </span>
+              <button type="button" className={prise !== null ? 'bouton-principal' : ''} disabled={prise === null} onClick={() => brancher(mo)}>
+                Brancher
+              </button>
+            </div>
+          )
+        })}
+      </section>
+    </Feuille>
+  )
+}
