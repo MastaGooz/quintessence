@@ -103,6 +103,24 @@ export function eclater(x: number, y: number, n = 6, couleur = 'var(--or)'): voi
   }
 }
 
+/** L'éclat d'un coup : une lueur ronde, blanche au cœur, qui s'ouvre et s'éteint en un éclair, au point frappé. */
+export function impact(x: number, y: number, taille = 50): void {
+  if (mouvementReduit()) return
+  const el = poser('impact', x, y)
+  if (el === null) return
+  el.style.width = `${taille}px`
+  el.style.height = `${taille}px`
+  animer(
+    el,
+    [
+      { transform: 'translate(-50%, -50%) scale(0.3)', opacity: 1 },
+      { transform: 'translate(-50%, -50%) scale(1.25)', opacity: 0.9, offset: 0.35 },
+      { transform: 'translate(-50%, -50%) scale(1.6)', opacity: 0 },
+    ],
+    { duration: 220, easing: 'ease-out' },
+  )
+}
+
 /** Une onde de lumière qui s'élargit depuis (x, y) et s'efface : l'impact d'une pièce. */
 export function onde(x: number, y: number, rayon = 40, couleur = 'rgba(255, 214, 90, 0.95)'): void {
   if (mouvementReduit()) return

@@ -872,6 +872,15 @@ select {
   will-change: transform, opacity;
 }
 
+/* L'éclat d'un coup (`impact`) : une lueur ronde, blanche au cœur. */
+.impact {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 245, 0.95) 0%, rgba(255, 226, 122, 0.6) 35%, rgba(255, 198, 31, 0) 70%);
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
 .piece {
   position: absolute;
   width: 14px;
@@ -1229,10 +1238,18 @@ select {
 }
 
 .producteur .mine-barre-gain {
+  display: inline-block;
   font-size: 26px;
   font-weight: 800;
   color: var(--creme);
   white-space: nowrap;
+  /* Il grossit et s'éclaire avec la barre (`--plein`, de 0 à 1, posé image par image). */
+  transform: scale(calc(1 + var(--plein, 0) * 0.35));
+  filter: drop-shadow(0 0 calc(var(--plein, 0) * 10px) rgba(255, 214, 90, 0.9));
+}
+
+.mine-barre-gain .symbole-piece {
+  transform-style: preserve-3d;
 }
 
 /* LA RÉSERVE de la mine (Keko, 02/11) : une jauge d'or qui se remplit par l'automatisation ; pleine, elle pulse ; une tape la récolte. */

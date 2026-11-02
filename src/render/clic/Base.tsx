@@ -36,7 +36,7 @@ import {
 import { sonBarre, sonBatir, sonEtape, sonReserve, sonTape } from '../../ui/sons.ts'
 import { Compteur } from '../Compteur.tsx'
 import { DUREE_GLISSE, monterCarte, type Carte, type Point } from '../carte/carte.ts'
-import { SERIE_MS, eclater, effetDepense, effetVente, flotter, mouvementReduit, onde } from '../effets.ts'
+import { SERIE_MS, eclater, effetDepense, effetVente, flotter, impact, mouvementReduit, onde } from '../effets.ts'
 import { Feuille } from '../Feuille.tsx'
 import { ChoixAmelioration } from './Ameliorations.tsx'
 import { BoutonCout, Boutique, COULEURS_RARETE } from './Boutique.tsx'
@@ -217,12 +217,13 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
         const r = barre?.getBoundingClientRect()
         if (r !== undefined) eclater(r.left + r.width * Math.min(1, coup.gain > 0 ? 1 : p.progres), r.top + r.height / 2, coup.critique ? 14 : 5, '#ffe27a')
       }
-      vibrer(coup.critique ? [10, 30, 25] : 8)
-      if (coup.critique) {
-        eclater(x, y, 26, '#ff8a5c')
-        flotter(x, y - 120, 'Critique !', 'flottant-critique', 1.3)
-      } else if (n > 0 && n % 10 === 9) eclater(x, y, 14)
-      else if (Math.random() < 0.3) eclater(x, y, 3)
+      vibrer(coup.critique ? [10, 30, 25] : coup.gain > 0 ? [10, 20, 15] : 8)
+      // AU POINT DE LA TAPE (Keko, 02/11 : « ça manque de juice à l'endroit du tap ») : un éclat de lumière, une petite onde, des étincelles à chaque coup ; plus fort quand la tape remplit la barre, plus encore pour un critique.
+      const fort = coup.critique ? 2 : coup.gain > 0 ? 1.5 : 1
+      impact(x, y, 46 * fort)
+      onde(x, y, 24 * fort, coup.critique ? 'rgba(255, 150, 100, 0.9)' : 'rgba(255, 240, 200, 0.85)')
+      eclater(x, y, coup.critique ? 26 : coup.gain > 0 ? 14 : 6, coup.critique ? '#ff8a5c' : '#ffe27a')
+      if (coup.critique) flotter(x, y - 120, 'Critique !', 'flottant-critique', 1.3)
       return
     }
     if (coup.gain <= 0) {
@@ -693,7 +694,25 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
       ],
       { duration: 320, easing: 'ease-out' },
     )
-    el?.querySelector('.mine-barre-gain')?.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.5)', offset: 0.3 }, { transform: 'scale(1)' }], { duration: 320, easing: 'ease-out' })
+    // LE « +1 » ÉCLATE (Keko, 02/11 : « ça manque de juice au moment du remplissage, sur le chiffre à droite de la barre ») : grand rebond qui vacille, éclair d'or, la pièce tourne sur elle-même en partant ; étincelles et onde.
+    const gainEl = el?.querySelector<HTMLElement>('.mine-barre-gain')
+    gainEl?.animate(
+      [
+        { transform: 'scale(1.35) rotate(0deg)', filter: 'brightness(1.2) drop-shadow(0 0 6px rgba(255, 214, 90, 0.9))' },
+        { transform: 'scale(2.1) rotate(-8deg)', filter: 'brightness(2) drop-shadow(0 0 18px rgba(255, 214, 90, 1))', offset: 0.25 },
+        { transform: 'scale(0.88) rotate(5deg)', offset: 0.58 },
+        { transform: 'scale(1.06) rotate(-2deg)', offset: 0.8 },
+        { transform: 'scale(1) rotate(0deg)', filter: 'brightness(1) drop-shadow(0 0 0 rgba(255, 214, 90, 0))' },
+      ],
+      { duration: 560, easing: 'ease-out' },
+    )
+    gainEl?.querySelector('.symbole-piece')?.animate([{ transform: 'rotateY(0deg)' }, { transform: 'rotateY(720deg)' }], { duration: 560, easing: 'cubic-bezier(.2,.8,.3,1)' })
+    if (depuis !== undefined) {
+      const cx = depuis.left + depuis.width / 2
+      const cy = depuis.top + depuis.height / 2
+      eclater(cx, cy, 16, '#ffe27a')
+      onde(cx, cy, 44)
+    }
   }
 
   // LA BARRE DE LA MINE : posée image par image (elle n'avance qu'à la tape) ; pleine un instant quand elle vient de payer.
@@ -714,6 +733,8 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
         if (tete !== null) tete.style.left = `${montre * 100}%`
         // 8 tapes de 10 % font 0,7999… : le seuil a sa marge.
         el.querySelector('.mine-barre')?.classList.toggle('mine-barre-presque', cible >= 0.795 && cible < 1)
+        // Le « +1 » grossit et s'éclaire à mesure que la barre se remplit : on voit venir la pièce.
+        el.querySelector<HTMLElement>('.mine-barre-gain')?.style.setProperty('--plein', montre.toFixed(3))
       }
       image = requestAnimationFrame(pas)
     }
