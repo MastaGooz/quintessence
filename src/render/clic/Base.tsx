@@ -577,11 +577,24 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     if (mine === undefined) return
     const prix = prixNiveauMine(mine)
     const gain = gainNiveauMine(j)
+    const queteAvant = j.quete
     const fait = { ok: false }
     agir(() => {
       fait.ok = monterLaMine(m, j, mine)
     })
     if (!fait.ok) return
+    // LA QUÊTE DU NIVEAU est accomplie : sa carte éclate, la suivante naît à sa place.
+    if (j.quete > queteAvant) {
+      window.setTimeout(() => {
+        const carte = objectifEl.current
+        if (carte === null) return
+        const r = carte.getBoundingClientRect()
+        sonEtape()
+        carte.classList.add('piece-nait')
+        eclater(r.left + r.width / 2, r.top + r.height / 2, 26)
+        flotter(r.left + r.width / 2, r.top - 6, 'Quête accomplie !', 'flottant-or', 1.2)
+      }, 380)
+    }
     setMenuOuvert(false)
     sonBatir()
     vibrer([20, 30, 60])
@@ -662,19 +675,13 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     if (fait.q === null) return
     sonEtape()
     vibrer([20, 30, 60])
-    const bouton = fait.q.recompense === 'bouton'
     if (r !== undefined) {
       eclater(r.left + r.width / 2, r.top + r.height / 2, 26)
-      flotter(r.left + r.width / 2, r.top - 6, bouton ? 'Les améliorations sont ouvertes !' : 'Une amélioration au choix !', 'flottant-or', 1.2)
+      flotter(r.left + r.width / 2, r.top - 6, 'Les améliorations sont ouvertes !', 'flottant-or', 1.2)
     }
-    if (bouton) {
-      // LE BOUTON DES AMÉLIORATIONS APPARAÎT en haut à droite de la mine : il naît, éclate.
-      const mine = j.producteurs.find(estMine)
-      faireNaitre(() => (mine === undefined ? undefined : producteursEl.current.get(mine.id)?.querySelector<HTMLElement>('.mine-ameliorer')))
-      return
-    }
-    // Le choix s'ouvre de lui-même, le temps de voir l'éclat.
-    window.setTimeout(() => setChoixOuvert(true), 450)
+    // LE BOUTON DES AMÉLIORATIONS APPARAÎT en haut à droite de la mine : il naît, éclate.
+    const mine = j.producteurs.find(estMine)
+    faireNaitre(() => (mine === undefined ? undefined : producteursEl.current.get(mine.id)?.querySelector<HTMLElement>('.mine-ameliorer')))
   }
 
   /** ACHETER au marché, depuis la feuille d'un transformateur, la matière qui manque à son prochain coup. */
@@ -1321,16 +1328,31 @@ function Objectif({
       <div key={`quete-${q.id}`} ref={refCarte} className={`objectif${accomplie ? ' objectif-accompli' : ''}`}>
         <span className="objectif-titre">Quête</span>
         <span className="objectif-texte">
-          Gagner {q.or} <SymbolePiece />
+          {q.objectif === 'niveau' ? (
+            <>Améliorer la mine au niveau {q.but}</>
+          ) : (
+            <>
+              Gagner {q.but} <SymbolePiece />
+            </>
+          )}
         </span>
         <span className="objectif-jauge">
           <span style={{ width: `${(100 * fait) / but}%` }} />
         </span>
         <span className="objectif-ligne">
           <span className="petit sourd">
-            {possede(fait)} / {but} <SymbolePiece /> · récompense : {NOM_RECOMPENSE[q.recompense]}
+            {q.objectif === 'niveau' ? (
+              <>
+                niveau {fait} / {but}
+              </>
+            ) : (
+              <>
+                {possede(fait)} / {but} <SymbolePiece />
+              </>
+            )}
+            {q.recompense !== 'aucune' && <> · récompense : {NOM_RECOMPENSE[q.recompense]}</>}
           </span>
-          {accomplie && (
+          {accomplie && q.recompense !== 'aucune' && (
             <button type="button" className="bouton-principal respire" onClick={onReclamer}>
               Réclamer
             </button>

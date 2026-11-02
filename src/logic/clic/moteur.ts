@@ -997,41 +997,47 @@ export function ameliorerSource(j: Joueur, p: Producteur): boolean {
 // ---------------------------------------------------------------------------
 // LES QUÊTES ET CE QU'ELLES DÉBLOQUENT
 
-/** La quête en cours : la première ouvre le menu des améliorations, les suivantes donnent un choix, sans fin, l'objectif doublant. */
+/** La quête en cours : la première, gagner de l'or, ouvre le menu des améliorations ; les suivantes demandent la mine au niveau 2, 3… */
 export function queteEnCours(j: Joueur): Quete | null {
-  if (j.quete === 0) return { id: 'bouton', or: QUETE_CHOIX.bouton, recompense: 'bouton' }
-  const k = j.quete - 1
-  return { id: `choix-${k + 1}`, or: Math.round(QUETE_CHOIX.premier * Math.pow(QUETE_CHOIX.croissance, k)), recompense: 'choix' }
+  if (j.quete === 0) return { id: 'bouton', objectif: 'or', but: QUETE_CHOIX.bouton, recompense: 'bouton' }
+  return { id: `niveau-${j.quete + 1}`, objectif: 'niveau', but: j.quete + 1, recompense: 'aucune' }
 }
 
-/** Ce que la quête en cours demande : l'or à gagner. */
+/** Ce que la quête en cours demande : l'or à gagner, ou le niveau de la mine. */
 export function objectifQuete(j: Joueur): number {
-  return queteEnCours(j)?.or ?? 0
+  return queteEnCours(j)?.but ?? 0
 }
 
-/** L'or gagné pour la quête en cours, depuis son début, borné à son objectif. */
+/** Où en est la quête en cours, borné à son objectif : l'or gagné depuis son début, ou le niveau de la mine. */
 export function progresQuete(j: Joueur): number {
-  return Math.min(objectifQuete(j), Math.max(0, j.orProduit - j.queteDepuis))
+  const q = queteEnCours(j)
+  if (q === null) return 0
+  const fait = q.objectif === 'niveau' ? (j.producteurs.find(estMine)?.niveau ?? 1) : j.orProduit - j.queteDepuis
+  return Math.min(q.but, Math.max(0, fait))
 }
 
 export function queteAccomplie(j: Joueur): boolean {
   const q = queteEnCours(j)
-  return q !== null && j.orProduit - j.queteDepuis + 1e-9 >= q.or
+  return q !== null && progresQuete(j) + 1e-9 >= q.but
 }
 
-/**
- * Réclame la quête accomplie : sa récompense est débloquée (une quête de
- * choix tire l'offre d'améliorations), la suivante commence. On ne réclame pas
- * tant qu'une offre attend son choix. Rend la quête réclamée, ou null.
- */
+/** Réclame la quête accomplie qui a une récompense : elle est débloquée, la suivante commence. Rend la quête réclamée, ou null. */
 export function reclamerQuete(m: Monde, j: Joueur): Quete | null {
+  void m
   const q = queteEnCours(j)
-  if (q === null || !queteAccomplie(j) || j.offre !== null) return null
+  if (q === null || q.recompense === 'aucune' || !queteAccomplie(j)) return null
   // Le menu des améliorations n'a rien à poser : il est là dès que la première quête est réclamée (`ameliorationsOuvertes`).
-  if (q.recompense === 'choix') j.offre = tirerOffre(m, j)
   j.quete += 1
   j.queteDepuis = j.orProduit
   return q
+}
+
+/** Les quêtes sans récompense s'accomplissent d'elles-mêmes : tant que celle en cours est remplie, la suivante commence. */
+function avancerLesQuetes(j: Joueur): void {
+  for (let q = queteEnCours(j); q !== null && q.recompense === 'aucune' && queteAccomplie(j); q = queteEnCours(j)) {
+    j.quete += 1
+    j.queteDepuis = j.orProduit
+  }
 }
 
 /** Le bouton des améliorations est là : la première quête est réclamée. */
@@ -1061,6 +1067,7 @@ export function monterLaMine(m: Monde, j: Joueur, p: Producteur): boolean {
   if (gainNiveauMine(j) === 'automatique') j.automatisation = 1
   else j.offre = tirerOffre(m, j)
   p.niveau += 1
+  avancerLesQuetes(j)
   return true
 }
 

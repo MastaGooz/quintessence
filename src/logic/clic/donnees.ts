@@ -200,22 +200,25 @@ export const FABRICATION = {
 export const MINE: TypeProducteur = { id: 'mine', genre: 'mine', cout: { forme: 0, couleur: null, quantite: 0 }, lot: 1, creux: [_, _, _, _, _, _, _, _], taille: { largeur: 450, hauteur: 450 } }
 
 /**
- * LES QUÊTES : GAGNER de l'or, une à la fois, sans fin ; l'or compte depuis
- * le début de la quête ; remplie, une quête se RÉCLAME d'une tape. La
- * première demande `bouton` or (à la tape : il n'y a encore rien d'autre) et
- * fait apparaître LE BOUTON DES AMÉLIORATIONS de la mine, dont le menu fait
- * monter son niveau (voir `NIVEAU_MINE`). Les suivantes demandent `premier × croissance^k` or et donnent le
- * CHOIX d'une amélioration parmi `offre` tirées au hasard (Keko : « X or pour
- * obtenir une amélioration au choix »). Chiffres de moi, validés par Keko.
+ * LES QUÊTES, une à la fois, sans fin (Keko, 02/11 : « quête 1 : gagner 10,
+ * quête 2 : améliorer la mine au niveau 2, quête 3 : au niveau 3, etc. »). La
+ * première demande `bouton` or (l'or compte depuis son début), se RÉCLAME
+ * d'une tape et fait apparaître LE BOUTON DES AMÉLIORATIONS de la mine, dont
+ * le menu fait monter son niveau (voir `NIVEAU_MINE`). Les suivantes
+ * demandent un niveau de la mine : sans récompense à elles (le niveau donne
+ * déjà la sienne), elles s'accomplissent d'elles-mêmes quand il est atteint.
+ * Chaque niveau gagné, à partir du deuxième, offre `offre` améliorations au
+ * choix.
  */
-export type Recompense = 'bouton' | 'choix'
+export type Recompense = 'bouton' | 'aucune'
 export interface Quete {
   id: string
-  /** L'or à gagner depuis le début de la quête. */
-  or: number
+  /** Ce qu'elle demande : de l'or à gagner depuis son début, ou un niveau de la mine. */
+  objectif: 'or' | 'niveau'
+  but: number
   recompense: Recompense
 }
-export const QUETE_CHOIX = { bouton: 10, premier: 20, croissance: 2, offre: 3 }
+export const QUETE_CHOIX = { bouton: 10, offre: 3 }
 
 /**
  * LE NIVEAU DE LA MINE (Keko, 02/11 : « le bouton amélioration ouvre le menu
