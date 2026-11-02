@@ -54,16 +54,6 @@ export function parSeconde(n: number): string {
   return `${abrege(n)}/s`
 }
 
-/** Un compte à rebours, à la seconde : « 42 s », « 1:40 », « 1:02:05 ». */
-export function compteARebours(secondes: number): string {
-  const s = Math.max(0, Math.ceil(secondes - 1e-6))
-  if (s < 60) return `${s} s`
-  const h = Math.floor(s / 3600)
-  const min = Math.floor((s % 3600) / 60)
-  const sec = String(s % 60).padStart(2, '0')
-  return h > 0 ? `${h}:${String(min).padStart(2, '0')}:${sec}` : `${min}:${sec}`
-}
-
 /** « 3 h 15 », « 45 min », « 2 j 4 h ». */
 export function duree(h: number): string {
   if (h < 1 / 60) return 'maintenant'

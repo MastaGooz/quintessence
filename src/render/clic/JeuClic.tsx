@@ -13,7 +13,6 @@ import { ecrireSauvegardeClic, effacerSauvegardeClic, lireSauvegardeClic } from 
 import { abrege, duree, horloge, parSeconde, possede } from '../../ui/format.ts'
 import { NOM_OR } from '../../ui/noms-clic.ts'
 import { basculerSon, sonActif, sonClic } from '../../ui/sons.ts'
-import { vitesseDemandee } from '../../ui/vitesse-clic.ts'
 import { Compteur } from '../Compteur.tsx'
 import { declarerCibleOr, monterCouche } from '../effets.ts'
 import { IconeSon } from '../Jeu.tsx'
@@ -29,6 +28,11 @@ const PAGES: { id: Page; nom: string }[] = [
   { id: 'marche', nom: 'Marché' },
   { id: 'rivaux', nom: 'Rivaux' },
 ]
+
+function vitesseDemandee(): number {
+  const v = Number(new URLSearchParams(location.search).get('vitesse') ?? '1')
+  return Number.isFinite(v) && v > 0 ? v : 1
+}
 
 export function JeuClic(): ReactElement {
   const [sauvegarde, setSauvegarde] = useState(() => lireSauvegardeClic())
