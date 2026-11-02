@@ -154,19 +154,20 @@ export function effetAmeliorationProducteur(j: Joueur, p: Producteur, id: IdAmel
   }
 }
 
-/** Un prix en or et en ressources : chaque part non nulle, son nombre et son symbole. */
-export function PrixVu({ prix }: { prix: Prix }): ReactElement {
+/** Un prix en or et en ressources : chaque part non nulle, son nombre et son symbole ; celle que le joueur n'a pas, rougeâtre (Keko, 02/11). */
+export function PrixVu({ j, prix }: { j: Joueur; prix: Prix }): ReactElement {
+  const classe = (manque: boolean): string => (manque ? 'prix-manque' : '')
   return (
     <span className="prix-vu">
       {prix.or > 0 && (
-        <span>
+        <span className={classe(j.or + 1e-9 < prix.or)}>
           {prix.or} <SymbolePiece />
         </span>
       )}
       {RESSOURCES.map(
         (r) =>
           prix[r] > 0 && (
-            <span key={r}>
+            <span key={r} className={classe(stockRessource(j, r) + 1e-9 < prix[r])}>
               {prix[r]} <SymboleRessource ressource={r} />
             </span>
           ),
@@ -225,7 +226,7 @@ export function MenuAmeliorations({ j, p, onMonter, onChoisir, onFermer }: { j: 
             <span className="amelioration-tete">
               <b className="amelioration-nom">Niveau {p.niveau + 1}</b>
               <span className="amelioration-prix">
-                <PrixVu prix={prix} />
+                <PrixVu j={j} prix={prix} />
               </span>
             </span>
             <span className="amelioration-effet">

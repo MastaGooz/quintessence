@@ -32,7 +32,7 @@ export function MenuConstruction({ j, onConstruire, onFermer }: { j: Joueur; onC
                 <span className="amelioration-tete">
                   <b className="amelioration-nom">{NOM_TYPE[type]}</b>
                   <span className="amelioration-prix">
-                    <PrixVu prix={prix} />
+                    <PrixVu j={j} prix={prix} />
                   </span>
                 </span>
                 <span className="amelioration-effet">

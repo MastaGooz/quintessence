@@ -1323,6 +1323,15 @@ select {
   white-space: nowrap;
 }
 
+/* Chaque part du prix pour elle-même : celle qu'on a, en couleur ; celle qui manque, rougeâtre, son symbole teinté de rouge. */
+.prix-manque {
+  color: var(--rouge);
+}
+
+.prix-manque [role='img'] {
+  filter: sepia(0.9) saturate(3) hue-rotate(-35deg) brightness(0.9);
+}
+
 /* LE BOUTON DES AMÉLIORATIONS, en haut à droite de la mine ; doré et battant quand quelque chose s'achète. */
 .mine-ameliorer {
   position: absolute;
@@ -2181,7 +2190,6 @@ span.rarete-4,
   color: var(--rouge);
 }
 
-/* Éteinte : son arrivée (`both`) fige l'opacité, l'éteinte passe par le filtre. */
 /* LE MENU DE CONSTRUCTION : le pictogramme du producteur à gauche de sa carte. */
 .amelioration-carte.construction-carte {
   flex-direction: row;
@@ -2211,9 +2219,9 @@ span.rarete-4,
   min-width: 0;
 }
 
+/* Pas encore payable : la carte ne se grise plus (Keko, 02/11 : « les ressources manquantes en rougeâtre plutôt que grisé, celles dispo en couleur, séparément ») ; son liseré s'éteint, ce qui manque rougit dans le prix. */
 .amelioration-carte:disabled {
-  filter: grayscale(0.7) brightness(0.75);
-  border-color: rgba(255, 246, 226, 0.2);
+  border-color: rgba(255, 198, 31, 0.28);
   cursor: default;
 }
 
