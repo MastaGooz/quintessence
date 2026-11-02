@@ -233,7 +233,7 @@ function options(m: Monde, j: Joueur, s: Strategie): Option[] {
       },
     }
   }
-  const neufDe = (i: number, couleur: number, forme: number): Producteur => ({ id: -1, type: i, x: 0, y: 0, couleur, forme, niveau: 1, reserve: 0, progres: 0 })
+  const neufDe = (i: number, couleur: number, forme: number): Producteur => ({ id: -1, type: i, x: 0, y: 0, couleur, forme, niveau: 1, reserve: 0, progres: 0, entamee: 0 })
   // UNE PREMIÈRE RAFFINERIE avant tout : sans elle, pas de matière formée, pas de modules.
   if (!aRaffinerie) {
     const i = PRODUCTEURS.findIndex((t) => t.genre === 'raffinerie')

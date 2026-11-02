@@ -1305,15 +1305,27 @@ select {
   text-shadow: 1.5px 0 0 rgba(20, 8, 28, 0.85), -1.5px 0 0 rgba(20, 8, 28, 0.85), 0 1.5px 0 rgba(20, 8, 28, 0.85), 0 -1.5px 0 rgba(20, 8, 28, 0.85), 0 3px 0 rgba(20, 8, 28, 0.9);
 }
 
-/* L'anneau de l'automatique, dans la réserve à gauche : centré sur le bout arrondi de la pilule. */
+/* L'anneau de l'automatique, à gauche de la réserve : la ligne a la largeur de celle de la barre de la mine, la réserve lui cède sa place. */
+.reserve-ligne {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 340px;
+}
+
+.reserve-ligne .reserve {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
 .reserve-anneau {
-  position: absolute;
-  left: 13px;
-  top: 50%;
+  flex: none;
   width: 52px;
   height: 52px;
   /* Le tour part d'en haut. */
-  transform: translateY(-50%) rotate(-90deg);
+  transform: rotate(-90deg);
   overflow: visible;
   pointer-events: none;
 }
@@ -1328,7 +1340,7 @@ select {
 }
 
 .reserve-anneau-lisere {
-  stroke: rgba(255, 246, 226, 0.25);
+  stroke: rgba(255, 198, 31, 0.55);
   stroke-width: 1.6;
 }
 
@@ -1339,6 +1351,10 @@ select {
   filter: drop-shadow(0 0 3px rgba(255, 214, 90, 0.7));
   /* D'une seconde à l'autre, il glisse. */
   transition: stroke-dashoffset 1s linear;
+}
+
+.reserve-anneau-arrete {
+  opacity: 0.45;
 }
 
 .reserve.enfonce {

@@ -50,10 +50,12 @@ export interface Producteur {
   forme: number
   /** Source : son niveau, qui multiplie son lot de base. */
   niveau: number
-  /** Mine : l'or des barres qui attend d'être récolté (voir `RESERVE_MINE`). */
+  /** Mine : les pièces ENTIÈRES qui attendent d'être récoltées (voir `RESERVE_MINE`). */
   reserve: number
   /** Mine : où en est sa barre, de 0 à 1. */
   progres: number
+  /** Mine : la pièce que l'automatique est en train de remplir, de 0 à 1 (absente des parties d'avant : 0). */
+  entamee: number
 }
 
 /** UN MODULE : une pièce d'une couleur et d'une forme, d'une rareté, emboîtée sur un générateur ou dans la soute. */
@@ -146,7 +148,7 @@ const PAS_Y = 3 * CASE
 
 /** Ce qu'un joueur a au départ (et après un prestige) : la mine d'or seule, au centre du plan. */
 function depart(): Producteur[] {
-  return [{ id: 1, type: TYPE_MINE, x: 0, y: 0, couleur: 0, forme: 0, niveau: 1, reserve: 0, progres: 0 }]
+  return [{ id: 1, type: TYPE_MINE, x: 0, y: 0, couleur: 0, forme: 0, niveau: 1, reserve: 0, progres: 0, entamee: 0 }]
 }
 
 export function nouveauJoueur(id: number, nom: string): Joueur {
@@ -704,23 +706,43 @@ export function reservePleine(j: Joueur, p: Producteur): boolean {
   return estMine(p) && (p.reserve ?? 0) + 1e-9 >= capaciteReserve(j, p)
 }
 
-/** L'or automatique entre dans la réserve de la mine, jusqu'à sa capacité ; du reste, le trop-plein coule dans la bourse, le reste est perdu. */
+/**
+ * L'or automatique remplit la PIÈCE ENTAMÉE de la mine, et chaque pièce
+ * entière entre dans la réserve, jusqu'à sa capacité (Keko, 02/11 :
+ * « n'augmente pas l'or en chiffres décimaux, seulement un par un »). Ce qui
+ * déborde d'une réserve pleine remplit la pièce entamée à la part du
+ * trop-plein, et ses pièces entières coulent dans la bourse ; le reste est
+ * perdu.
+ */
 function remplirReserve(j: Joueur, p: Producteur, q: number): void {
   if (q <= 0) return
-  const avant = p.reserve ?? 0
-  const capacite = capaciteReserve(j, p)
-  p.reserve = Math.min(capacite, avant + q)
-  const deborde = q - (p.reserve - avant)
-  if (deborde > 0) produireOr(j, deborde * partTropPlein(j))
+  // Une réserve d'avant les pièces entières rend sa fraction à la pièce entamée.
+  const entiere = Math.floor(p.reserve + 1e-9)
+  let entamee = (p.entamee ?? 0) + Math.max(0, p.reserve - entiere)
+  p.reserve = entiere
+  const entre = Math.min(q, Math.max(0, capaciteReserve(j, p) - p.reserve - entamee))
+  entamee += entre
+  const pieces = Math.floor(entamee + 1e-9)
+  p.reserve += pieces
+  entamee = Math.max(0, entamee - pieces)
+  const part = partTropPlein(j)
+  if (q > entre && part > 0) {
+    entamee += (q - entre) * part
+    const coulent = Math.floor(entamee + 1e-9)
+    entamee = Math.max(0, entamee - coulent)
+    produireOr(j, coulent)
+  }
+  p.entamee = entamee
 }
 
-/** RÉCOLTER la réserve d'une mine : son or passe dans la bourse du joueur (et à son score). Rend l'or récolté. */
+/** RÉCOLTER la réserve d'une mine : ses pièces entières passent dans la bourse du joueur (et à son score) ; pas avant la première (Keko, 02/11). Rend l'or récolté. */
 export function recolter(j: Joueur, p: Producteur): number {
-  // Une réserve PLEINE récoltée rapporte la prime.
+  const pieces = estMine(p) ? Math.floor((p.reserve ?? 0) + 1e-9) : 0
+  if (pieces < 1) return 0
+  // Une réserve PLEINE récoltée rapporte la prime, en pièces entières elle aussi.
   const prime = reservePleine(j, p) ? 1 + EFFETS_MINE.prime * j.ameliorations.prime : 1
-  const q = estMine(p) ? (p.reserve ?? 0) * prime : 0
-  if (q <= 0) return 0
-  p.reserve = 0
+  const q = Math.floor(pieces * prime + 1e-9)
+  p.reserve = Math.max(0, p.reserve - pieces)
   produireOr(j, q)
   j.journal.recoltes += 1
   return q
@@ -934,7 +956,7 @@ export function acheterProducteur(j: Joueur, i: number, couleur = 0): Producteur
   const place = placeDApparition(j)
   j.achetes[i] = (j.achetes[i] ?? 0) + 1
   const c = t.genre === 'source' ? couleur : t.genre === 'raffinerie' ? couleurDominante(j) : PRIMAIRES
-  const p: Producteur = { id: j.prochainId++, type: i, x: place.x, y: place.y, couleur: c, forme: t.genre === 'raffinerie' ? 1 : 0, niveau: 1, reserve: 0, progres: 0 }
+  const p: Producteur = { id: j.prochainId++, type: i, x: place.x, y: place.y, couleur: c, forme: t.genre === 'raffinerie' ? 1 : 0, niveau: 1, reserve: 0, progres: 0, entamee: 0 }
   j.producteurs.push(p)
   // LE DÉVOILEMENT : le modèle suivant de la famille.
   const fam = FAMILLE_INDEX[t.genre]

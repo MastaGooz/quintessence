@@ -584,7 +584,9 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
         const mine = j.producteurs.find(estMine)
         const reserve = mine === undefined ? undefined : producteursEl.current.get(mine.id)?.querySelector<HTMLElement>('.reserve')
         if (reserve === null || reserve === undefined) return
-        reserve.classList.add('piece-nait')
+        // Elle naît avec son anneau.
+        const naissante = reserve.closest<HTMLElement>('.reserve-ligne') ?? reserve
+        naissante.classList.add('piece-nait')
         const rr = reserve.getBoundingClientRect()
         eclater(rr.left + rr.width / 2, rr.top + rr.height / 2, 22)
         onde(rr.left + rr.width / 2, rr.top + rr.height / 2, rr.width * 0.7)
@@ -1280,14 +1282,21 @@ function pomperLaReserve(reserve: HTMLElement, impact: DOMRect, pleine: boolean)
 function Reserve({ j, p }: { j: Joueur; p: Producteur }): ReactElement {
   const capacite = capaciteReserve(j, p)
   const pleine = reservePleine(j, p)
-  return (
+  const pilule = (
     <span className={`reserve${pleine ? ' reserve-pleine' : ''}`} data-cliquable data-reserve data-id={p.id} aria-label="Récolter la réserve">
       <span className="reserve-jauge" style={{ width: `${(100 * Math.min(capacite, p.reserve)) / capacite}%` }} />
       <span className="reserve-eclat" />
-      {vitesseAuto(j) > 0 && !pleine && <AnneauAutomatique p={p} />}
       <span className="reserve-texte">
         <Compteur valeur={p.reserve} cle="reserve" format={possede} duree={200} sursautEnBaisse={false} /> / {capacite} <SymbolePiece />
       </span>
+    </span>
+  )
+  if (vitesseAuto(j) <= 0) return pilule
+  // L'anneau à gauche de la réserve (Keko, 02/11 : « essaie de le mettre à gauche de la barre ») ; la ligne a la largeur de celle de la barre de la mine.
+  return (
+    <span className="reserve-ligne">
+      <AnneauAutomatique p={p} pleine={pleine} />
+      {pilule}
     </span>
   )
 }
@@ -1297,22 +1306,21 @@ const TOUR_ANNEAU = 2 * Math.PI * RAYON_ANNEAU
 
 /**
  * L'ANNEAU DE L'AUTOMATIQUE (Keko, 02/11 : « un simple indicateur visuel
- * suffit », « épaissis un peu l'anneau », « la barre de réserve, à
- * l'intérieur à gauche ») : il fait le tour à mesure que la pièce entamée de
- * la réserve se remplit, habillé comme la barre de la mine (fond sombre,
- * liseré crème). La table repeint chaque seconde, il glisse d'une seconde à
- * l'autre ; à chaque pièce tombée, il en naît un neuf (la clé), qui repart de
- * zéro sans revenir en arrière. Réserve pleine : il n'est pas là.
+ * suffit », « épaissis un peu l'anneau », puis « à gauche de la barre » de
+ * réserve) : il fait le tour à mesure que la pièce entamée se remplit,
+ * habillé comme la réserve (fond sombre, liseré d'or). La table repeint
+ * chaque seconde, il glisse d'une seconde à l'autre ; à chaque pièce tombée,
+ * il en naît un neuf (la clé), qui repart de zéro sans revenir en arrière.
+ * Réserve pleine : il reste plein, éteint (la réserve ne bouge pas).
  */
-function AnneauAutomatique({ p }: { p: Producteur }): ReactElement {
-  const entieres = Math.floor(p.reserve + 1e-9)
-  const avance = Math.min(1, Math.max(0, p.reserve - entieres))
+function AnneauAutomatique({ p, pleine }: { p: Producteur; pleine: boolean }): ReactElement {
+  const avance = pleine ? 1 : Math.min(1, Math.max(0, p.entamee ?? 0))
   return (
-    <svg className="reserve-anneau" viewBox="0 0 40 40" aria-hidden>
+    <svg className={`reserve-anneau${pleine ? ' reserve-anneau-arrete' : ''}`} viewBox="0 0 40 40" aria-hidden>
       <circle className="reserve-anneau-fond" cx="20" cy="20" r={RAYON_ANNEAU} />
       <circle className="reserve-anneau-lisere" cx="20" cy="20" r={RAYON_ANNEAU + 4.4} />
       <circle className="reserve-anneau-lisere" cx="20" cy="20" r={RAYON_ANNEAU - 4.4} />
-      <circle key={entieres} className="reserve-anneau-plein" cx="20" cy="20" r={RAYON_ANNEAU} strokeDasharray={TOUR_ANNEAU} strokeDashoffset={TOUR_ANNEAU * (1 - avance)} />
+      <circle key={pleine ? 'pleine' : p.reserve} className="reserve-anneau-plein" cx="20" cy="20" r={RAYON_ANNEAU} strokeDasharray={TOUR_ANNEAU} strokeDashoffset={TOUR_ANNEAU * (1 - avance)} />
     </svg>
   )
 }
