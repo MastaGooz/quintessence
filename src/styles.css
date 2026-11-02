@@ -18,7 +18,8 @@ html {
   font-size: clamp(15px, min(0.6vw + 13px, 2.2vh), 20px);
   background: var(--fond);
   color: var(--creme);
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  /* Baloo 2 (Keko, 02/11 : « utilise une police, les chiffres sont moches, surtout le 4 où on voit les traits des segments ») ; le système en attendant qu'elle arrive. */
+  font-family: 'Baloo 2', 'Segoe UI', system-ui, -apple-system, sans-serif;
   -webkit-text-size-adjust: 100%;
 }
 
@@ -823,8 +824,18 @@ select {
   font-weight: 800;
   font-size: 1.3rem;
   color: var(--creme);
-  -webkit-text-stroke: 0.5px rgba(20, 8, 28, 0.8);
-  text-shadow: 0 2px 0 rgba(20, 8, 28, 0.9), 0 0 10px rgba(0, 0, 0, 0.7);
+  /* Le cerne sombre est fait d'ombres décalées tout autour, pas d'un `text-stroke` : celui-ci trace chaque contour du glyphe, et les morceaux qui se recouvrent (le 4) montraient leurs traits. */
+  text-shadow:
+    1.5px 0 0 rgba(20, 8, 28, 0.85),
+    -1.5px 0 0 rgba(20, 8, 28, 0.85),
+    0 1.5px 0 rgba(20, 8, 28, 0.85),
+    0 -1.5px 0 rgba(20, 8, 28, 0.85),
+    1px 1px 0 rgba(20, 8, 28, 0.85),
+    -1px 1px 0 rgba(20, 8, 28, 0.85),
+    1px -1px 0 rgba(20, 8, 28, 0.85),
+    -1px -1px 0 rgba(20, 8, 28, 0.85),
+    0 3px 0 rgba(20, 8, 28, 0.9),
+    0 0 10px rgba(0, 0, 0, 0.7);
   white-space: nowrap;
   will-change: transform, opacity;
 }
