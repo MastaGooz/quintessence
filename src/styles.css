@@ -21,6 +21,8 @@ html {
   /* Baloo 2 (Keko, 02/11 : « utilise une police, les chiffres sont moches, surtout le 4 où on voit les traits des segments ») ; le système en attendant qu'elle arrive. */
   font-family: 'Baloo 2', 'Segoe UI', system-ui, -apple-system, sans-serif;
   -webkit-text-size-adjust: 100%;
+  /* Pas de voile bleu du téléphone sur ce qu'on touche (Keko, 02/11 : « quand je tape, le carré devient bleu comme une sélection de texte ») : le jeu répond lui-même au doigt. */
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {

@@ -906,7 +906,7 @@ function TexteProducteur({ j, p, b, actif }: { j: Joueur; p: Producteur; b: Retu
             </small>
           )}
           <small className="sourd">
-            {abregeFin(b.tapeMoyenne)} <SymbolePiece /> par tape
+            +{abregeFin(b.tapeMoyenne)} <SymbolePiece />
           </small>
         </span>
       </span>
