@@ -24,8 +24,8 @@ export const BOTS: (Strategie & { visites: number })[] = [
 export const PAS = 0.25
 
 export interface Partie {
-  /** 10 : la première quête et l'automatisation de la mine (Keko, 02/11) ; une sauvegarde plus ancienne est abandonnée. */
-  version: 10
+  /** 11 : la réserve de la mine (Keko, 02/11) ; une sauvegarde 10 reçoit des réserves vides, une plus ancienne est abandonnée. */
+  version: 11
   graine: number
   monde: Monde
   /** Par bot, l'instant de sa dernière visite jouée. */
@@ -33,7 +33,7 @@ export interface Partie {
 }
 
 export function nouvellePartie(graine: number, nomDuJoueur: string): Partie {
-  return { version: 10, graine, monde: nouveauMonde([nomDuJoueur, ...BOTS.map((b) => b.nom)], graine), dernieresVisites: BOTS.map(() => -1) }
+  return { version: 11, graine, monde: nouveauMonde([nomDuJoueur, ...BOTS.map((b) => b.nom)], graine), dernieresVisites: BOTS.map(() => -1) }
 }
 
 export function joueur(p: Partie): Joueur {
@@ -89,8 +89,17 @@ export function serialiser(p: Partie): string {
 export function deserialiser(texte: string): Partie | null {
   try {
     const p = JSON.parse(texte) as Partie
-    if (p === null || typeof p !== 'object' || p.version !== 10) return null
+    if (p === null || typeof p !== 'object') return null
     if (!Array.isArray(p.monde?.joueurs) || p.monde.joueurs.length !== BOTS.length + 1) return null
+    // Une partie de la version 10 (la première quête) se garde : ses mines reçoivent une réserve vide.
+    if ((p.version as number) === 10) {
+      for (const j of p.monde.joueurs) {
+        for (const pr of j.producteurs) pr.reserve ??= 0
+        j.journal.recoltes ??= 0
+      }
+      p.version = 11
+    }
+    if (p.version !== 11) return null
     if (!Array.isArray(p.dernieresVisites)) return null
     return p
   } catch {

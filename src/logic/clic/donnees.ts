@@ -222,6 +222,16 @@ export const QUETES: readonly Quete[] = [{ id: 'premier-or', or: 50, recompense:
  */
 export const AUTOMATISATION = { cout: 50, tics: 1 }
 
+/**
+ * LA RÉSERVE DE LA MINE (Keko, 02/11 : « une limite à la quantité d'or
+ * obtenue en auto, qu'elle ne soit pas ajoutée à l'or mais dans la réserve de
+ * la mine, et que le joueur doive cliquer pour l'ajouter ») : l'or de
+ * l'automatisation s'y accumule jusqu'à `capacite` ; pleine, la mine s'arrête
+ * et ce qu'elle aurait produit est perdu. Une tape sur la réserve la récolte.
+ * Chiffre de moi, à rejuger : une minute d'automatisation.
+ */
+export const RESERVE_MINE = { capacite: 60 }
+
 /** Tous les types de générateurs, par famille. `type` d'un producteur est un indice ici. */
 export const PRODUCTEURS: readonly TypeProducteur[] = [...SOURCES, ...RAFFINERIES, ...MELANGEURS, MINE]
 /** L'indice de la mine dans `PRODUCTEURS`. */

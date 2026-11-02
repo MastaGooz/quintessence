@@ -1119,6 +1119,9 @@ select {
 .mine-picto {
   width: 280px;
   height: 280px;
+  /* L'image cède de la hauteur quand la réserve arrive dans le carré. */
+  flex: 0 1 280px;
+  min-height: 0;
   object-fit: contain;
   pointer-events: none;
   user-select: none;
@@ -1137,6 +1140,63 @@ select {
 .producteur .mine-nom {
   font-size: 40px;
   color: var(--creme);
+}
+
+/* LA RÉSERVE de la mine (Keko, 02/11) : une jauge d'or qui se remplit par l'automatisation ; pleine, elle pulse ; une tape la récolte. */
+.reserve {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 320px;
+  /* Au zoom du téléphone, au moins 48 pixels sous le doigt. */
+  height: 84px;
+  border-radius: 42px;
+  background: rgba(20, 8, 28, 0.65);
+  border: 3px solid rgba(255, 198, 31, 0.55);
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.08s ease-out;
+}
+
+.reserve-jauge {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(90deg, #7a5600, #c89412);
+  transition: width 0.5s ease-out;
+}
+
+.producteur .reserve-texte {
+  position: relative;
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--creme);
+  text-shadow: 1.5px 0 0 rgba(20, 8, 28, 0.85), -1.5px 0 0 rgba(20, 8, 28, 0.85), 0 1.5px 0 rgba(20, 8, 28, 0.85), 0 -1.5px 0 rgba(20, 8, 28, 0.85), 0 3px 0 rgba(20, 8, 28, 0.9);
+}
+
+.reserve.enfonce {
+  transform: scale(0.95);
+}
+
+.reserve-pleine {
+  border-color: var(--or);
+  animation: reserve-pleine 1.2s ease-in-out infinite;
+}
+
+.reserve-pleine .reserve-jauge {
+  background: linear-gradient(90deg, #d9a514, var(--or), #ffe27a);
+}
+
+@keyframes reserve-pleine {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 198, 31, 0);
+  }
+  50% {
+    box-shadow: 0 0 26px 6px rgba(255, 198, 31, 0.55);
+  }
 }
 
 .producteur-texte {

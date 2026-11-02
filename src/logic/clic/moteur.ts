@@ -31,7 +31,7 @@
  */
 import {
   ACHAT, AUTOMATISATION, CASE, COULEURS, EFFETS, EMPLACEMENTS, FABRICATION, FAMILLES, FORMES, FUSION, MARCHE, MELANGE, MODULE, NIVEAU, NIVEAU_SOURCE, PIECE, PRESTIGE, PRIMAIRES, PRODUCTEUR,
-  PRODUCTEURS, QUETES, RARETES, SORTES, TRAITS, TYPE_MINE, VALEUR_MODULE, aDuBleu, couleurDe, formeDe, partsDe, sorteDe,
+  PRODUCTEURS, QUETES, RARETES, RESERVE_MINE, SORTES, TRAITS, TYPE_MINE, VALEUR_MODULE, aDuBleu, couleurDe, formeDe, partsDe, sorteDe,
   type Cout, type Genre, type Qualite, type Quete, type Recompense, type Trait, type TypeProducteur,
 } from './donnees.ts'
 import { graineDe, rngDe } from '../rng.ts'
@@ -49,6 +49,8 @@ export interface Producteur {
   forme: number
   /** Source : son niveau, qui multiplie son lot de base. */
   niveau: number
+  /** Mine : l'or de l'automatisation qui attend d'être récolté (voir `RESERVE_MINE`). */
+  reserve: number
 }
 
 /** UN MODULE : une pièce d'une couleur et d'une forme, d'une rareté, emboîtée sur un générateur ou dans la soute. */
@@ -109,7 +111,7 @@ export interface Joueur {
   /** Les fabrications depuis le dernier rare, le dernier épique : la garantie. */
   sansRare: number
   sansEpique: number
-  journal: { tapes: number; fabrications: number; ventes: number; achats: number; orVentes: number; orAchats: number; fusions: number }
+  journal: { tapes: number; fabrications: number; ventes: number; achats: number; orVentes: number; orAchats: number; fusions: number; recoltes: number }
 }
 
 /** LE MARCHÉ : par sorte, le volume net vendu récemment, la demande suivie, et le prix de chaque heure passée. */
@@ -132,7 +134,7 @@ const PAS_Y = 3 * CASE
 
 /** Ce qu'un joueur a au départ (et après un prestige) : la mine d'or seule, au centre du plan. */
 function depart(): Producteur[] {
-  return [{ id: 1, type: TYPE_MINE, x: 0, y: 0, couleur: 0, forme: 0, niveau: 1 }]
+  return [{ id: 1, type: TYPE_MINE, x: 0, y: 0, couleur: 0, forme: 0, niveau: 1, reserve: 0 }]
 }
 
 export function nouveauJoueur(id: number, nom: string): Joueur {
@@ -162,7 +164,7 @@ export function nouveauJoueur(id: number, nom: string): Joueur {
     tirages: 0,
     sansRare: 0,
     sansEpique: 0,
-    journal: { tapes: 0, fabrications: 0, ventes: 0, achats: 0, orVentes: 0, orAchats: 0, fusions: 0 },
+    journal: { tapes: 0, fabrications: 0, ventes: 0, achats: 0, orVentes: 0, orAchats: 0, fusions: 0, recoltes: 0 },
   }
 }
 
@@ -596,6 +598,33 @@ function produireOr(j: Joueur, q: number): void {
   j.orProduit += q
 }
 
+/** Ce que la réserve d'une mine peut contenir. */
+export function capaciteReserve(j: Joueur, p: Producteur): number {
+  void j
+  void p
+  return RESERVE_MINE.capacite
+}
+
+export function reservePleine(j: Joueur, p: Producteur): boolean {
+  return estMine(p) && (p.reserve ?? 0) + 1e-9 >= capaciteReserve(j, p)
+}
+
+/** L'or automatique entre dans la réserve de la mine, jusqu'à sa capacité ; le reste est perdu. */
+function remplirReserve(j: Joueur, p: Producteur, q: number): void {
+  if (q <= 0) return
+  p.reserve = Math.min(capaciteReserve(j, p), (p.reserve ?? 0) + q)
+}
+
+/** RÉCOLTER la réserve d'une mine : son or passe dans la bourse du joueur (et à son score). Rend l'or récolté. */
+export function recolter(j: Joueur, p: Producteur): number {
+  const q = estMine(p) ? (p.reserve ?? 0) : 0
+  if (q <= 0) return 0
+  p.reserve = 0
+  produireOr(j, q)
+  j.journal.recoltes += 1
+  return q
+}
+
 /** Ce que la matière en stock permet de convertir d'un coup sur ce générateur, par unité de lot : le plus petit de ses stocks d'entrée. */
 export function disponible(j: Joueur, p: Producteur): number {
   const e = entrees(p)
@@ -785,7 +814,7 @@ export function acheterProducteur(j: Joueur, i: number, couleur = 0): Producteur
   const place = placeDApparition(j)
   j.achetes[i] = (j.achetes[i] ?? 0) + 1
   const c = t.genre === 'source' ? couleur : t.genre === 'raffinerie' ? couleurDominante(j) : PRIMAIRES
-  const p: Producteur = { id: j.prochainId++, type: i, x: place.x, y: place.y, couleur: c, forme: t.genre === 'raffinerie' ? 1 : 0, niveau: 1 }
+  const p: Producteur = { id: j.prochainId++, type: i, x: place.x, y: place.y, couleur: c, forme: t.genre === 'raffinerie' ? 1 : 0, niveau: 1, reserve: 0 }
   j.producteurs.push(p)
   // LE DÉVOILEMENT : le modèle suivant de la famille.
   const fam = FAMILLE_INDEX[t.genre]
@@ -1276,7 +1305,8 @@ export function avancer(m: Monde, dt: number): void {
     for (const p of ordonnes) {
       const b = bilanProducteur(j, p)
       if (b.frequence <= 0) continue
-      if (estMine(p)) produireOr(j, b.debit * 3600 * dt)
+      // L'or automatique de la mine va dans sa réserve, pas dans la bourse : il faut le récolter.
+      if (estMine(p)) remplirReserve(j, p, b.debit * 3600 * dt)
       else if (estSource(p)) produire(j, sortie(p), b.debit * 3600 * dt)
       else convertir(j, p, b.debit * 3600 * dt)
     }
