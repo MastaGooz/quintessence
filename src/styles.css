@@ -1256,6 +1256,52 @@ select {
   display: inline-block;
 }
 
+/* LE BOUTON DES AMÉLIORATIONS, en haut à droite de la mine ; doré et battant quand quelque chose s'achète. */
+.mine-ameliorer {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 68px;
+  height: 68px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: rgba(20, 8, 28, 0.75);
+  border: 3px solid rgba(255, 198, 31, 0.55);
+  color: var(--or);
+  cursor: pointer;
+  transition: transform 0.08s ease-out;
+}
+
+.mine-ameliorer svg {
+  width: 36px;
+  height: 36px;
+  fill: currentColor;
+}
+
+.mine-ameliorer-pret {
+  background: linear-gradient(180deg, #ffe27a, #e0a812);
+  border-color: #fff3c4;
+  color: #3a2408;
+  animation: mine-ameliorer 1.3s ease-in-out infinite;
+}
+
+@keyframes mine-ameliorer {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 198, 31, 0);
+  }
+  50% {
+    box-shadow: 0 0 24px 6px rgba(255, 198, 31, 0.6);
+  }
+}
+
+.mine-ameliorer.enfonce {
+  transform: scale(0.9);
+}
+
 /* LA RÉSERVE de la mine (Keko, 02/11) : une jauge d'or qui se remplit par l'automatisation ; pleine, elle pulse ; une tape la récolte. */
 .reserve {
   position: relative;
@@ -1897,51 +1943,6 @@ span.rarete-4,
 
 .carte-hud > * {
   pointer-events: auto;
-}
-
-/* LE BOUTON DES AMÉLIORATIONS, en haut à droite ; doré et battant quand quelque chose s'achète. Les stocks passent dessous. */
-.carte-ameliorer {
-  position: absolute;
-  top: 0.7rem;
-  right: 0.9rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 3rem;
-  height: 3rem;
-  min-height: 3rem;
-  padding: 0;
-  border-radius: 50%;
-  background: rgba(20, 8, 28, 0.75);
-  border: 2px solid rgba(255, 198, 31, 0.55);
-  color: var(--or);
-}
-
-.carte-ameliorer svg {
-  width: 1.6rem;
-  height: 1.6rem;
-  fill: currentColor;
-}
-
-.carte-ameliorer-pret {
-  background: linear-gradient(180deg, #ffe27a, #e0a812);
-  border-color: #fff3c4;
-  color: #3a2408;
-  animation: carte-ameliorer 1.3s ease-in-out infinite;
-}
-
-@keyframes carte-ameliorer {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(255, 198, 31, 0);
-  }
-  50% {
-    box-shadow: 0 0 20px 5px rgba(255, 198, 31, 0.6);
-  }
-}
-
-.carte-ameliorer ~ .stocks {
-  top: 4.3rem;
 }
 
 .carte-zoom {

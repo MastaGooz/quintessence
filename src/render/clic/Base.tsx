@@ -652,8 +652,9 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
       flotter(r.left + r.width / 2, r.top - 6, bouton ? 'Les améliorations sont ouvertes !' : 'Une amélioration au choix !', 'flottant-or', 1.2)
     }
     if (bouton) {
-      // LE BOUTON DES AMÉLIORATIONS APPARAÎT en haut à droite : il naît, éclate.
-      faireNaitre(() => document.querySelector<HTMLElement>('.carte-ameliorer'))
+      // LE BOUTON DES AMÉLIORATIONS APPARAÎT en haut à droite de la mine : il naît, éclate.
+      const mine = j.producteurs.find(estMine)
+      faireNaitre(() => (mine === undefined ? undefined : producteursEl.current.get(mine.id)?.querySelector<HTMLElement>('.mine-ameliorer')))
       return
     }
     // Le choix s'ouvre de lui-même, le temps de voir l'éclat.
@@ -693,6 +694,8 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
         const pr = Number.isNaN(id) ? undefined : producteurDe(j, id)
         // La réserve de la mine se tape à part : elle se récolte, la mine ne se déclenche pas.
         if (pr !== undefined && cible !== null && cible.dataset['reserve'] !== undefined) recolterIci(pr, cible)
+        // Le bouton des améliorations aussi : il ouvre leur menu.
+        else if (pr !== undefined && cible !== null && cible.dataset['ameliorer'] !== undefined) setMenuOuvert(true)
         else if (pr !== undefined) declencherIci(pr, sx, sy)
         setBulle(null)
       },
@@ -912,7 +915,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
   else if (rien && automatiqueEnVente(j))
     indice = (
       <>
-        Améliorations, en haut à droite : l’automatique remplit la barre de la mine, même sans vous, pour {PRIX_AUTOMATIQUE} <SymbolePiece />.
+        Touchez la flèche de la mine : l’automatique remplit sa barre même sans vous, pour {PRIX_AUTOMATIQUE} <SymbolePiece />.
       </>
     )
   else if (rien && mine !== undefined && j.journal.recoltes === 0 && mine.reserve >= 1) indice = 'L’automatique remplit la réserve, même en votre absence : tapez-la pour récolter.'
@@ -1157,23 +1160,6 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
         <span className="carte-zoom" ref={zoomVu}>
           ×1,0
         </span>
-        {/* LE BOUTON DES AMÉLIORATIONS (Keko, 02/11 : « un bouton générique d'upgrade en haut à droite ») : il respire quand quelque chose s'achète. */}
-        {ameliorationsOuvertes(j) && (
-          <button
-            type="button"
-            className={`carte-ameliorer${automatiqueEnVente(j) && j.or + 1e-9 >= PRIX_AUTOMATIQUE ? ' carte-ameliorer-pret' : ''}`}
-            onClick={() => {
-              setBulle(null)
-              setMenuOuvert(true)
-            }}
-            aria-label="Améliorations"
-            title="Améliorations"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden>
-              <path d="M12 3 L21 12.5 H15.5 V21 H8.5 V12.5 H3 Z" />
-            </svg>
-          </button>
-        )}
         {(rondes >= 10 || j.matiere.some((q) => q >= 1)) && (
           <div className="stocks">
             {stocksVus.map((s) => (
@@ -1398,6 +1384,22 @@ function Reserve({ j, p }: { j: Joueur; p: Producteur }): ReactElement {
   )
 }
 
+/**
+ * LE BOUTON DES AMÉLIORATIONS, en haut à droite de la mine (Keko, 02/11 : « un bouton générique d'upgrade en haut à droite de la
+ * mine, qui ouvre le menu upgrade qu'on a déjà ») : doré et battant quand quelque chose s'achète. Il se tape à part de la mine
+ * (`data-ameliorer`).
+ */
+function BoutonAmeliorer({ j, p }: { j: Joueur; p: Producteur }): ReactElement {
+  const pret = automatiqueEnVente(j) && j.or + 1e-9 >= PRIX_AUTOMATIQUE
+  return (
+    <span className={`mine-ameliorer${pret ? ' mine-ameliorer-pret' : ''}`} data-cliquable data-ameliorer data-id={p.id} role="button" aria-label="Améliorations">
+      <svg viewBox="0 0 24 24" aria-hidden>
+        <path d="M12 3 L21 12.5 H15.5 V21 H8.5 V12.5 H3 Z" />
+      </svg>
+    </span>
+  )
+}
+
 /** L'image de la mine : celle de Keko (`public/mine.webp`, servie avec la date du build) quand elle est là ; sinon, le pictogramme d'attente dessiné en code. */
 function ImageMine(): ReactElement {
   const [absente, setAbsente] = useState(false)
@@ -1428,6 +1430,7 @@ function TexteProducteur({ j, p, b, actif }: { j: Joueur; p: Producteur; b: Retu
     // LA MINE D'OR : son image, son nom, sa BARRE (qui se remplit seule : son remplissage est posé image par image, voir plus haut) et ce qu'elle rend, sa réserve.
     return (
       <span className="mine">
+        {ameliorationsOuvertes(j) && <BoutonAmeliorer j={j} p={p} />}
         <ImageMine />
         <b className="mine-nom">{NOM_MINE}</b>
         <span className="mine-production">
