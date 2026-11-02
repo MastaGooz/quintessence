@@ -1873,6 +1873,123 @@ span.rarete-4,
   box-shadow: 0 0 0 1px var(--or), 0 0 26px rgba(255, 198, 31, 0.35), 0 6px 18px rgba(0, 0, 0, 0.45);
 }
 
+/* LE CHOIX D'UNE AMÉLIORATION : des cartes qui arrivent l'une après l'autre ; une tape en prend une. */
+.choix-ameliorations {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding-bottom: 0.4rem;
+}
+
+.amelioration-carte {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  width: 100%;
+  padding: 0.8rem 1rem;
+  text-align: left;
+  border-radius: 0.9rem;
+  background: linear-gradient(160deg, #3b2a4c, #2a1d38);
+  border: 2px solid rgba(255, 198, 31, 0.55);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+  animation: carte-arrive 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+
+.amelioration-carte:not(:disabled):hover {
+  border-color: var(--or);
+  box-shadow: 0 0 0 1px var(--or), 0 0 22px rgba(255, 198, 31, 0.35), 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+.amelioration-tete {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  width: 100%;
+}
+
+.amelioration-nom {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--or);
+}
+
+.amelioration-niveau {
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.amelioration-effet {
+  font-size: 0.95rem;
+}
+
+@keyframes carte-arrive {
+  from {
+    transform: translateY(1.2rem) scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+/* « Critique ! » au-dessus du doigt. */
+.flottant-critique {
+  color: #ff9a5c;
+  font-size: 1.5rem;
+}
+
+/* LES PÉPITES : une pierre d'or taillée qui jaillit de la mine, luit, clignote avant de se perdre. */
+.pepite {
+  position: absolute;
+  z-index: 5;
+  width: 100px;
+  height: 100px;
+  cursor: pointer;
+  filter: drop-shadow(0 0 12px rgba(255, 210, 60, 0.85)) drop-shadow(0 6px 6px rgba(0, 0, 0, 0.5));
+  animation:
+    pepite-jaillit 0.55s cubic-bezier(0.2, 1.4, 0.4, 1) backwards,
+    pepite-luit 0.7s ease-in-out 0.55s infinite alternate,
+    pepite-clignote 0.3s steps(2, jump-none) calc(var(--duree) - 1.5s) infinite;
+  transition: transform 0.08s ease-out;
+}
+
+.pepite::before {
+  content: '';
+  position: absolute;
+  inset: 14px;
+  clip-path: polygon(30% 4%, 72% 0%, 100% 34%, 92% 78%, 58% 100%, 14% 90%, 0% 52%);
+  background: radial-gradient(circle at 34% 28%, #fff8d0 0%, #ffd84a 26%, #e0a400 62%, #8a5a00 100%);
+}
+
+.pepite.enfonce {
+  transform: scale(0.88);
+}
+
+@keyframes pepite-jaillit {
+  from {
+    transform: translate(var(--depuis-x), var(--depuis-y)) scale(0.2) rotate(-90deg);
+    opacity: 0;
+  }
+}
+
+@keyframes pepite-luit {
+  to {
+    filter: drop-shadow(0 0 22px rgba(255, 220, 90, 1)) drop-shadow(0 6px 6px rgba(0, 0, 0, 0.5)) brightness(1.15);
+  }
+}
+
+@keyframes pepite-clignote {
+  50% {
+    opacity: 0.35;
+  }
+}
+
 @keyframes objectif-nait {
   from {
     transform: scale(0.85);

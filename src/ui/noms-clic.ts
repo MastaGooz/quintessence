@@ -3,7 +3,7 @@
  * 01/11 : « revenons au système abstrait »). Une matière se nomme par sa forme
  * et sa couleur (« carré rouge », « rond bleu ») ; l'habillage viendra après.
  */
-import { FABRICATION, PRIMAIRES, PRODUCTEURS, RARETES, couleurDe, formeDe, partsDe, type Genre, type Recompense, type Trait } from '../logic/clic/donnees.ts'
+import { FABRICATION, PRIMAIRES, PRODUCTEURS, RARETES, couleurDe, formeDe, partsDe, type Genre, type IdAmelioration, type Recompense, type Trait } from '../logic/clic/donnees.ts'
 import { rangDe } from '../logic/clic/moteur.ts'
 
 /** La ressource, en un mot. */
@@ -56,7 +56,20 @@ export const NOM_MINE = 'Mine d’or'
 /** L'amélioration qui fait taper la mine toute seule. */
 export const NOM_AUTOMATISATION = 'Automatisation'
 /** Ce qu'une quête débloque, tel qu'on l'annonce sur sa carte. */
-export const NOM_RECOMPENSE: Record<Recompense, string> = { automatisation: 'l’automatisation' }
+export const NOM_RECOMPENSE: Record<Recompense, string> = { automatisation: 'l’automatisation', choix: 'une amélioration au choix' }
+/** Les améliorations de la mine (Keko, 02/11). */
+export const NOM_AMELIORATION: Record<IdAmelioration, string> = {
+  pioche: 'Pioche',
+  puissance: 'Puissance',
+  critique: 'Critique',
+  forceCritique: 'Force du critique',
+  elan: 'Élan',
+  pepite: 'Pépites',
+  cadence: 'Cadence',
+  reserve: 'Grande réserve',
+  prime: 'Prime de réserve pleine',
+  tropPlein: 'Trop-plein',
+}
 
 export const NOM_GENRE: Record<Genre, string> = { source: 'source', raffinerie: 'raffinerie', melangeur: 'mélangeur', mine: 'mine' }
 const MAJUSCULE: Record<Genre, string> = { source: 'Source', raffinerie: 'Raffinerie', melangeur: 'Mélangeur', mine: 'Mine' }

@@ -5,7 +5,7 @@
  * lit l'horloge : c'est `ui/` qui dit quelle heure il est.
  */
 import { SAISON_H } from './donnees.ts'
-import { avancer, nouveauMonde, type Joueur, type Monde } from './moteur.ts'
+import { avancer, niveauxVides, nouveauMonde, type Joueur, type Monde } from './moteur.ts'
 import { visiter, type Strategie } from './bots.ts'
 import { graineDe, rngDe } from '../rng.ts'
 
@@ -24,8 +24,8 @@ export const BOTS: (Strategie & { visites: number })[] = [
 export const PAS = 0.25
 
 export interface Partie {
-  /** 11 : la réserve de la mine (Keko, 02/11) ; une sauvegarde 10 reçoit des réserves vides, une plus ancienne est abandonnée. */
-  version: 11
+  /** 12 : les améliorations de la mine au choix (Keko, 02/11) ; une sauvegarde 10 ou 11 reçoit ce qui lui manque, une plus ancienne est abandonnée. */
+  version: 12
   graine: number
   monde: Monde
   /** Par bot, l'instant de sa dernière visite jouée. */
@@ -33,7 +33,7 @@ export interface Partie {
 }
 
 export function nouvellePartie(graine: number, nomDuJoueur: string): Partie {
-  return { version: 11, graine, monde: nouveauMonde([nomDuJoueur, ...BOTS.map((b) => b.nom)], graine), dernieresVisites: BOTS.map(() => -1) }
+  return { version: 12, graine, monde: nouveauMonde([nomDuJoueur, ...BOTS.map((b) => b.nom)], graine), dernieresVisites: BOTS.map(() => -1) }
 }
 
 export function joueur(p: Partie): Joueur {
@@ -91,15 +91,18 @@ export function deserialiser(texte: string): Partie | null {
     const p = JSON.parse(texte) as Partie
     if (p === null || typeof p !== 'object') return null
     if (!Array.isArray(p.monde?.joueurs) || p.monde.joueurs.length !== BOTS.length + 1) return null
-    // Une partie de la version 10 (la première quête) se garde : ses mines reçoivent une réserve vide.
-    if ((p.version as number) === 10) {
+    // Une partie des versions 10 (la première quête) et 11 (la réserve) se garde : elle reçoit des réserves vides, aucune amélioration.
+    if ((p.version as number) === 10 || (p.version as number) === 11) {
       for (const j of p.monde.joueurs) {
         for (const pr of j.producteurs) pr.reserve ??= 0
         j.journal.recoltes ??= 0
+        j.ameliorations ??= niveauxVides()
+        j.offre ??= null
+        j.pepites ??= 0
       }
-      p.version = 11
+      p.version = 12
     }
-    if (p.version !== 11) return null
+    if (p.version !== 12) return null
     if (!Array.isArray(p.dernieresVisites)) return null
     return p
   } catch {

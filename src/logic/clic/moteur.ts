@@ -31,8 +31,8 @@
  */
 import {
   ACHAT, AUTOMATISATION, CASE, COULEURS, EFFETS, EMPLACEMENTS, FABRICATION, FAMILLES, FORMES, FUSION, MARCHE, MELANGE, MODULE, NIVEAU, NIVEAU_SOURCE, PIECE, PRESTIGE, PRIMAIRES, PRODUCTEUR,
-  PRODUCTEURS, QUETES, RARETES, RESERVE_MINE, SORTES, TRAITS, TYPE_MINE, VALEUR_MODULE, aDuBleu, couleurDe, formeDe, partsDe, sorteDe,
-  type Cout, type Genre, type Qualite, type Quete, type Recompense, type Trait, type TypeProducteur,
+  PRODUCTEURS, QUETES, QUETE_CHOIX, RARETES, RESERVE_MINE, SORTES, AMELIORATIONS, EFFETS_MINE, IDS_AMELIORATIONS, TRAITS, TYPE_MINE, VALEUR_MODULE, aDuBleu, couleurDe, formeDe, partsDe, sorteDe,
+  type Cout, type Genre, type IdAmelioration, type Qualite, type Quete, type Recompense, type Trait, type TypeProducteur,
 } from './donnees.ts'
 import { graineDe, rngDe } from '../rng.ts'
 
@@ -84,6 +84,12 @@ export interface Joueur {
   debloques: Recompense[]
   /** L'automatisation de la mine achetée (0 ou 1) : elle se tape seule. */
   automatisation: number
+  /** Le niveau de chaque amélioration de la mine (voir `AMELIORATIONS`). */
+  ameliorations: Record<IdAmelioration, number>
+  /** Les améliorations proposées par une quête de choix, en attendant qu'on en choisisse une. */
+  offre: IdAmelioration[] | null
+  /** Les pépites tombées, pas encore tapées ni perdues. */
+  pepites: number
   /** La matière en stock, par sorte (voir `sorteDe`). */
   matiere: number[]
   producteurs: Producteur[]
@@ -129,6 +135,11 @@ export interface Monde {
   marche: Marche
 }
 
+/** Aucune amélioration : tous les niveaux à zéro. */
+export function niveauxVides(): Record<IdAmelioration, number> {
+  return Object.fromEntries(IDS_AMELIORATIONS.map((id) => [id, 0])) as Record<IdAmelioration, number>
+}
+
 /** Le pas vertical des places d'apparition des générateurs. */
 const PAS_Y = 3 * CASE
 
@@ -147,6 +158,9 @@ export function nouveauJoueur(id: number, nom: string): Joueur {
     queteDepuis: 0,
     debloques: [],
     automatisation: 0,
+    ameliorations: niveauxVides(),
+    offre: null,
+    pepites: 0,
     matiere: Array.from({ length: SORTES }, () => 0),
     producteurs: depart(),
     modules: [],
@@ -481,6 +495,8 @@ export interface Bilan {
   frequence: number
   /** Le lot moyen fois la fréquence : de la matière par seconde. */
   debit: number
+  /** Ce que multiplie un critique. */
+  multCritique: number
 }
 
 /**
@@ -515,7 +531,7 @@ export function bilan(lot0: number, mods: readonly ModuleAgissant[], prestige: n
   const tape = lot * (1 + (ajout[0] ?? 0)) * (mult[0] ?? 1)
   const tapeMoyenne = tape * (1 + (EFFETS.coup - 1) * chanceCritique) * gros
   const frequence = horloge * (mult[2] ?? 1) * (1 + chanceRafale)
-  return { lot, lotMoyen, tape, tapeMoyenne, chanceCritique, chanceGrosLot, frequence, debit: lotMoyen * frequence }
+  return { lot, lotMoyen, tape, tapeMoyenne, chanceCritique, chanceGrosLot, frequence, debit: lotMoyen * frequence, multCritique: EFFETS.coup }
 }
 
 /** Le lot de base d'un générateur : celui de son type, fois le niveau d'une source ou de la mine. */
@@ -528,9 +544,63 @@ export function horlogeDeBase(j: Joueur, p: Producteur): number {
   return estMine(p) ? j.automatisation * AUTOMATISATION.tics : 0
 }
 
-/** Le bilan d'un générateur tel qu'il est équipé. */
+/** Le bilan d'un générateur tel qu'il est équipé ; la mine, par ses améliorations. */
 export function bilanProducteur(j: Joueur, p: Producteur): Bilan {
+  if (estMine(p)) return bilanMine(j, p)
   return bilan(lotDeBase(p), modulesDe(j, p), multiplicateurPrestige(j), horlogeDeBase(j, p))
+}
+
+/** Ce que la pioche ajoute à chaque tape au niveau n : 1 + 2 + … + n. */
+export function bonusPioche(n: number): number {
+  return (EFFETS_MINE.pioche * n * (n + 1)) / 2
+}
+
+/**
+ * LE BILAN DE LA MINE, par ses améliorations : une tape rend son lot plus la
+ * pioche, fois la puissance ; un critique multiplie ; l'automatisation tape à
+ * sa cadence, avec le lot seul (la pioche et la puissance sont des forces de
+ * la main).
+ */
+export function bilanMine(j: Joueur, p: Producteur): Bilan {
+  const n = j.ameliorations
+  const prestige = multiplicateurPrestige(j)
+  const lot = lotDeBase(p) * prestige
+  const tape = (lotDeBase(p) + bonusPioche(n.pioche)) * (1 + EFFETS_MINE.puissance * n.puissance) * prestige
+  const chanceCritique = Math.min(1, EFFETS_MINE.critique * n.critique)
+  const multCritique = EFFETS_MINE.critiqueBase + EFFETS_MINE.forceCritique * n.forceCritique
+  const frequence = horlogeDeBase(j, p) * (1 + EFFETS_MINE.cadence * n.cadence)
+  return { lot, lotMoyen: lot, tape, tapeMoyenne: tape * (1 + (multCritique - 1) * chanceCritique), chanceCritique, chanceGrosLot: 0, frequence, debit: lot * frequence, multCritique }
+}
+
+/** L'élan : ce que vaut la tape de rang `serie` dans une série (0 : la première). */
+export function facteurElan(j: Joueur, serie: number): number {
+  const n = j.ameliorations.elan
+  return 1 + Math.min(EFFETS_MINE.elanPlafond * n, EFFETS_MINE.elanPas * n * Math.max(0, serie))
+}
+
+/** La chance qu'une tape fasse tomber une pépite. */
+export function chancePepite(j: Joueur): number {
+  return Math.min(1, EFFETS_MINE.pepiteChance * j.ameliorations.pepite)
+}
+
+/** Ce que vaut une pépite tapée : tant de tapes de la mine. */
+export function valeurPepite(j: Joueur): number {
+  const mine = j.producteurs.find(estMine)
+  return mine === undefined ? 0 : EFFETS_MINE.pepiteValeur * bilanMine(j, mine).tape
+}
+
+/** Ramasse une pépite tombée : son or entre dans la bourse. Rend l'or, ou 0 s'il n'y en avait pas. */
+export function ramasserPepite(j: Joueur): number {
+  if (j.pepites <= 0) return 0
+  j.pepites -= 1
+  const q = valeurPepite(j)
+  produireOr(j, q)
+  return q
+}
+
+/** Une pépite non tapée à temps est perdue. */
+export function perdrePepite(j: Joueur): void {
+  j.pepites = Math.max(0, j.pepites - 1)
 }
 
 /** L'or par seconde du joueur : ses mines, par leurs horloges. */
@@ -598,26 +668,36 @@ function produireOr(j: Joueur, q: number): void {
   j.orProduit += q
 }
 
-/** Ce que la réserve d'une mine peut contenir. */
+/** Ce que la réserve d'une mine peut contenir : sa capacité, grandie par l'amélioration. */
 export function capaciteReserve(j: Joueur, p: Producteur): number {
-  void j
   void p
-  return RESERVE_MINE.capacite
+  return Math.round(RESERVE_MINE.capacite * (1 + EFFETS_MINE.reserve * j.ameliorations.reserve))
+}
+
+/** La part de l'or d'une réserve pleine qui coule quand même dans la bourse (le trop-plein). */
+export function partTropPlein(j: Joueur): number {
+  return Math.min(1, EFFETS_MINE.tropPlein * j.ameliorations.tropPlein)
 }
 
 export function reservePleine(j: Joueur, p: Producteur): boolean {
   return estMine(p) && (p.reserve ?? 0) + 1e-9 >= capaciteReserve(j, p)
 }
 
-/** L'or automatique entre dans la réserve de la mine, jusqu'à sa capacité ; le reste est perdu. */
+/** L'or automatique entre dans la réserve de la mine, jusqu'à sa capacité ; du reste, le trop-plein coule dans la bourse, le reste est perdu. */
 function remplirReserve(j: Joueur, p: Producteur, q: number): void {
   if (q <= 0) return
-  p.reserve = Math.min(capaciteReserve(j, p), (p.reserve ?? 0) + q)
+  const avant = p.reserve ?? 0
+  const capacite = capaciteReserve(j, p)
+  p.reserve = Math.min(capacite, avant + q)
+  const deborde = q - (p.reserve - avant)
+  if (deborde > 0) produireOr(j, deborde * partTropPlein(j))
 }
 
 /** RÉCOLTER la réserve d'une mine : son or passe dans la bourse du joueur (et à son score). Rend l'or récolté. */
 export function recolter(j: Joueur, p: Producteur): number {
-  const q = estMine(p) ? (p.reserve ?? 0) : 0
+  // Une réserve PLEINE récoltée rapporte la prime.
+  const prime = reservePleine(j, p) ? 1 + EFFETS_MINE.prime * j.ameliorations.prime : 1
+  const q = estMine(p) ? (p.reserve ?? 0) * prime : 0
   if (q <= 0) return 0
   p.reserve = 0
   produireOr(j, q)
@@ -649,6 +729,8 @@ export interface Coup {
   /** La sorte gagnée ; sans sens quand `or` est vrai. */
   sorte: number
   or: boolean
+  /** Une pépite est tombée. */
+  pepite?: boolean
 }
 
 /**
@@ -657,10 +739,20 @@ export interface Coup {
  * 0 à 1) décide du critique et du gros lot ; sans lui, la moyenne (les bots,
  * qui ne tirent rien). Une tape sans matière à convertir ne fait rien.
  */
-export function declencher(m: Monde, j: Joueur, p: Producteur, alea?: number): Coup {
+export function declencher(m: Monde, j: Joueur, p: Producteur, alea?: number, serie = 0): Coup {
   const b = bilanProducteur(j, p)
   const or = estMine(p)
   const rien: Coup = { gain: 0, critique: false, grosLot: false, sorte: sortie(p), or }
+  if (or) {
+    // LA MINE : le critique, l'élan de la série ; une pépite qui tombe. Sans `alea` (les bots), la moyenne, pépites comprises.
+    const critique = alea !== undefined && alea < b.chanceCritique
+    const gain = alea === undefined ? b.tapeMoyenne * facteurElan(j, serie) + chancePepite(j) * valeurPepite(j) : b.tape * (critique ? b.multCritique : 1) * facteurElan(j, serie)
+    produireOr(j, gain)
+    const pepite = alea !== undefined && (alea * 104729) % 1 < chancePepite(j) && j.pepites < EFFETS_MINE.pepitesMax
+    if (pepite) j.pepites += 1
+    j.journal.tapes += 1
+    return { gain, critique, grosLot: false, sorte: sortie(p), or, pepite }
+  }
   const critique = alea !== undefined && alea < b.chanceCritique
   const grosLot = alea !== undefined && (alea * 7919) % 1 < b.chanceGrosLot
   const q = alea === undefined ? b.tapeMoyenne : b.tape * (critique ? EFFETS.coup : 1) * (grosLot ? EFFETS.grosLot : 1)
@@ -857,9 +949,12 @@ export function ameliorerSource(j: Joueur, p: Producteur): boolean {
 // ---------------------------------------------------------------------------
 // LES QUÊTES ET CE QU'ELLES DÉBLOQUENT
 
-/** La quête en cours, ou null quand toutes sont faites. */
+/** La quête en cours : celles de `QUETES`, puis les quêtes de choix, sans fin. */
 export function queteEnCours(j: Joueur): Quete | null {
-  return QUETES[j.quete] ?? null
+  const q = QUETES[j.quete]
+  if (q !== undefined) return q
+  const k = j.quete - QUETES.length
+  return { id: `choix-${k + 1}`, or: Math.round(QUETE_CHOIX.premier * Math.pow(QUETE_CHOIX.croissance, k)), recompense: 'choix' }
 }
 
 /** L'or gagné pour la quête en cours, borné à son objectif. */
@@ -873,14 +968,44 @@ export function queteAccomplie(j: Joueur): boolean {
   return q !== null && j.orProduit - j.queteDepuis + 1e-9 >= q.or
 }
 
-/** Réclame la quête accomplie : sa récompense est débloquée, la suivante commence. Rend la quête réclamée, ou null. */
-export function reclamerQuete(j: Joueur): Quete | null {
+/**
+ * Réclame la quête accomplie : sa récompense est débloquée (une quête de
+ * choix tire l'offre d'améliorations), la suivante commence. On ne réclame pas
+ * tant qu'une offre attend son choix. Rend la quête réclamée, ou null.
+ */
+export function reclamerQuete(m: Monde, j: Joueur): Quete | null {
   const q = queteEnCours(j)
-  if (q === null || !queteAccomplie(j)) return null
-  if (!j.debloques.includes(q.recompense)) j.debloques.push(q.recompense)
+  if (q === null || !queteAccomplie(j) || j.offre !== null) return null
+  if (q.recompense === 'choix') j.offre = tirerOffre(m, j)
+  else if (!j.debloques.includes(q.recompense)) j.debloques.push(q.recompense)
   j.quete += 1
   j.queteDepuis = j.orProduit
   return q
+}
+
+/** Une amélioration peut-elle être proposée : sous son maximum, sa condition remplie ? */
+export function ameliorationPossible(j: Joueur, id: IdAmelioration): boolean {
+  const a = AMELIORATIONS.find((x) => x.id === id)
+  if (a === undefined || j.ameliorations[id] >= a.max) return false
+  if (a.requiert === null) return true
+  if (a.requiert === 'automatisation') return j.automatisation > 0
+  return j.ameliorations[a.requiert] > 0
+}
+
+/** Tire l'offre d'une quête de choix : `QUETE_CHOIX.offre` améliorations possibles, au hasard du joueur. */
+function tirerOffre(m: Monde, j: Joueur): IdAmelioration[] | null {
+  const possibles = IDS_AMELIORATIONS.filter((id) => ameliorationPossible(j, id))
+  const offre: IdAmelioration[] = []
+  while (offre.length < QUETE_CHOIX.offre && possibles.length > 0) offre.push(possibles.splice(Math.floor(tirer(m, j) * possibles.length), 1)[0]!)
+  return offre.length > 0 ? offre : null
+}
+
+/** Choisit une amélioration de l'offre : elle prend un niveau, l'offre se referme. */
+export function choisirAmelioration(j: Joueur, id: IdAmelioration): boolean {
+  if (j.offre === null || !j.offre.includes(id)) return false
+  j.ameliorations[id] += 1
+  j.offre = null
+  return true
 }
 
 /** L'automatisation se propose quand une quête l'a débloquée et qu'on ne l'a pas encore. */
@@ -1046,9 +1171,12 @@ export function cadenceReelle(j: Joueur, p: Producteur, frequence: number, lot: 
  * nourrissent.
  */
 export function valeurDe(m: Monde, j: Joueur, p: Producteur, mods: readonly ModuleAgissant[]): number {
-  const b = bilan(lotDeBase(p), mods, multiplicateurPrestige(j), horlogeDeBase(j, p))
   // La mine rend de l'or : sa valeur est son or, tel quel.
-  if (estMine(p)) return b.lotMoyen * b.frequence + b.tapeMoyenne * TAPE_NOMINALE
+  if (estMine(p)) {
+    const bm = bilanMine(j, p)
+    return bm.debit + bm.tapeMoyenne * TAPE_NOMINALE
+  }
+  const b = bilan(lotDeBase(p), mods, multiplicateurPrestige(j), horlogeDeBase(j, p))
   const prixSortie = prixCourant(m, sortie(p))
   if (estSource(p)) return (b.lotMoyen * b.frequence + b.tapeMoyenne * TAPE_NOMINALE) * prixSortie
   const parSeconde = b.lotMoyen * b.frequence + b.tapeMoyenne * TAPE_NOMINALE

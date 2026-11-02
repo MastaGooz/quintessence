@@ -19,9 +19,9 @@
  * (la seconde qui passe) : il lit `traine` pour laisser la pièce sous le doigt.
  */
 import { useEffect, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from 'react'
-import { AUTOMATISATION, COULEURS, FAMILLES, FORMES, MELANGE, MODULE, PIECE, PRIMAIRES, PRODUCTEURS, TAPES_MAX_PAR_S, aDuBleu, couleurDe, sorteDe, type Quete } from '../../logic/clic/donnees.ts'
+import { AUTOMATISATION, COULEURS, EFFETS_MINE, FAMILLES, FORMES, MELANGE, MODULE, PIECE, PRIMAIRES, PRODUCTEURS, TAPES_MAX_PAR_S, aDuBleu, couleurDe, sorteDe, type IdAmelioration, type Quete } from '../../logic/clic/donnees.ts'
 import {
-  DIRECTIONS, acheter, ameliorer, ameliorerSource, automatisationVisible, automatiser, bilan, bilanProducteur, boiteModule, branches, brancher, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, debitTotal,
+  DIRECTIONS, acheter, ameliorer, ameliorerSource, automatisationVisible, automatiser, bilan, choisirAmelioration, perdrePepite, ramasserPepite, bilanProducteur, boiteModule, branches, brancher, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, debitTotal,
   capaciteReserve, debrancher, declencher, deplacerProducteur, disponible, disposition, effetsDe, entrees, estFixe, estMine, estSource, etendue, force, fusibles, genreDe, lotDeBase, meilleurePrise, moduleDe,
   modulesDe, multiplicateurPrestige, peutAmeliorer, peutAmeliorerSource, peutAutomatiser, peutFabriquer, peutPayer, placeSurProducteur, pointsSi, prisesPour, producteurDe, producteurTient, progresQuete,
   queteAccomplie, queteEnCours, reclamerQuete, recolter, regler, reservePleine, sortesFormees,
@@ -31,13 +31,14 @@ import { joueur } from '../../logic/clic/partie.ts'
 import { abrege, parSeconde, possede } from '../../ui/format.ts'
 import { vibrer } from '../../ui/haptique.ts'
 import {
-  EXPLICATION_TRAIT, LETTRE_PRODUCTEUR, NOM_AUTOMATISATION, NOM_COULEUR, NOM_MATIERE, NOM_MINE, NOM_OR, NOM_RECOMPENSE, NOM_RARETE, NOM_SOUTE, NOM_TRAIT, NOMS_FORMES, explicationModule, nomProducteur, nomSorte, nomSortePluriel,
+  EXPLICATION_TRAIT, LETTRE_PRODUCTEUR, NOM_AMELIORATION, NOM_AUTOMATISATION, NOM_COULEUR, NOM_MATIERE, NOM_MINE, NOM_OR, NOM_RECOMPENSE, NOM_RARETE, NOM_SOUTE, NOM_TRAIT, NOMS_FORMES, explicationModule, nomProducteur, nomSorte, nomSortePluriel,
 } from '../../ui/noms-clic.ts'
 import { sonBatir, sonEtape, sonTape } from '../../ui/sons.ts'
 import { Compteur } from '../Compteur.tsx'
 import { DUREE_GLISSE, monterCarte, type Carte, type Point } from '../carte/carte.ts'
 import { SERIE_MS, eclater, effetDepense, effetGainOr, effetVente, flotter, flotterOr, mouvementReduit } from '../effets.ts'
 import { Feuille } from '../Feuille.tsx'
+import { ChoixAmelioration } from './Ameliorations.tsx'
 import { BoutonCout, Boutique, COULEURS_RARETE } from './Boutique.tsx'
 import { Choix } from './Choix.tsx'
 import { Glyphe, Symbole, SymbolePiece, SymboleSorte, TEINTES } from './Glyphe.tsx'
@@ -111,6 +112,9 @@ type Traine =
       tient: boolean
     }
 
+/** Une pépite à l'écran : sa clé, sa place (pixels-monde), et l'écart à la mine d'où elle a jailli. */
+type PepiteVue = { cle: number; x: number; y: number; dx: number; dy: number }
+
 /** Ce dont la bulle est ouverte : un module (son niveau), ou un générateur (sa feuille : réglage, niveau). */
 type Bulle = { genre: 'module'; id: number } | { genre: 'producteur'; id: number }
 
@@ -131,6 +135,13 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
   agirRef.current = agir
   const [boutique, setBoutique] = useState(false)
   const [souteOuverte, setSouteOuverte] = useState(false)
+  /** La feuille du choix d'une amélioration, ouverte. */
+  const [choixOuvert, setChoixOuvert] = useState(false)
+  /** LES PÉPITES tombées, à l'écran : où chacune est posée, d'où elle a jailli. Le moteur sait combien il y en a (`j.pepites`). */
+  const [pepitesVues, setPepitesVues] = useState<PepiteVue[]>([])
+  const pepitesRef = useRef<PepiteVue[]>([])
+  const minuteursPepites = useRef(new Map<number, number>())
+  const prochainePepite = useRef(1)
   const [bulle, setBulle] = useState<Bulle | null>(null)
   /** Ce qu'on tient : le rendu pose les creux candidats pendant qu'on tient un module. */
   const [, setEnMain] = useState<number | null>(null)
@@ -177,7 +188,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     const brut = estSource(p) || estMine(p)
     let coup: Coup = { gain: 0, critique: false, grosLot: false, sorte: 0, or: false }
     agirRef.current(() => {
-      coup = declencher(m, j, p, Math.random())
+      coup = declencher(m, j, p, Math.random(), n)
     })
     if (coup.gain <= 0) {
       // Rien à convertir : la feuille du générateur dit ce qui manque.
@@ -193,7 +204,10 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     if (coup.or) {
       // L'OR DE LA MINE : le nombre de la série grossit au-dessus du doigt, une pièce vole au compteur, des étincelles d'or de temps en temps.
       effetGainOr(x, y, coup.gain, coup.critique ? 3 : coup.grosLot ? 2 : 1)
-      if (coup.critique) eclater(x, y, 22)
+      if (coup.critique) {
+        eclater(x, y, 26, '#ff8a5c')
+        flotter(x, y - 120, 'Critique !', 'flottant-critique', 1.3)
+      }
       else if (coup.grosLot) eclater(x, y, 16)
       else if (n > 0 && n % 10 === 9) eclater(x, y, 14)
       else if (Math.random() < 0.3) eclater(x, y, 3)
@@ -469,21 +483,69 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     if (!mouvementReduit()) cible.animate(ECRASER, { duration: 200, easing: 'ease-out' })
   }
 
+  /** Une pépite quitte l'écran (tapée ou perdue) : son minuteur s'arrête. */
+  const retirerPepite = (cle: number): void => {
+    window.clearTimeout(minuteursPepites.current.get(cle))
+    minuteursPepites.current.delete(cle)
+    pepitesRef.current = pepitesRef.current.filter((pe) => pe.cle !== cle)
+    setPepitesVues(pepitesRef.current)
+  }
+
+  /** RAMASSER une pépite d'une tape : son or vole au compteur. */
+  const ramasserIci = (cle: number, cible: HTMLElement): void => {
+    const r = cible.getBoundingClientRect()
+    retirerPepite(cle)
+    const fait = { or: 0 }
+    agirRef.current(() => {
+      fait.or = ramasserPepite(j)
+    })
+    if (fait.or <= 0) return
+    effetVente(r, fait.or)
+    eclater(r.left + r.width / 2, r.top + r.height / 2, 20)
+    vibrer([10, 20, 40])
+  }
+
+  /** CHOISIR une amélioration de l'offre : la carte éclate, la feuille se ferme, la mine annonce ce qu'elle a gagné. */
+  const choisirIci = (id: IdAmelioration, carte: HTMLElement): void => {
+    const r = carte.getBoundingClientRect()
+    const fait = { ok: false }
+    agir(() => {
+      fait.ok = choisirAmelioration(j, id)
+    })
+    if (!fait.ok) return
+    sonBatir()
+    vibrer([20, 40, 80])
+    eclater(r.left + r.width / 2, r.top + r.height / 2, 30)
+    setChoixOuvert(false)
+    const mine = j.producteurs.find(estMine)
+    const s = mine === undefined ? null : surLaPage({ x: mine.x, y: mine.y })
+    if (s !== null) {
+      const niveau = j.ameliorations[id]
+      window.setTimeout(() => {
+        eclater(s.x, s.y, 22)
+        flotter(s.x, s.y - 40, `${NOM_AMELIORATION[id]}${niveau > 1 ? ` · niveau ${niveau}` : ''}`, 'flottant-or', 1.4)
+      }, 250)
+    }
+  }
+
   /** RÉCLAMER la quête remplie : sa récompense se débloque, la carte de la quête cède la place à ce qu'elle a débloqué. */
   const objectifEl = useRef<HTMLDivElement>(null)
   const reclamerIci = (): void => {
     const r = objectifEl.current?.getBoundingClientRect()
     const fait: { q: Quete | null } = { q: null }
     agir(() => {
-      fait.q = reclamerQuete(j)
+      fait.q = reclamerQuete(m, j)
     })
     if (fait.q === null) return
     sonEtape()
     vibrer([20, 30, 60])
+    const choix = fait.q.recompense === 'choix'
     if (r !== undefined) {
       eclater(r.left + r.width / 2, r.top + r.height / 2, 26)
-      flotter(r.left + r.width / 2, r.top - 6, `${NOM_AUTOMATISATION} débloquée`, 'flottant-or', 1.2)
+      flotter(r.left + r.width / 2, r.top - 6, choix ? 'Une amélioration au choix !' : `${NOM_AUTOMATISATION} débloquée`, 'flottant-or', 1.2)
     }
+    // Le choix s'ouvre de lui-même, le temps de voir l'éclat.
+    if (choix) window.setTimeout(() => setChoixOuvert(true), 450)
   }
 
   /** ACHETER L'AUTOMATISATION : les pièces partent du compteur, la mine éclate et se met à battre toute seule. */
@@ -525,6 +587,11 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     const [r, b, z] = cadrage()
     const k = monterCarte(el, c, mo, zoomVu.current, { rayon: r, bas: b, zoomMin: z }, {
       onClic: (cible, sx, sy) => {
+        // Une pépite tombée se ramasse.
+        if (cible !== null && cible.dataset['pepite'] !== undefined) {
+          ramasserIci(Number(cible.dataset['pepite']), cible)
+          return
+        }
         // La mine de départ est cliquable, pas saisissable : le doigt qui glisse dessus emporte la carte, pas la mine.
         const id = cible === null ? NaN : Number(cible.dataset['id'])
         const pr = Number.isNaN(id) ? undefined : producteurDe(j, id)
@@ -544,6 +611,42 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
       carte.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // LES PÉPITES : autant à l'écran que le moteur en compte ; une neuve jaillit de la mine et se pose sur son carré, puis se perd si on ne la tape pas à temps.
+  useEffect(() => {
+    const vues = pepitesRef.current
+    const mine = j.producteurs.find(estMine)
+    if (mine === undefined || vues.length === j.pepites) return
+    if (vues.length > j.pepites) {
+      for (const pe of vues.slice(0, vues.length - j.pepites)) retirerPepite(pe.cle)
+      return
+    }
+    const neuves: PepiteVue[] = []
+    for (let k = vues.length; k < j.pepites; k++) {
+      const cle = prochainePepite.current++
+      const x = mine.x + (Math.random() * 2 - 1) * 160
+      const y = mine.y - 190 + Math.random() * 200
+      neuves.push({ cle, x, y, dx: mine.x - x, dy: mine.y + 20 - y })
+      minuteursPepites.current.set(
+        cle,
+        window.setTimeout(() => {
+          retirerPepite(cle)
+          agirRef.current(() => {
+            perdrePepite(j)
+          })
+        }, EFFETS_MINE.pepiteDuree * 1000),
+      )
+    }
+    pepitesRef.current = [...vues, ...neuves]
+    setPepitesVues(pepitesRef.current)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [j.pepites])
+  useEffect(() => {
+    const minuteurs = minuteursPepites.current
+    return () => {
+      for (const id of minuteurs.values()) window.clearTimeout(id)
+    }
   }, [])
 
   // L'installation grandit : le zoom normal suit.
@@ -809,6 +912,18 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
           )
         })}
 
+        {/* LES PÉPITES tombées : une tape les ramasse ; elles clignotent avant de se perdre. */}
+        {pepitesVues.map((pe) => (
+          <div
+            key={pe.cle}
+            className="pepite"
+            data-cliquable
+            data-pepite={pe.cle}
+            aria-label="Pépite"
+            style={{ left: pe.x - 50, top: pe.y - 50, '--depuis-x': `${pe.dx}px`, '--depuis-y': `${pe.dy}px`, '--duree': `${EFFETS_MINE.pepiteDuree}s` } as CSSProperties}
+          />
+        ))}
+
         {/* LA BULLE d'un module tapé : son niveau, son effet, et le bouton pour le monter. Elle garde sa taille à l'écran (`--zoom`). */}
         {choisi !== undefined && placeChoisi !== undefined && (
           <div
@@ -855,7 +970,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
           </div>
         )}
         <div className={`carte-actions${avecBarre ? ' carte-actions-barre' : ''}`}>
-          <Objectif j={j} refCarte={objectifEl} onReclamer={reclamerIci} onAutomatiser={automatiserIci} />
+          <Objectif j={j} refCarte={objectifEl} onReclamer={reclamerIci} onAutomatiser={automatiserIci} onChoisir={() => setChoixOuvert(true)} />
           {indice !== null && <p className="carte-indice">{indice}</p>}
           <div className="carte-actions-ligne">
             {boutiqueVisible && (
@@ -905,6 +1020,8 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
           <FeuilleProducteur m={m} j={j} p={producteurChoisi} agir={agir} onAcheter={acheterPourIci} onAmeliorer={ameliorerSourceIci} />
         </Feuille>
       )}
+      {/* LE CHOIX d'une amélioration, qu'ouvre une quête. */}
+      {choixOuvert && j.offre !== null && <ChoixAmelioration j={j} onChoisir={choisirIci} onFermer={() => setChoixOuvert(false)} />}
       {souteOuverte && (
         <Soute
           partie={partie}
@@ -946,12 +1063,30 @@ function Objectif({
   refCarte,
   onReclamer,
   onAutomatiser,
+  onChoisir,
 }: {
   j: Joueur
   refCarte: React.RefObject<HTMLDivElement | null>
   onReclamer: () => void
   onAutomatiser: (bouton: HTMLElement) => void
+  onChoisir: () => void
 }): ReactElement | null {
+  // UN CHOIX EN ATTENTE passe avant tout : la quête suivante compte déjà.
+  if (j.offre !== null) {
+    return (
+      <div key="offre" ref={refCarte} className="objectif objectif-accompli">
+        <span className="objectif-titre">Récompense</span>
+        <span className="objectif-ligne">
+          <span className="objectif-texte">Une amélioration au choix</span>
+          <button type="button" className="bouton-principal respire" onClick={onChoisir}>
+            Choisir
+          </button>
+        </span>
+      </div>
+    )
+  }
+  // L'AUTOMATISATION débloquée passe avant la quête suivante.
+  if (automatisationVisible(j)) return <CarteAutomatisation j={j} refCarte={refCarte} onAutomatiser={onAutomatiser} />
   const q = queteEnCours(j)
   if (q !== null) {
     const fait = progresQuete(j)
@@ -978,24 +1113,26 @@ function Objectif({
       </div>
     )
   }
-  if (automatisationVisible(j)) {
-    const payable = peutAutomatiser(j)
-    return (
-      <div key="automatisation" ref={refCarte} className="objectif">
-        <span className="objectif-titre">Amélioration</span>
-        <span className="objectif-texte">{NOM_AUTOMATISATION}</span>
-        <span className="objectif-ligne">
-          <span className="petit sourd">
-            La mine se tape toute seule : +{AUTOMATISATION.tics} <SymbolePiece /> par seconde.
-          </span>
-          <button type="button" className={payable ? 'bouton-principal respire' : ''} disabled={!payable} onClick={(e) => onAutomatiser(e.currentTarget)}>
-            {AUTOMATISATION.cout} <SymbolePiece />
-          </button>
-        </span>
-      </div>
-    )
-  }
   return null
+}
+
+/** L'automatisation, débloquée par la première quête, à acheter. */
+function CarteAutomatisation({ j, refCarte, onAutomatiser }: { j: Joueur; refCarte: React.RefObject<HTMLDivElement | null>; onAutomatiser: (bouton: HTMLElement) => void }): ReactElement {
+  const payable = peutAutomatiser(j)
+  return (
+    <div key="automatisation" ref={refCarte} className="objectif">
+      <span className="objectif-titre">Amélioration</span>
+      <span className="objectif-texte">{NOM_AUTOMATISATION}</span>
+      <span className="objectif-ligne">
+        <span className="petit sourd">
+          La mine se tape toute seule : +{AUTOMATISATION.tics} <SymbolePiece /> par seconde.
+        </span>
+        <button type="button" className={payable ? 'bouton-principal respire' : ''} disabled={!payable} onClick={(e) => onAutomatiser(e.currentTarget)}>
+          {AUTOMATISATION.cout} <SymbolePiece />
+        </button>
+      </span>
+    </div>
+  )
 }
 
 /**
@@ -1050,7 +1187,7 @@ function TexteProducteur({ j, p, b, actif }: { j: Joueur; p: Producteur; b: Retu
         <span className="mine-legende">
           <b className="mine-nom">{NOM_MINE}</b>
           <small className="sourd">
-            +{abregeFin(b.tapeMoyenne)} <SymbolePiece />
+            +{abregeFin(b.tape)} <SymbolePiece />
           </small>
         </span>
         {(j.automatisation > 0 || p.reserve >= 1) && <Reserve j={j} p={p} />}

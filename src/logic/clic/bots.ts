@@ -15,7 +15,7 @@ import { FABRICATION, PRIMAIRES, PRODUCTEURS, PRESTIGE, SORTES, couleurDe, forme
 import {
   acheter, acheterProducteur, ameliorer, ameliorerSource, besoins, brancherAuMieux, completerAuMarche, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, declencher, disponible,
   entrees, esperanceEffet, estMine, estSource, fabriquerModule, fondre, force, fusibles, genreDe, manquePour, meilleureSource, modulesDe, multiplicateurPrestige, peutFabriquer, peutPayer, pointsSi,
-  prestiger, automatiser, peutAutomatiser, queteAccomplie, reclamerQuete, recolter,
+  prestiger, automatiser, choisirAmelioration, peutAutomatiser, queteAccomplie, reclamerQuete, recolter,
   prisesLibres, production, regler, sortePourPayer, sortie, sortesFormees, soute, typeDe, valeurCout, valeurDe, vendre, venteRaisonnable, visibleProducteur, visibleQualite,
   type Joueur, type Monde, type Producteur,
 } from './moteur.ts'
@@ -339,9 +339,13 @@ export function visiter(m: Monde, j: Joueur, s: Strategie): void {
   // LA RÉSERVE de chaque mine, récoltée en passant.
   for (const p of j.producteurs) if (estMine(p)) recolter(j, p)
   const source = sourceATaper(m, j, s)
-  for (let k = 0; k < s.tapes; k++) declencher(m, j, source)
-  // LES QUÊTES : réclamées dès qu'elles sont remplies ; l'automatisation de la mine achetée dès qu'on peut.
-  while (queteAccomplie(j)) if (reclamerQuete(j) === null) break
+  // Les tapes d'une visite font une série : l'élan joue.
+  for (let k = 0; k < s.tapes; k++) declencher(m, j, source, undefined, k)
+  // LES QUÊTES : réclamées dès qu'elles sont remplies, la première amélioration de l'offre choisie ; l'automatisation de la mine achetée dès qu'on peut.
+  for (let n = 0; n < 20 && queteAccomplie(j); n++) {
+    if (reclamerQuete(m, j) === null) break
+    if (j.offre !== null) choisirAmelioration(j, j.offre[0]!)
+  }
   if (peutAutomatiser(j)) automatiser(j)
   // LES TRANSFORMATEURS : réglés sur ce qui manque, puis la matière convertie à la main.
   let voulues = sortesVoulues(m, j)
