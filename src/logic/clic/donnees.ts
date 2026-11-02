@@ -202,21 +202,25 @@ export const MINE: TypeProducteur = { id: 'mine', genre: 'mine', cout: { forme: 
 /**
  * LES QUÊTES : GAGNER de l'or, une à la fois, sans fin ; l'or compte depuis
  * le début de la quête ; remplie, une quête se RÉCLAME d'une tape. La
- * première demande `automatisation` or (à la tape : il n'y a encore rien
- * d'autre) et DÉBLOQUE L'AUTOMATIQUE (Keko, 02/11 : « on enlève le
- * remplissage auto dès le début et on le met en récompense de la première
- * quête »). Les suivantes demandent `premier × croissance^k` or et donnent le
+ * première demande `bouton` or (à la tape : il n'y a encore rien d'autre) et
+ * fait apparaître sur la mine LE BOUTON qui vend l'automatique
+ * `PRIX_AUTOMATIQUE` or (Keko, 02/11 : « plutôt que donner l'auto
+ * directement, la première quête ouvre le bouton upgrade sur la mine, et pour
+ * 10 on achète l'upgrade »). Les suivantes demandent `premier × croissance^k` or et donnent le
  * CHOIX d'une amélioration parmi `offre` tirées au hasard (Keko : « X or pour
  * obtenir une amélioration au choix »). Chiffres de moi, validés par Keko.
  */
-export type Recompense = 'automatisation' | 'choix'
+export type Recompense = 'bouton' | 'choix'
 export interface Quete {
   id: string
   /** L'or à gagner depuis le début de la quête. */
   or: number
   recompense: Recompense
 }
-export const QUETE_CHOIX = { automatisation: 10, premier: 20, croissance: 2, offre: 3 }
+export const QUETE_CHOIX = { bouton: 10, premier: 20, croissance: 2, offre: 3 }
+
+/** Le prix de l'automatique, sur le bouton de la mine. */
+export const PRIX_AUTOMATIQUE = 10
 
 /**
  * LES AMÉLIORATIONS DE LA MINE, la liste de Keko (02/11). Chacune se prend

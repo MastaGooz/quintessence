@@ -32,7 +32,7 @@
  */
 import {
   ACHAT, CASE, COULEURS, EFFETS, EMPLACEMENTS, FABRICATION, FAMILLES, FORMES, FUSION, MARCHE, MELANGE, MODULE, NIVEAU, NIVEAU_SOURCE, PIECE, PRESTIGE, PRIMAIRES, PRODUCTEUR,
-  PRODUCTEURS, QUETE_CHOIX, RARETES, RESERVE_MINE, SORTES, AMELIORATIONS, EFFETS_MINE, IDS_AMELIORATIONS, TRAITS, TYPE_MINE, VALEUR_MODULE, aDuBleu, couleurDe, formeDe, partsDe, sorteDe,
+  PRIX_AUTOMATIQUE, PRODUCTEURS, QUETE_CHOIX, RARETES, RESERVE_MINE, SORTES, AMELIORATIONS, EFFETS_MINE, IDS_AMELIORATIONS, TRAITS, TYPE_MINE, VALEUR_MODULE, aDuBleu, couleurDe, formeDe, partsDe, sorteDe,
   type Cout, type Genre, type IdAmelioration, type Qualite, type Quete, type Trait, type TypeProducteur,
 } from './donnees.ts'
 import { graineDe, rngDe } from '../rng.ts'
@@ -83,7 +83,7 @@ export interface Joueur {
   /** La quête en cours (son rang), et l'or extrait quand elle a commencé. */
   quete: number
   queteDepuis: number
-  /** L'automatique de la mine débloqué par la première quête (0 ou 1) : il remplit la réserve. */
+  /** L'automatique de la mine (0 ou 1), acheté sur le bouton que la première quête fait apparaître : il remplit la barre, et la réserve. */
   automatisation: number
   /** Le niveau de chaque amélioration de la mine (voir `AMELIORATIONS`). */
   ameliorations: Record<IdAmelioration, number>
@@ -996,9 +996,9 @@ export function ameliorerSource(j: Joueur, p: Producteur): boolean {
 // ---------------------------------------------------------------------------
 // LES QUÊTES ET CE QU'ELLES DÉBLOQUENT
 
-/** La quête en cours : la première débloque l'automatique, les suivantes donnent un choix, sans fin, l'objectif doublant. */
+/** La quête en cours : la première fait apparaître le bouton de l'automatique, les suivantes donnent un choix, sans fin, l'objectif doublant. */
 export function queteEnCours(j: Joueur): Quete | null {
-  if (j.quete === 0) return { id: 'automatisation', or: QUETE_CHOIX.automatisation, recompense: 'automatisation' }
+  if (j.quete === 0) return { id: 'bouton', or: QUETE_CHOIX.bouton, recompense: 'bouton' }
   const k = j.quete - 1
   return { id: `choix-${k + 1}`, or: Math.round(QUETE_CHOIX.premier * Math.pow(QUETE_CHOIX.croissance, k)), recompense: 'choix' }
 }
@@ -1026,11 +1026,24 @@ export function queteAccomplie(j: Joueur): boolean {
 export function reclamerQuete(m: Monde, j: Joueur): Quete | null {
   const q = queteEnCours(j)
   if (q === null || !queteAccomplie(j) || j.offre !== null) return null
-  if (q.recompense === 'automatisation') j.automatisation = 1
-  else j.offre = tirerOffre(m, j)
+  // Le bouton de l'automatique n'a rien à poser : il est là dès que la première quête est réclamée (`automatiqueEnVente`).
+  if (q.recompense === 'choix') j.offre = tirerOffre(m, j)
   j.quete += 1
   j.queteDepuis = j.orProduit
   return q
+}
+
+/** Le bouton de l'automatique est sur la mine : la première quête est réclamée, l'automatique pas encore acheté. */
+export function automatiqueEnVente(j: Joueur): boolean {
+  return j.quete >= 1 && j.automatisation === 0
+}
+
+/** ACHETER L'AUTOMATIQUE sur le bouton de la mine, `PRIX_AUTOMATIQUE` or. Rend vrai s'il est acheté. */
+export function acheterAutomatique(j: Joueur): boolean {
+  if (!automatiqueEnVente(j) || j.or + 1e-9 < PRIX_AUTOMATIQUE) return false
+  j.or -= PRIX_AUTOMATIQUE
+  j.automatisation = 1
+  return true
 }
 
 /** Une amélioration peut-elle être proposée : sous son maximum, sa condition remplie ? */

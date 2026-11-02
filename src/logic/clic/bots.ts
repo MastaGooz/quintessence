@@ -15,7 +15,7 @@ import { FABRICATION, PRIMAIRES, PRODUCTEURS, PRESTIGE, SORTES, couleurDe, forme
 import {
   acheter, acheterProducteur, ameliorer, ameliorerSource, besoins, brancherAuMieux, completerAuMarche, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, declencher, disponible,
   entrees, esperanceEffet, estMine, estSource, fabriquerModule, fondre, force, fusibles, genreDe, manquePour, meilleureSource, modulesDe, multiplicateurPrestige, peutFabriquer, peutPayer, pointsSi,
-  prestiger, choisirAmelioration, queteAccomplie, reclamerQuete, recolter,
+  prestiger, acheterAutomatique, choisirAmelioration, queteAccomplie, reclamerQuete, recolter,
   prisesLibres, production, regler, sortePourPayer, sortie, sortesFormees, soute, typeDe, valeurCout, valeurDe, vendre, venteRaisonnable, visibleProducteur, visibleQualite,
   type Joueur, type Monde, type Producteur,
 } from './moteur.ts'
@@ -350,6 +350,8 @@ export function visiter(m: Monde, j: Joueur, s: Strategie): void {
     if (reclamerQuete(m, j) === null) break
     if (j.offre !== null) choisirAmelioration(j, j.offre[0]!)
   }
+  // L'AUTOMATIQUE, acheté dès que le bouton est là et que l'or suffit.
+  acheterAutomatique(j)
   recolterSiPermis()
   // LES TRANSFORMATEURS : réglés sur ce qui manque, puis la matière convertie à la main.
   let voulues = sortesVoulues(m, j)
