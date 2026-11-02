@@ -251,7 +251,7 @@ export const MAX_AMELIORATION_PRODUCTEUR: Record<IdAmeliorationProducteur, numbe
  * production d'une réserve pleine qui arrive quand même ; l'élan comme celui
  * de la banque. Calqué sur la banque (`EFFETS_MINE`).
  */
-export const EFFETS_PRODUCTEUR = { tape: 0.1, outils: 0.05, rendement: 1, auto: 0.01, cadence: 0.5, reserve: 288, entrepot: 0.5, coupDouble: 0.05, prime: 0.25, tropPlein: 0.1, elanPas: 0.05, elanPlafond: 0.5 }
+export const EFFETS_PRODUCTEUR = { tape: 0.1, outils: 0.05, rendement: 1, auto: 0.01, cadence: 0.5, reserve: 100, entrepot: 0.5, coupDouble: 0.05, prime: 0.25, tropPlein: 0.1, elanPas: 0.05, elanPlafond: 0.5 }
 
 /**
  * LES QUÊTES, une à la fois (Keko, 02/11 : « quête 1 : gagner 10, quête 2 :
@@ -382,12 +382,12 @@ export const EFFETS_MINE = {
  * obtenue en auto, qu'elle ne soit pas ajoutée à l'or mais dans la réserve de
  * la mine, et que le joueur doive cliquer pour l'ajouter ») : l'or de
  * l'automatique s'y accumule jusqu'à `capacite` ; pleine, l'automatique
- * s'arrête. Une tape sur la réserve la récolte. HUIT HEURES d'automatique
- * (Keko, 02/11 : « on ne veut pas pénaliser les joueurs qui ne passent pas
- * toutes les 5 minutes, ni générer trop d'or ») : une nuit tient dedans, trois
- * visites par jour récoltent presque tout. La Grande réserve l'agrandit.
+ * s'arrête. Une tape sur la réserve la récolte. D'abord huit heures
+ * d'automatique (288), puis CENT (Keko, 02/11 : « on va passer la réserve à
+ * 100 de base ») : 2 h 47 au rythme de base, une visite toutes les trois
+ * heures récolte tout. La Grande réserve l'agrandit.
  */
-export const RESERVE_MINE = { capacite: 288 }
+export const RESERVE_MINE = { capacite: 100 }
 
 /** Tous les types de générateurs, par famille. `type` d'un producteur est un indice ici. */
 export const PRODUCTEURS: readonly TypeProducteur[] = [...SOURCES, ...RAFFINERIES, ...MELANGEURS, MINE, SCIERIE, MINE_DE_PIERRE]
