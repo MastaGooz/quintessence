@@ -21,7 +21,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from 'react'
 import { COULEURS, EFFETS_MINE, FAMILLES, FORMES, MELANGE, MODULE, PIECE, PRIMAIRES, PRODUCTEURS, TAPES_MAX_PAR_S, aDuBleu, couleurDe, sorteDe, type IdAmelioration, type Quete } from '../../logic/clic/donnees.ts'
 import {
-  DIRECTIONS, acheter, ameliorationsOuvertes, ameliorer, gainNiveauMine, monterLaMine, peutMonterLaMine, prixNiveauMine, ameliorerSource, bilan, choisirAmelioration, perdrePepite, ramasserPepite, bilanProducteur, boiteModule, branches, brancher, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, debitTotal,
+  DIRECTIONS, acheter, ameliorationsOuvertes, ameliorer, construire, constructionOuverte, estConstruit, prixConstruction, ressourceDe, gainNiveauMine, monterLaMine, peutMonterLaMine, prixNiveauMine, ameliorerSource, bilan, choisirAmelioration, perdrePepite, ramasserPepite, bilanProducteur, boiteModule, branches, brancher, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, debitTotal,
   capaciteReserve, debrancher, mineArretee, declencher, deplacerProducteur, disponible, disposition, effetsDe, entrees, estFixe, estMine, estSource, etendue, force, fusibles, genreDe, lotDeBase, meilleurePrise, moduleDe,
   modulesDe, multiplicateurPrestige, peutAmeliorer, peutAmeliorerSource, peutFabriquer, peutPayer, placeSurProducteur, pointsSi, prisesPour, producteurDe, producteurTient, progresQuete,
   objectifQuete, queteAccomplie, queteEnCours, reclamerQuete, recolter, regler, reservePleine, sortesFormees,
@@ -36,12 +36,14 @@ import {
 import { sonBarre, sonBatir, sonEtape, sonReserve, sonTape } from '../../ui/sons.ts'
 import { Compteur } from '../Compteur.tsx'
 import { DUREE_GLISSE, monterCarte, type Carte, type Point } from '../carte/carte.ts'
-import { DUREE_VOL, SERIE_MS, eclater, effetDepense, effetRecolte, effetVente, flotter, impact, intensiteRecolte, mouvementReduit, onde, retarderLeCompteur, volerDesPieces } from '../effets.ts'
+import { DUREE_VOL, SERIE_MS, eclater, effetDepense, effetRecolte, effetRessource, effetVente, flotter, impact, intensiteRecolte, mouvementReduit, onde, retarderLeCompteur, volerDesPieces } from '../effets.ts'
 import { Feuille } from '../Feuille.tsx'
 import { ChoixAmelioration, MenuAmeliorations } from './Ameliorations.tsx'
+import { MenuConstruction } from './Construction.tsx'
+import { ImageDuType } from './Pictos.tsx'
 import { BoutonCout, Boutique, COULEURS_RARETE } from './Boutique.tsx'
 import { Choix } from './Choix.tsx'
-import { Glyphe, Symbole, SymbolePiece, SymboleSorte, TEINTES } from './Glyphe.tsx'
+import { Glyphe, Symbole, SymbolePiece, SymboleRessource, SymboleSorte, TEINTES } from './Glyphe.tsx'
 import { boite, cheminDecoupe, cotesDuModule, cotesDuProducteur } from './pieces.ts'
 import type { PagePropsClic } from './props.ts'
 import { Soute } from './Soute.tsx'
@@ -136,6 +138,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
   /** La feuille du choix d'une amélioration, ouverte. */
   const [choixOuvert, setChoixOuvert] = useState(false)
   const [menuOuvert, setMenuOuvert] = useState(false)
+  const [menuConstruction, setMenuConstruction] = useState(false)
   /** LES PÉPITES tombées, à l'écran : où chacune est posée, d'où elle a jailli. Le moteur sait combien il y en a (`j.pepites`). */
   const [pepitesVues, setPepitesVues] = useState<PepiteVue[]>([])
   const pepitesRef = useRef<PepiteVue[]>([])
@@ -151,7 +154,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
   const raffineries = j.producteurs.filter((p) => genreDe(p) === 'raffinerie')
   const rondes = Array.from({ length: PRIMAIRES }, (_, c) => j.matiere[sorteDe(c, 0)] ?? 0).reduce((s, q) => s + q, 0)
   // Rien que la mine : le départ.
-  const rien = j.modules.length === 0 && j.producteurs.length === 1
+  const rien = j.modules.length === 0 && j.producteurs.every((p) => estMine(p) || estConstruit(p))
   // Le tout début : rien encore extrait (une bourse vidée par un achat n'est pas un début).
   // Le tout début : aucune tape, rien en réserve ni extrait (une heure passée peut remplir la réserve sans tape).
   const debut = rien && j.points === 0 && j.journal.tapes === 0 && j.orProduit === 0 && (j.producteurs.find(estMine)?.reserve ?? 0) < 1
@@ -190,13 +193,14 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     agirRef.current(() => {
       coup = declencher(m, j, p, Math.random(), n)
     })
-    if (coup.or) {
-      // LA MINE : la tape fait bondir la barre ; une barre pleine paie la bourse — sa pièce vole du « +1 » au compteur (Keko, 02/11 : la tape est le gain actif, la réserve le gain d'absence).
+    if (coup.or || coup.ressource !== undefined) {
+      // LA BANQUE, ET LES PRODUCTEURS CONSTRUITS QUI PRODUISENT COMME ELLE : la tape fait bondir la barre ; une barre pleine paie — sa pièce vole du « +1 » au compteur (Keko, 02/11 : la tape est le gain actif, la réserve le gain d'absence).
       const el = producteursEl.current.get(p.id)
+      const etincelle = coup.ressource === 'bois' ? '#e8b878' : coup.ressource === 'pierre' ? '#d6d8e0' : '#ffe27a'
       // LA BARRE RÉAGIT À CHAQUE TAPE (Keko, 02/11 : « ça manque de juice, le remplissage ») : elle s'écrase et s'allume, sa tête flashe, des étincelles partent de son bord ; la note monte avec elle.
       const remplissage = coup.gain > 0 ? 1 : Math.min(1, p.progres)
       sonBarre(remplissage, coup.critique)
-      if (coup.gain > 0) lacherLaPiece(el, coup.gain)
+      if (coup.gain > 0) lacherLaPiece(el, p, coup.gain)
       if (!mouvementReduit()) {
         // LE CHIFFRE POMPE à chaque tape (Keko, 02/11 : « pump le chiffre au moment du remplissage »), de plus en plus fort à mesure que la barre se remplit.
         el?.querySelector('.mine-barre-gain-pompe')?.animate(
@@ -226,14 +230,14 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
           { duration: 260, easing: 'ease-out' },
         )
         const r = barre?.getBoundingClientRect()
-        if (r !== undefined) eclater(r.left + r.width * Math.min(1, coup.gain > 0 ? 1 : p.progres), r.top + r.height / 2, coup.critique ? 14 : 5, '#ffe27a')
+        if (r !== undefined) eclater(r.left + r.width * Math.min(1, coup.gain > 0 ? 1 : p.progres), r.top + r.height / 2, coup.critique ? 14 : 5, etincelle)
       }
       vibrer(coup.critique ? [10, 30, 25] : coup.gain > 0 ? [10, 20, 15] : 8)
       // AU POINT DE LA TAPE (Keko, 02/11 : « ça manque de juice à l'endroit du tap ») : un éclat de lumière, une petite onde, des étincelles à chaque coup ; plus fort quand la tape remplit la barre, plus encore pour un critique.
       const fort = coup.critique ? 2 : coup.gain > 0 ? 1.5 : 1
       impact(x, y, 46 * fort)
       onde(x, y, 24 * fort, coup.critique ? 'rgba(255, 150, 100, 0.9)' : 'rgba(255, 240, 200, 0.85)')
-      eclater(x, y, coup.critique ? 26 : coup.gain > 0 ? 14 : 6, coup.critique ? '#ff8a5c' : '#ffe27a')
+      eclater(x, y, coup.critique ? 26 : coup.gain > 0 ? 14 : 6, coup.critique ? '#ff8a5c' : etincelle)
       if (coup.critique) flotter(x, y - 120, 'Critique !', 'flottant-critique', 1.3)
       return
     }
@@ -554,8 +558,51 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     }
   }
 
+  /** UNE QUÊTE ACCOMPLIE d'elle-même (un niveau, une construction) : sa carte éclate, la suivante naît à sa place — ou, après la dernière, il n'y en a plus. */
+  const feterLaQuete = (queteAvant: number, carteAvant: DOMRect | undefined): void => {
+    if (j.quete <= queteAvant) return
+    window.setTimeout(() => {
+      const carte = objectifEl.current
+      const r = carte?.getBoundingClientRect() ?? carteAvant
+      if (r === undefined) return
+      sonEtape()
+      carte?.classList.add('piece-nait')
+      eclater(r.left + r.width / 2, r.top + r.height / 2, 26)
+      flotter(r.left + r.width / 2, r.top - 6, 'Quête accomplie !', 'flottant-or', 1.2)
+    }, 380)
+  }
+
+  /**
+   * CONSTRUIRE un producteur depuis le menu de construction (Keko, 02/11) : le menu se ferme, le producteur naît à côté de la banque, la
+   * carte se recadre pour les montrer tous, et les pièces du prix volent du compteur vers lui.
+   */
+  const construireIci = (type: number): void => {
+    const queteAvant = j.quete
+    const carteAvant = objectifEl.current?.getBoundingClientRect()
+    const prix = prixConstruction(j)
+    const fait: { p: Producteur | null } = { p: null }
+    agir(() => {
+      fait.p = construire(j, type)
+    })
+    const p = fait.p
+    if (p === null) return
+    setMenuConstruction(false)
+    sonBatir()
+    vibrer([20, 30, 60])
+    window.setTimeout(() => carte.current?.centrer(), 60)
+    faireNaitre(
+      () => producteursEl.current.get(p.id),
+      (r) => {
+        effetDepense(r, prix)
+        flotter(r.left + r.width / 2, r.top + r.height * 0.2, `${nomProducteur(p)} construite !`, 'flottant-or', 1.4)
+      },
+      60 + DUREE_GLISSE,
+    )
+    feterLaQuete(queteAvant, carteAvant)
+  }
+
   /** Ce qui apparaît (le bouton des améliorations, la réserve) naît et éclate, une fois peint ; `puis` le suit, depuis sa place. */
-  const faireNaitre = (trouver: () => HTMLElement | null | undefined, puis?: (r: DOMRect) => void): void => {
+  const faireNaitre = (trouver: () => HTMLElement | null | undefined, puis?: (r: DOMRect) => void, apres = 60): void => {
     window.setTimeout(() => {
       const el = trouver()
       if (el === null || el === undefined) return
@@ -564,7 +611,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
       eclater(r.left + r.width / 2, r.top + r.height / 2, 22)
       onde(r.left + r.width / 2, r.top + r.height / 2, r.width * 0.7)
       puis?.(r)
-    }, 60)
+    }, apres)
   }
 
   /**
@@ -579,23 +626,15 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     const gain = gainNiveauMine(j)
     const queteAvant = j.quete
     const carteAvant = objectifEl.current?.getBoundingClientRect()
+    const constructionAvant = constructionOuverte(j)
     const fait = { ok: false }
     agir(() => {
       fait.ok = monterLaMine(m, j, mine)
     })
     if (!fait.ok) return
-    // LA QUÊTE DU NIVEAU est accomplie : sa carte éclate, la suivante naît à sa place — ou, après la dernière, il n'y en a plus.
-    if (j.quete > queteAvant) {
-      window.setTimeout(() => {
-        const carte = objectifEl.current
-        const r = carte?.getBoundingClientRect() ?? carteAvant
-        if (r === undefined) return
-        sonEtape()
-        carte?.classList.add('piece-nait')
-        eclater(r.left + r.width / 2, r.top + r.height / 2, 26)
-        flotter(r.left + r.width / 2, r.top - 6, 'Quête accomplie !', 'flottant-or', 1.2)
-      }, 380)
-    }
+    feterLaQuete(queteAvant, carteAvant)
+    // LE BOUTON DE CONSTRUCTION naît avec la quête qui le demande.
+    if (!constructionAvant && constructionOuverte(j)) faireNaitre(() => document.querySelector<HTMLElement>('.bouton-construire'))
     setMenuOuvert(false)
     sonBatir()
     vibrer([20, 30, 60])
@@ -780,17 +819,19 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
   }, [rayon, bas])
 
   /** Jusqu'à cet instant, la barre de la mine se montre PLEINE : elle vient d'envoyer sa pièce, on la voit pleine avant qu'elle ne se vide. */
-  const barrePleineJusqua = useRef(0)
+  const barrePleineJusqua = useRef(new Map<number, number>())
 
   /**
    * UNE BARRE PLEINE : elle reste pleine un instant, gonfle et s'allume ; le « +1 » pompe ; sa pièce vole. Finie par une tape, au compteur
    * de la bourse ; finie par l'automatique (`versLaReserve`), à la réserve, qui pompe et tinte à chaque arrivée. Le compteur visé ne bouge
    * qu'à l'arrivée.
    */
-  const lacherLaPiece = (el: HTMLElement | undefined, gain: number, versLaReserve = false): void => {
-    barrePleineJusqua.current = performance.now() + 170
-    const depuis = el?.querySelector('.mine-barre-gain .symbole-piece')?.getBoundingClientRect()
-    if (depuis !== undefined && !versLaReserve) effetVente(depuis, gain)
+  const lacherLaPiece = (el: HTMLElement | undefined, p: Producteur, gain: number, versLaReserve = false): void => {
+    barrePleineJusqua.current.set(p.id, performance.now() + 170)
+    const depuis = el?.querySelector('.mine-barre-gain [role="img"]')?.getBoundingClientRect()
+    // Un producteur construit envoie sa ressource à son compteur ; la banque, son or à la bourse.
+    if (depuis !== undefined && estConstruit(p)) effetRessource(depuis, ressourceDe(p), gain)
+    else if (depuis !== undefined && !versLaReserve) effetVente(depuis, gain)
     const reserve = el?.querySelector<HTMLElement>('.reserve')
     const vers = reserve?.querySelector('.reserve-texte .symbole-piece')?.getBoundingClientRect()
     const mine = j.producteurs.find(estMine)
@@ -824,7 +865,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
       ],
       { duration: 560, easing: 'ease-out' },
     )
-    gainEl?.querySelector('.symbole-piece')?.animate([{ transform: 'rotateY(0deg)' }, { transform: 'rotateY(720deg)' }], { duration: 560, easing: 'cubic-bezier(.2,.8,.3,1)' })
+    gainEl?.querySelector('[role="img"]')?.animate([{ transform: 'rotateY(0deg)' }, { transform: 'rotateY(720deg)' }], { duration: 560, easing: 'cubic-bezier(.2,.8,.3,1)' })
     if (depuis !== undefined) {
       const cx = depuis.left + depuis.width / 2
       const cy = depuis.top + depuis.height / 2
@@ -833,18 +874,22 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     }
   }
 
-  // LA BARRE DE LA MINE : posée image par image (la tape la fait bondir, l'automatique la pousse chaque seconde) ; pleine un instant quand elle vient de payer.
+  // LES BARRES — la banque, les producteurs construits : posées image par image (la tape les fait bondir, l'automatique pousse celle de la banque chaque seconde) ; pleines un instant quand elles viennent de payer.
   useEffect(() => {
     let image = 0
+    const montres = new Map<number, number>()
     const pas = (maintenant: number): void => {
-      const mine = j.producteurs.find(estMine)
-      const el = mine === undefined ? undefined : producteursEl.current.get(mine.id)
       const dt = Math.min(0.05, (maintenant - avant) / 1000)
       avant = maintenant
-      if (mine !== undefined && el !== undefined) {
-        const cible = maintenant < barrePleineJusqua.current ? 1 : Math.min(1, mine.progres)
+      for (const p of j.producteurs) {
+        if (!estMine(p) && !estConstruit(p)) continue
+        const el = producteursEl.current.get(p.id)
+        if (el === undefined) continue
+        const cible = maintenant < (barrePleineJusqua.current.get(p.id) ?? 0) ? 1 : Math.min(1, p.progres)
         // Elle MONTE en glissant (vite, sans rebond), et redescend d'un coup quand elle a payé.
-        montre = cible < montre - 0.001 ? cible : montre + (cible - montre) * (1 - Math.exp(-dt * 24))
+        const avantMontre = montres.get(p.id) ?? 0
+        const montre = cible < avantMontre - 0.001 ? cible : avantMontre + (cible - avantMontre) * (1 - Math.exp(-dt * 24))
+        montres.set(p.id, montre)
         const remplie = el.querySelector<HTMLElement>('.mine-barre-remplie')
         if (remplie !== null) remplie.style.transform = `scaleX(${montre})`
         const tete = el.querySelector<HTMLElement>('.mine-barre-tete')
@@ -856,7 +901,6 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
       }
       image = requestAnimationFrame(pas)
     }
-    let montre = 0
     let avant = performance.now()
     image = requestAnimationFrame(pas)
     return () => cancelAnimationFrame(image)
@@ -881,7 +925,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     const gain = aVerser.current
     if (gain <= 0 || mineVue === undefined) return
     aVerser.current = 0
-    lacherLaPiece(producteursEl.current.get(mineVue.id), gain, true)
+    lacherLaPiece(producteursEl.current.get(mineVue.id), mineVue, gain, true)
   })
 
   // LES LOTS DES HORLOGES flottent au-dessus de leur source, à son rythme — quand il est assez lent pour qu'on les lise.
@@ -932,14 +976,20 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
   if (debut)
     indice = (
       <>
-        Tapez la mine pour remplir sa barre : 1 <SymbolePiece /> par barre pleine.
+        Tapez la banque pour remplir sa barre : 1 <SymbolePiece /> par barre pleine.
       </>
     )
   else if (rien && mine !== undefined && mineArretee(j, mine)) indice = 'La réserve est pleine : tapez-la pour récolter ses pièces.'
+  else if (rien && constructionOuverte(j) && !j.producteurs.some(estConstruit))
+    indice = (
+      <>
+        Touchez « Construire » : une scierie ou une mine, pour {prixConstruction(j)} <SymbolePiece />.
+      </>
+    )
   else if (rien && mine !== undefined && ameliorationsOuvertes(j) && j.automatisation === 0)
     indice = (
       <>
-        Touchez la flèche de la mine : au niveau 2, pour {prixNiveauMine(mine)} <SymbolePiece />, l’automatique remplit sa barre même sans vous.
+        Touchez la flèche de la banque : au niveau 2, pour {prixNiveauMine(mine)} <SymbolePiece />, l’automatique remplit sa barre même sans vous.
       </>
     )
   else if (rien && mine !== undefined && j.journal.recoltes === 0 && mine.reserve >= 1) indice = 'L’automatique remplit la réserve, même en votre absence : tapez-la pour récolter.'
@@ -1006,10 +1056,10 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
           const y = enMain ? t.y : p.y
           const b = bilanProducteur(j, p)
           const genre = genreDe(p)
-          const brut = genre === 'source' || genre === 'mine'
+          const brut = genre === 'source' || genre === 'mine' || genre === 'ressource'
           // Une mine à la réserve pleine s'arrête ; un transformateur sans matière aussi.
           const nourri = genre === 'mine' ? !mineArretee(j, p) : brut || disponible(j, p) >= 1
-          const actif = genre !== 'mine' && b.frequence > 0 && nourri
+          const actif = genre !== 'mine' && genre !== 'ressource' && b.frequence > 0 && nourri
           const cadence = actif ? Math.min(60, Math.max(0.25, 1 / b.frequence)) : 0
           const ta = tailleDe(p)
           const bo = BOITES_PRODUCTEURS[p.type] ?? BOITES_PRODUCTEURS[0]!
@@ -1020,7 +1070,8 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
             height: ta.hauteur,
             '--cadence': `${cadence.toFixed(2)}s`,
             // La mine a la teinte de l'or.
-            '--teinte': genre === 'mine' ? 45 : (TEINTES[p.couleur] ?? 0),
+            // La banque a la teinte de l'or ; la scierie, celle du bois ; la mine, celle de la pierre.
+            '--teinte': genre === 'mine' ? 45 : genre === 'ressource' ? (ressourceDe(p) === 'bois' ? 30 : 225) : (TEINTES[p.couleur] ?? 0),
           }
           const classes = ['producteur', `producteur-${genre}`, estFixe(p) ? 'producteur-base' : 'producteur-achete']
           if (!brut) classes.push('producteur-transfo')
@@ -1057,7 +1108,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
               <div className="producteur-texte">
                 <TexteProducteur j={j} p={p} b={b} actif={actif} />
                 {/* La roue d'un générateur : sa feuille. La mine n'a rien à régler pour l'instant. */}
-                {genre !== 'mine' && (
+                {genre !== 'mine' && genre !== 'ressource' && (
                   <button
                     type="button"
                     className="atelier-reglage"
@@ -1223,6 +1274,19 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
                 {NOM_SOUTE} · {enSoute.length}
               </button>
             )}
+            {/* LE BOUTON DE CONSTRUCTION (Keko, 02/11 : « un bouton sur l'UI qui ouvre le menu de construction ») : là dès la quête qui le demande ; il respire tant qu'on n'a rien construit et que l'or suffit. */}
+            {constructionOuverte(j) && (
+              <button
+                type="button"
+                className={`bouton-construire${!j.producteurs.some(estConstruit) && j.or + 1e-9 >= prixConstruction(j) ? ' respire' : ''}`}
+                onClick={() => {
+                  setBulle(null)
+                  setMenuConstruction(true)
+                }}
+              >
+                Construire
+              </button>
+            )}
             <button type="button" onClick={() => carte.current?.centrer()}>
               Centrer
             </button>
@@ -1247,6 +1311,8 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
       )}
       {/* LE CHOIX d'une amélioration, qu'ouvre une quête. */}
       {choixOuvert && j.offre !== null && <ChoixAmelioration j={j} onChoisir={choisirIci} onFermer={() => setChoixOuvert(false)} />}
+      {/* LE MENU DE CONSTRUCTION, qu'ouvre son bouton. */}
+      {menuConstruction && <MenuConstruction j={j} onConstruire={construireIci} onFermer={() => setMenuConstruction(false)} />}
       {/* LE MENU DES AMÉLIORATIONS, qu'ouvre le bouton en haut à droite. */}
       {menuOuvert && (
         <MenuAmeliorations
@@ -1306,7 +1372,9 @@ function Objectif({ j, refCarte, onReclamer }: { j: Joueur; refCarte: React.RefO
         <span className="objectif-titre">Quête</span>
         <span className="objectif-texte">
           {q.objectif === 'niveau' ? (
-            <>Améliorer la mine au niveau {q.but}</>
+            <>Améliorer la banque au niveau {q.but}</>
+          ) : q.objectif === 'construction' ? (
+            <>Construisez un producteur</>
           ) : (
             <>
               Gagner {q.but} <SymbolePiece />
@@ -1321,7 +1389,9 @@ function Objectif({ j, refCarte, onReclamer }: { j: Joueur; refCarte: React.RefO
         )}
         <span className="objectif-ligne">
           <span className="petit sourd">
-            {q.objectif === 'niveau' ? (
+            {q.objectif === 'construction' ? (
+              <>une scierie ou une mine, dans « Construire »</>
+            ) : q.objectif === 'niveau' ? (
               <>
                 niveau {fait} / {but}
               </>
@@ -1429,30 +1499,6 @@ function BoutonAmeliorer({ j, p }: { j: Joueur; p: Producteur }): ReactElement {
   )
 }
 
-/** L'image de la mine : celle de Keko (`public/mine.webp`, servie avec la date du build) quand elle est là ; sinon, le pictogramme d'attente dessiné en code. */
-function ImageMine(): ReactElement {
-  const [absente, setAbsente] = useState(false)
-  if (absente) return <PictoMine />
-  return <img className="mine-image" src={`${import.meta.env.BASE_URL}mine.webp?v=${encodeURIComponent(__DATE_DU_BUILD__)}`} alt="" draggable={false} onError={() => setAbsente(true)} />
-}
-
-/** Le pictogramme d'attente de la mine, à remplacer par l'image de Keko : l'entrée d'une galerie étayée de bois, deux rails, trois pépites. */
-function PictoMine(): ReactElement {
-  return (
-    <svg className="mine-picto" viewBox="0 0 100 100" aria-hidden>
-      <path d="M25 90 V58 Q25 46 37 46 H63 Q75 46 75 58 V90 Z" fill="#160d20" />
-      <path d="M40 90 L45 62 M60 90 L55 62" stroke="#4a3560" strokeWidth="2.5" strokeLinecap="round" />
-      <rect x="16" y="48" width="9" height="42" rx="2" fill="#8a5a2b" />
-      <rect x="75" y="48" width="9" height="42" rx="2" fill="#8a5a2b" />
-      <rect x="12" y="40" width="76" height="9" rx="2" fill="#a06a33" />
-      <rect x="8" y="88" width="84" height="6" rx="2" fill="#5a3d22" />
-      <circle cx="43" cy="84" r="4" fill="#ffc61f" />
-      <circle cx="53" cy="86" r="3" fill="#ffc61f" />
-      <circle cx="60" cy="82" r="3.5" fill="#ffd95a" />
-    </svg>
-  )
-}
-
 /** Le texte sur la pièce d'un générateur : ce qu'il est, ce qu'il fait, ce qui le bloque. */
 function TexteProducteur({ j, p, b, actif }: { j: Joueur; p: Producteur; b: ReturnType<typeof bilanProducteur>; actif: boolean }): ReactElement {
   if (estMine(p)) {
@@ -1460,7 +1506,7 @@ function TexteProducteur({ j, p, b, actif }: { j: Joueur; p: Producteur; b: Retu
     return (
       <span className="mine">
         {ameliorationsOuvertes(j) && <BoutonAmeliorer j={j} p={p} />}
-        <ImageMine />
+        <ImageDuType type={p.type} />
         <b className="mine-nom">{NOM_MINE}</b>
         <span className="mine-production">
           <span className="mine-barre">
@@ -1475,6 +1521,27 @@ function TexteProducteur({ j, p, b, actif }: { j: Joueur; p: Producteur; b: Retu
           </span>
         </span>
         {(j.automatisation > 0 || p.reserve >= 1) && <Reserve j={j} p={p} />}
+      </span>
+    )
+  }
+  if (estConstruit(p)) {
+    // UN PRODUCTEUR CONSTRUIT (la scierie, la mine) : la mise en page de la banque — son image, son nom, sa barre et ce qu'elle rend.
+    const r = ressourceDe(p)
+    return (
+      <span className="mine">
+        <ImageDuType type={p.type} />
+        <b className="mine-nom">{nomProducteur(p)}</b>
+        <span className="mine-production">
+          <span className="mine-barre">
+            <span className="mine-barre-remplie" />
+            <span className="mine-barre-tete" />
+          </span>
+          <span className="mine-barre-gain">
+            <span className="mine-barre-gain-pompe">
+              +{abregeFin(typeDe(p).lot)} <SymboleRessource ressource={r} />
+            </span>
+          </span>
+        </span>
       </span>
     )
   }

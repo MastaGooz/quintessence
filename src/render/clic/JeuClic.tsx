@@ -6,18 +6,18 @@
  * pages n'apparaissent qu'avec autre chose qu'elle.
  */
 import { useEffect, useReducer, useRef, useState, type ReactElement } from 'react'
-import { SAISON_H } from '../../logic/clic/donnees.ts'
-import { debitOr } from '../../logic/clic/moteur.ts'
+import { RESSOURCES, SAISON_H } from '../../logic/clic/donnees.ts'
+import { debitOr, estConstruit, estMine, ressourceDe, stockRessource } from '../../logic/clic/moteur.ts'
 import { classement, finie, joueur, nouvellePartie, rattraper, type Partie } from '../../logic/clic/partie.ts'
 import { ecrireSauvegardeClic, effacerSauvegardeClic, lireSauvegardeClic } from '../../ui/stockage-clic.ts'
 import { abrege, duree, horloge, parSeconde, possede } from '../../ui/format.ts'
 import { NOM_OR } from '../../ui/noms-clic.ts'
 import { basculerSon, sonActif, sonClic } from '../../ui/sons.ts'
 import { Compteur } from '../Compteur.tsx'
-import { declarerCibleOr, monterCouche } from '../effets.ts'
+import { declarerCibleOr, declarerCibleRessource, monterCouche } from '../effets.ts'
 import { IconeSon } from '../Jeu.tsx'
 import { Base } from './Base.tsx'
-import { SymbolePiece } from './Glyphe.tsx'
+import { SymbolePiece, SymboleRessource } from './Glyphe.tsx'
 import { MarcheClic } from './MarcheClic.tsx'
 import { RivauxClic } from './RivauxClic.tsx'
 
@@ -47,7 +47,7 @@ function Accueil({ onCommencer }: { onCommencer: (nom: string) => void }): React
       <h1>Quintessence</h1>
       <p className="sourd petit">Prototype : le jeu se pose brique par brique.</p>
       <p>
-        Vous commencez avec une mine d’{NOM_OR}. Tapez-la : chaque tape rapporte 1 <SymbolePiece />.
+        Vous commencez avec une banque. Tapez-la : chaque tape rapporte 1 <SymbolePiece />.
       </p>
       <label>
         Votre nom
@@ -132,7 +132,10 @@ function Table({ partie, reelAuDepart, onRecommencer }: { partie: Partie; reelAu
   const props = { partie, agir }
   // Le jeu s'ouvre une chose à la fois : la barre et l'heure arrivent avec autre chose que la mine (l'or seul n'ouvre rien).
   const stock = j.matiere.reduce((s, q) => s + q, 0)
-  const ouvert = stock >= 10 || j.modules.length > 0 || j.points > 0 || j.producteurs.length > 1
+  // La banque et les producteurs construits n'ouvrent rien : seul le système des couleurs, quand il reviendra.
+  const ouvert = stock >= 10 || j.modules.length > 0 || j.points > 0 || j.producteurs.some((p) => !estMine(p) && !estConstruit(p))
+  // LES RESSOURCES, à côté de l'or, dès qu'un producteur en fait.
+  const ressourcesVues = RESSOURCES.filter((r) => j.producteurs.some((p) => estConstruit(p) && ressourceDe(p) === r) || stockRessource(j, r) > 0)
   const pageVue = ouvert ? page : 'base'
   // La carte remplit le corps : la page ne défile pas, c'est le plan qui glisse.
   const surLaCarte = !finie(partie) && pageVue === 'base'
@@ -146,6 +149,14 @@ function Table({ partie, reelAuDepart, onRecommencer }: { partie: Partie; reelAu
             <Compteur valeur={j.or} cle="or" format={possede} />
           </b>{' '}
           <SymbolePiece />
+          {ressourcesVues.map((r) => (
+            <span key={r} className="entete-ressource">
+              <b ref={declarerCibleRessource(r)}>
+                <Compteur valeur={stockRessource(j, r)} cle={r} format={possede} />
+              </b>{' '}
+              <SymboleRessource ressource={r} />
+            </span>
+          ))}
         </span>
         <span className="entete-heure">
           {ouvert && horloge(m.t)}

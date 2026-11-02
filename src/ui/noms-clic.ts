@@ -3,7 +3,7 @@
  * 01/11 : « revenons au système abstrait »). Une matière se nomme par sa forme
  * et sa couleur (« carré rouge », « rond bleu ») ; l'habillage viendra après.
  */
-import { FABRICATION, PRIMAIRES, PRODUCTEURS, RARETES, couleurDe, formeDe, partsDe, type Genre, type IdAmelioration, type Recompense, type Trait } from '../logic/clic/donnees.ts'
+import { FABRICATION, PRIMAIRES, PRODUCTEURS, RARETES, couleurDe, formeDe, partsDe, type Genre, type IdAmelioration, type Recompense, type Trait, type Ressource } from '../logic/clic/donnees.ts'
 import { rangDe } from '../logic/clic/moteur.ts'
 
 /** La ressource, en un mot. */
@@ -51,8 +51,11 @@ export function explicationModule(couleur: number, forme: number): string {
   return `deux effets à ${Math.round((parts[0]?.[1] ?? 0) * 100)} % : ${parts.map(([c]) => EXPLICATIONS[c]?.[forme] ?? '').join(' ; ')}`
 }
 
-/** La mine d'or du départ (Keko, 02/11). */
-export const NOM_MINE = 'Mine d’or'
+/** La BANQUE du départ (Keko, 02/11 : « on va changer la mine d'or pour banque, afin de distinguer » — de la mine qu'on construit). */
+export const NOM_MINE = 'Banque'
+/** Les ressources des producteurs construits, et de quoi les annoncer. */
+export const NOM_RESSOURCE: Record<Ressource, string> = { bois: 'bois', pierre: 'pierre' }
+export const DU_RESSOURCE: Record<Ressource, string> = { bois: 'Du bois', pierre: 'De la pierre' }
 /** Ce qu'une quête débloque, tel qu'on l'annonce sur sa carte. */
 export const NOM_RECOMPENSE: Record<Recompense, string> = { bouton: 'le menu des améliorations', aucune: '' }
 /** Les améliorations de la mine (Keko, 02/11). */
@@ -69,13 +72,23 @@ export const NOM_AMELIORATION: Record<IdAmelioration, string> = {
   tropPlein: 'Trop-plein',
 }
 
-export const NOM_GENRE: Record<Genre, string> = { source: 'source', raffinerie: 'raffinerie', melangeur: 'mélangeur', mine: 'mine' }
-const MAJUSCULE: Record<Genre, string> = { source: 'Source', raffinerie: 'Raffinerie', melangeur: 'Mélangeur', mine: 'Mine' }
-const LETTRE: Record<Genre, string> = { source: 'S', raffinerie: 'R', melangeur: 'M', mine: 'Or' }
+export const NOM_GENRE: Record<Genre, string> = { source: 'source', raffinerie: 'raffinerie', melangeur: 'mélangeur', mine: 'banque', ressource: 'producteur' }
+const MAJUSCULE: Record<Genre, string> = { source: 'Source', raffinerie: 'Raffinerie', melangeur: 'Mélangeur', mine: 'Banque', ressource: 'Producteur' }
+const LETTRE: Record<Genre, string> = { source: 'S', raffinerie: 'R', melangeur: 'M', mine: 'Or', ressource: 'P' }
+/** Les producteurs construits, par leur ressource. */
+const NOM_PRODUCTEUR: Record<Ressource, string> = { bois: 'Scierie', pierre: 'Mine' }
 
-/** Chaque type de générateur : « Mine d’or », « Source », « Source 2 », « Raffinerie 1 », « Mélangeur 1 ». */
+/** Chaque type de générateur : « Banque », « Scierie », « Mine », « Source », « Source 2 », « Raffinerie 1 », « Mélangeur 1 ». */
 export const NOM_TYPE: readonly string[] = PRODUCTEURS.map((t, i) =>
-  t.genre === 'mine' ? NOM_MINE : t.genre === 'source' ? (i === 0 ? 'Source' : `Source ${rangDe(i) + 1}`) : `${MAJUSCULE[t.genre]} ${rangDe(i) + 1}`,
+  t.genre === 'mine'
+    ? NOM_MINE
+    : t.genre === 'ressource'
+      ? NOM_PRODUCTEUR[t.ressource ?? 'bois']
+      : t.genre === 'source'
+        ? i === 0
+          ? 'Source'
+          : `Source ${rangDe(i) + 1}`
+        : `${MAJUSCULE[t.genre]} ${rangDe(i) + 1}`,
 )
 export const LETTRE_PRODUCTEUR: readonly string[] = PRODUCTEURS.map((t, i) => (t.genre === 'mine' ? LETTRE.mine : t.genre === 'source' && i === 0 ? 'S' : `${LETTRE[t.genre]}${rangDe(i) + 1}`))
 

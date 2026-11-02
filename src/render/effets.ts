@@ -11,6 +11,8 @@ import { sonDepense, sonPiece, sonRecolte } from '../ui/sons.ts'
 
 let couche: HTMLElement | null = null
 let cibleOr: HTMLElement | null = null
+/** Le compteur de chaque ressource, en haut : là où volent ses morceaux. */
+const ciblesRessources: Record<string, HTMLElement | null> = {}
 const retards: Record<string, number> = {}
 const glisses: Record<string, number> = {}
 
@@ -165,7 +167,7 @@ export const DUREE_VOL = 560
  * l'autre. `onArrivee` est appelé à chaque atterrissage. Rend l'instant (ms)
  * où la première pièce arrive.
  */
-export function volerDesPieces(depuis: DOMRect, vers: DOMRect, n: number, onArrivee?: (rang: number) => void, ecart = 55): number {
+export function volerDesPieces(depuis: DOMRect, vers: DOMRect, n: number, onArrivee?: (rang: number) => void, ecart = 55, classe = 'piece'): number {
   if (couche === null || mouvementReduit()) {
     onArrivee?.(0)
     return 0
@@ -177,7 +179,7 @@ export function volerDesPieces(depuis: DOMRect, vers: DOMRect, n: number, onArri
   for (let i = 0; i < n; i++) {
     const px = x0 + (Math.random() - 0.5) * Math.min(depuis.width, 120) * 0.6
     const py = y0 + (Math.random() - 0.5) * 12
-    const el = poser('piece', px, py)
+    const el = poser(classe, px, py)
     if (el === null) break
     // Un arc quadratique : on part vers le haut, puis on file vers la cible.
     const cx = (px + x1) / 2 + (Math.random() - 0.5) * 140
@@ -266,12 +268,52 @@ export function effetRecolte(source: DOMRect, gain: number, intensite: number): 
 /** Deux tapes à moins de ce délai forment une série : leurs gains s'additionnent dans un seul nombre, le son monte. */
 export const SERIE_MS = 450
 
-/** Un nombre d'or : le nombre, puis la pièce (Keko, 02/11 : « à la place du texte or, un symbole de pièce ; pas de + avant »). Une dépense garde son « − ». */
-function nombreOr(el: HTMLElement, n: number, signe = ''): void {
+/** Un nombre d'or : le nombre, puis la pièce (Keko, 02/11 : « à la place du texte or, un symbole de pièce ; pas de + avant »). Une dépense garde son « − ». `symbole` : une ressource à la place de la pièce. */
+function nombreOr(el: HTMLElement, n: number, signe = '', symbole = 'symbole-piece'): void {
   el.textContent = `${signe}${Math.round(n).toLocaleString('fr-FR')} `
   const piece = document.createElement('span')
-  piece.className = 'symbole-piece'
+  piece.className = symbole
   el.appendChild(piece)
+}
+
+/** Le compteur d'une ressource se déclare (une ref React). */
+export function declarerCibleRessource(r: string): (el: HTMLElement | null) => void {
+  return (el) => {
+    ciblesRessources[r] = el
+  }
+}
+
+/** Une ressource gagnée (Keko, 02/11 : les producteurs construits, comme la banque) : ses morceaux volent de `depuis` à son compteur, qui ne bouge qu'à leur arrivée ; le nombre flotte au-dessus. */
+export function effetRessource(depuis: DOMRect, r: string, gain: number): void {
+  const cible = ciblesRessources[r]
+  const vers = cible?.getBoundingClientRect()
+  if (cible === null || cible === undefined || vers === undefined || gain <= 0) return
+  const arrivee = volerDesPieces(
+    depuis,
+    vers,
+    Math.max(1, Math.min(12, Math.round(gain))),
+    (rang) => {
+      sonPiece(rang)
+      cible.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.18)', offset: 0.35 }, { transform: 'scale(1)' }], { duration: 220, easing: 'ease-out' })
+    },
+    55,
+    `piece piece-${r}`,
+  )
+  retarderLeCompteur(r, arrivee)
+  if (mouvementReduit()) return
+  const el = poser('flottant flottant-or', depuis.left + depuis.width / 2, depuis.top - 16)
+  if (el === null) return
+  nombreOr(el, gain, '', `symbole-ressource symbole-${r}`)
+  const dx = (Math.random() - 0.5) * 40
+  animer(
+    el,
+    [
+      { transform: 'translate(-50%, -50%) scale(0.5)', opacity: 0 },
+      { transform: `translate(calc(-50% + ${dx * 0.3}px), -150%) scale(1.15)`, opacity: 1, offset: 0.18 },
+      { transform: `translate(calc(-50% + ${dx}px), -270%) scale(1)`, opacity: 0 },
+    ],
+    { duration: 750, easing: 'cubic-bezier(.2,.7,.3,1)' },
+  )
 }
 
 /** Un nombre d'or qui flotte et s'efface, comme `flotter` ; une dépense en rouge, avec son « − ». */

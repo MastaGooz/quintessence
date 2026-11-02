@@ -126,7 +126,7 @@ export function MenuAmeliorations({ j, onMonter, onChoisir, onFermer }: { j: Jou
             <span className="amelioration-effet">
               {gainNiveauMine(j) === 'automatique' ? (
                 <>
-                  L’automatique : la barre de la mine se remplit seule, même sans vous — <b className="gain">{abregeFin(parHeure)}</b> <SymbolePiece /> par heure, dans la réserve
+                  L’automatique : la barre de la banque se remplit seule, même sans vous — <b className="gain">{abregeFin(parHeure)}</b> <SymbolePiece /> par heure, dans la réserve
                 </>
               ) : (
                 <>Une amélioration au choix, parmi trois</>

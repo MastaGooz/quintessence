@@ -32,8 +32,9 @@
  */
 import {
   ACHAT, CASE, COULEURS, EFFETS, EMPLACEMENTS, FABRICATION, FAMILLES, FORMES, FUSION, MARCHE, MELANGE, MODULE, NIVEAU, NIVEAU_SOURCE, PIECE, PRESTIGE, PRIMAIRES, PRODUCTEUR,
-  NIVEAU_MINE, PRODUCTEURS, QUETE_CHOIX, RARETES, RESERVE_MINE, SORTES, AMELIORATIONS, EFFETS_MINE, IDS_AMELIORATIONS, TRAITS, TYPE_MINE, VALEUR_MODULE, aDuBleu, couleurDe, formeDe, partsDe, sorteDe,
-  type Cout, type Genre, type IdAmelioration, type Qualite, type Quete, type Trait, type TypeProducteur,
+  CONSTRUCTION, NIVEAU_MINE, OFFRE_NIVEAU, PRODUCTEURS, QUETE_CONSTRUCTION, QUETES, RARETES, RESERVE_MINE, RESSOURCES, SORTES, AMELIORATIONS, EFFETS_MINE, IDS_AMELIORATIONS, TRAITS, TYPE_MINE, VALEUR_MODULE,
+  aDuBleu, couleurDe, formeDe, partsDe, sorteDe,
+  type Cout, type Genre, type IdAmelioration, type Qualite, type Quete, type Ressource, type Trait, type TypeProducteur,
 } from './donnees.ts'
 import { graineDe, rngDe } from '../rng.ts'
 
@@ -91,6 +92,8 @@ export interface Joueur {
   offre: IdAmelioration[] | null
   /** Les pépites tombées, pas encore tapées ni perdues. */
   pepites: number
+  /** Les ressources des producteurs construits (absentes des parties d'avant : rien). */
+  ressources: Record<Ressource, number>
   /** La matière en stock, par sorte (voir `sorteDe`). */
   matiere: number[]
   producteurs: Producteur[]
@@ -161,6 +164,7 @@ export function nouveauJoueur(id: number, nom: string): Joueur {
     ameliorations: niveauxVides(),
     offre: null,
     pepites: 0,
+    ressources: ressourcesVides(),
     matiere: Array.from({ length: SORTES }, () => 0),
     producteurs: depart(),
     modules: [],
@@ -217,6 +221,30 @@ export function estSource(p: { type: number }): boolean {
 /** La mine d'or : elle rend de l'or, pas de la matière. */
 export function estMine(p: { type: number }): boolean {
   return genreDe(p) === 'mine'
+}
+
+/** Un producteur construit (scierie, mine) : il produit une ressource. */
+export function estConstruit(p: { type: number }): boolean {
+  return genreDe(p) === 'ressource'
+}
+
+/** La ressource d'un producteur construit. */
+export function ressourceDe(p: { type: number }): Ressource {
+  return typeDe(p).ressource ?? 'bois'
+}
+
+function ressourcesVides(): Record<Ressource, number> {
+  return Object.fromEntries(RESSOURCES.map((r) => [r, 0])) as Record<Ressource, number>
+}
+
+/** Le stock d'une ressource (0 dans une partie d'avant les ressources). */
+export function stockRessource(j: Joueur, r: Ressource): number {
+  return j.ressources?.[r] ?? 0
+}
+
+function gagnerRessource(j: Joueur, r: Ressource, q: number): void {
+  j.ressources = { ...ressourcesVides(), ...j.ressources }
+  j.ressources[r] += q
 }
 
 /** Un générateur de départ : offert, ni saisissable ni achetable, il reste au centre. */
@@ -774,6 +802,8 @@ export interface Coup {
   pepite?: boolean
   /** La mine : ce que la tape a rempli de sa barre (0 : la barre est arrêtée). */
   avance?: number
+  /** Un producteur construit : la ressource gagnée (`gain` en compte les unités). */
+  ressource?: Ressource
 }
 
 /**
@@ -800,6 +830,17 @@ export function declencher(m: Monde, j: Joueur, p: Producteur, alea?: number, se
     }
     j.journal.tapes += 1
     return { gain: barres * orParBarre(j, p), critique, grosLot: false, sorte: sortie(p), or, pepite, avance }
+  }
+  if (estConstruit(p)) {
+    // UN PRODUCTEUR CONSTRUIT, comme la banque sans ses améliorations : la tape avance sa barre, une barre pleine donne sa ressource.
+    const r = ressourceDe(p)
+    p.progres = (p.progres ?? 0) + CONSTRUCTION.tape
+    const barres = Math.floor(p.progres + 1e-9)
+    p.progres = Math.max(0, p.progres - barres)
+    const gain = barres * typeDe(p).lot
+    if (gain > 0) gagnerRessource(j, r, gain)
+    j.journal.tapes += 1
+    return { gain, critique: false, grosLot: false, sorte: sortie(p), or: false, avance: CONSTRUCTION.tape, ressource: r }
   }
   const critique = alea !== undefined && alea < b.chanceCritique
   const grosLot = alea !== undefined && (alea * 7919) % 1 < b.chanceGrosLot
@@ -887,13 +928,13 @@ export function valeurCout(m: Monde, j: Joueur, c: Cout): number {
 /** Le coût du prochain générateur d'un type ; pour une source, dans cette couleur (les générateurs de départ ne s'achètent pas). */
 export function coutProducteur(j: Joueur, i: number, couleur = 0): Cout {
   const t = PRODUCTEURS[i]
-  if (t === undefined || estFixe({ type: i })) return { forme: 0, couleur: 0, quantite: Infinity }
+  if (t === undefined || estFixe({ type: i }) || t.genre === 'ressource') return { forme: 0, couleur: 0, quantite: Infinity }
   const quantite = Math.ceil(t.cout.quantite * Math.pow(ACHAT.croissance, j.achetes[i] ?? 0))
   return { forme: t.cout.forme, couleur: t.genre === 'source' ? couleur : t.cout.couleur, quantite }
 }
 
 /** L'indice de la famille d'un genre dans `connus`. */
-const FAMILLE_INDEX: Record<Genre, number> = { source: 0, raffinerie: 1, melangeur: 2, mine: 3 }
+const FAMILLE_INDEX: Record<Genre, number> = { source: 0, raffinerie: 1, melangeur: 2, mine: 3, ressource: 4 }
 
 /**
  * Un modèle est visible dès qu'on l'a dévoilé — le suivant en possédant le
@@ -903,7 +944,7 @@ const FAMILLE_INDEX: Record<Genre, number> = { source: 0, raffinerie: 1, melange
  */
 export function visibleProducteur(j: Joueur, i: number): boolean {
   const t = PRODUCTEURS[i]
-  if (t === undefined || estFixe({ type: i })) return false
+  if (t === undefined || estFixe({ type: i }) || t.genre === 'ressource') return false
   const k = rangDe(i)
   if (k < (j.connus[FAMILLE_INDEX[t.genre]] ?? 0)) return true
   if (t.genre === 'source') return false
@@ -997,12 +1038,9 @@ export function ameliorerSource(j: Joueur, p: Producteur): boolean {
 // ---------------------------------------------------------------------------
 // LES QUÊTES ET CE QU'ELLES DÉBLOQUENT
 
-/** La quête en cours : la première, gagner de l'or, ouvre le menu des améliorations ; les suivantes demandent la mine au niveau 2, puis 3 ; ensuite, plus de quête (null). */
+/** La quête en cours (voir `QUETES`), ou null quand il n'y en a plus. */
 export function queteEnCours(j: Joueur): Quete | null {
-  if (j.quete === 0) return { id: 'bouton', objectif: 'or', but: QUETE_CHOIX.bouton, recompense: 'bouton' }
-  const niveau = j.quete + 1
-  if (niveau > QUETE_CHOIX.dernierNiveau) return null
-  return { id: `niveau-${niveau}`, objectif: 'niveau', but: niveau, recompense: 'aucune' }
+  return QUETES[j.quete] ?? null
 }
 
 /** Ce que la quête en cours demande : l'or à gagner, ou le niveau de la mine. */
@@ -1014,7 +1052,8 @@ export function objectifQuete(j: Joueur): number {
 export function progresQuete(j: Joueur): number {
   const q = queteEnCours(j)
   if (q === null) return 0
-  const fait = q.objectif === 'niveau' ? (j.producteurs.find(estMine)?.niveau ?? 1) : j.orProduit - j.queteDepuis
+  const fait =
+    q.objectif === 'niveau' ? (j.producteurs.find(estMine)?.niveau ?? 1) : q.objectif === 'construction' ? j.producteurs.filter(estConstruit).length : j.orProduit - j.queteDepuis
   return Math.min(q.but, Math.max(0, fait))
 }
 
@@ -1045,6 +1084,65 @@ function avancerLesQuetes(j: Joueur): void {
 /** Le bouton des améliorations est là : la première quête est réclamée. */
 export function ameliorationsOuvertes(j: Joueur): boolean {
   return j.quete >= 1
+}
+
+// ---------------------------------------------------------------------------
+// LA CONSTRUCTION (l'étape deux)
+
+/** Le bouton de construction est là : la quête qui le demande a commencé. */
+export function constructionOuverte(j: Joueur): boolean {
+  return QUETE_CONSTRUCTION >= 0 && j.quete >= QUETE_CONSTRUCTION
+}
+
+/** Le prix de la prochaine construction, le même pour tous les producteurs : il monte avec ceux qu'on a déjà. */
+export function prixConstruction(j: Joueur): number {
+  return Math.round(CONSTRUCTION.premier * Math.pow(CONSTRUCTION.croissance, j.producteurs.filter(estConstruit).length))
+}
+
+/**
+ * Où se pose un producteur construit : SOUS la banque, en colonne — au
+ * téléphone en hauteur, le zoom normal ne descend pas assez pour montrer deux
+ * carrés côte à côte, mais il en montre deux l'un sous l'autre —, puis, si la
+ * colonne est prise, autour, sur une place libre.
+ */
+function placeDeConstruction(j: Joueur, type: number): { x: number; y: number } {
+  const taille = tailleDe({ type })
+  // Le pas d'une place à l'autre : deux empreintes côte à côte, arrondi aux cases.
+  const pas = Math.ceil((taille.largeur + 2 * MODULE.profondeur) / CASE) * CASE
+  const occupees = j.producteurs.map((p) => empreinte(p))
+  const libre = (c: { x: number; y: number }): boolean => !occupees.some((o) => seChevauchent(o, empreinte({ ...c, type })))
+  for (let k = 1; k <= 8; k++) {
+    const c = surLesCases(0, k * pas)
+    if (libre(c)) return c
+  }
+  for (let anneau = 1; anneau <= 6; anneau++) {
+    const places = [
+      { x: anneau * pas, y: 0 },
+      { x: -anneau * pas, y: 0 },
+      { x: 0, y: anneau * pas },
+      { x: 0, y: -anneau * pas },
+      { x: anneau * pas, y: anneau * pas },
+      { x: -anneau * pas, y: anneau * pas },
+      { x: anneau * pas, y: -anneau * pas },
+      { x: -anneau * pas, y: -anneau * pas },
+    ].map((c) => surLesCases(c.x, c.y))
+    const place = places.find(libre)
+    if (place !== undefined) return place
+  }
+  return surLesCases(0, 7 * pas)
+}
+
+/** CONSTRUIRE un producteur (un indice de `TYPES_CONSTRUCTION`) : payé en or, posé à côté de la banque. Rend le producteur, ou null. */
+export function construire(j: Joueur, type: number): Producteur | null {
+  const t = PRODUCTEURS[type]
+  const prix = prixConstruction(j)
+  if (t?.genre !== 'ressource' || !constructionOuverte(j) || j.or + 1e-9 < prix) return null
+  j.or -= prix
+  const place = placeDeConstruction(j, type)
+  const p: Producteur = { id: j.prochainId++, type, x: place.x, y: place.y, couleur: 0, forme: 0, niveau: 1, reserve: 0, progres: 0 }
+  j.producteurs.push(p)
+  avancerLesQuetes(j)
+  return p
 }
 
 /** Le prix du niveau suivant de la mine. */
@@ -1082,11 +1180,11 @@ export function ameliorationPossible(j: Joueur, id: IdAmelioration): boolean {
   return j.ameliorations[a.requiert] > 0
 }
 
-/** Tire l'offre d'une quête de choix : `QUETE_CHOIX.offre` améliorations possibles, au hasard du joueur. */
+/** Tire l'offre d'un niveau de la banque : `OFFRE_NIVEAU` améliorations possibles, au hasard du joueur. */
 function tirerOffre(m: Monde, j: Joueur): IdAmelioration[] | null {
   const possibles = IDS_AMELIORATIONS.filter((id) => ameliorationPossible(j, id))
   const offre: IdAmelioration[] = []
-  while (offre.length < QUETE_CHOIX.offre && possibles.length > 0) offre.push(possibles.splice(Math.floor(tirer(m, j) * possibles.length), 1)[0]!)
+  while (offre.length < OFFRE_NIVEAU && possibles.length > 0) offre.push(possibles.splice(Math.floor(tirer(m, j) * possibles.length), 1)[0]!)
   return offre.length > 0 ? offre : null
 }
 
@@ -1496,7 +1594,7 @@ export function prestiger(j: Joueur): boolean {
 // ---------------------------------------------------------------------------
 // LE TEMPS
 
-const ORDRE: Record<Genre, number> = { mine: 0, source: 0, melangeur: 1, raffinerie: 2 }
+const ORDRE: Record<Genre, number> = { mine: 0, ressource: 0, source: 0, melangeur: 1, raffinerie: 2 }
 
 /** Fait vivre le monde `dt` heures : la mine et les sources produisent par leurs horloges, les mélangeurs puis les raffineries convertissent, le marché respire. */
 export function avancer(m: Monde, dt: number): void {
@@ -1509,6 +1607,8 @@ export function avancer(m: Monde, dt: number): void {
         avancerBarreAuto(j, p, vitesseAuto(j) * dt * 3600)
         continue
       }
+      // Les producteurs construits n'avancent qu'à la tape, pour l'instant.
+      if (estConstruit(p)) continue
       const b = bilanProducteur(j, p)
       if (b.frequence <= 0) continue
       if (estSource(p)) produire(j, sortie(p), b.debit * 3600 * dt)

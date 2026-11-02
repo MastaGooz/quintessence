@@ -806,6 +806,16 @@ select {
   display: inline-block;
 }
 
+/* Les ressources, à côté de l'or. */
+.entete-ressource {
+  margin-left: 0.7rem;
+  white-space: nowrap;
+}
+
+.entete-or .entete-ressource b {
+  color: var(--creme);
+}
+
 .entete-son {
   min-height: 2rem;
   width: 2rem;
@@ -892,6 +902,28 @@ select {
 }
 
 /* LA PIÈCE D'OR À LA PLACE DU MOT « OR » (Keko, 02/11) : la même pièce que celle qui vole, à la taille du texte, posée sur sa ligne. */
+/* LES RESSOURCES : le bois, une tranche de rondin ; la pierre, un caillou. À la taille du texte, ou en vol (`.piece-bois`, `.piece-pierre`). */
+.symbole-ressource {
+  display: inline-block;
+  width: 0.85em;
+  height: 0.85em;
+  vertical-align: -0.1em;
+}
+
+.symbole-bois,
+.piece.piece-bois {
+  border-radius: 50%;
+  background: radial-gradient(circle, #edc993 0 15%, #b7834a 16% 25%, #e2b97c 26% 39%, #a8733d 40% 53%, #d8a764 54% 66%, #7a4a22 67%);
+  box-shadow: inset 0 0 0 0.05em rgba(60, 30, 10, 0.6), 0 0.05em 0.12em rgba(0, 0, 0, 0.5);
+}
+
+.symbole-pierre,
+.piece.piece-pierre {
+  border-radius: 42% 58% 38% 62% / 55% 40% 60% 45%;
+  background: radial-gradient(circle at 35% 30%, #eceef2, #a3a6b0 55%, #5f626c);
+  box-shadow: inset 0 0 0 0.05em rgba(40, 40, 50, 0.5), 0 0.05em 0.12em rgba(0, 0, 0, 0.5);
+}
+
 .symbole-piece {
   display: inline-block;
   width: 0.85em;
@@ -1122,9 +1154,16 @@ select {
 }
 
 /* LA MINE D'OR, le carré du départ (Keko, 02/11 : « forme carré avec une image de mine dedans ») : l'image de Keko (`public/mine.webp`) ou le pictogramme d'attente, son nom dessous, le trait d'or de la base. */
-.producteur-mine .producteur-texte {
+.producteur-mine .producteur-texte,
+.producteur-ressource .producteur-texte {
   width: 100%;
   height: 100%;
+}
+
+/* LES PRODUCTEURS CONSTRUITS (la scierie, la mine) : des carrés comme la banque, le trait à la teinte de leur ressource. */
+.producteur-ressource .producteur-forme path {
+  stroke: hsl(var(--teinte) 40% 62% / 0.9);
+  stroke-width: 6;
 }
 
 .mine {
@@ -2115,6 +2154,35 @@ span.rarete-4,
 }
 
 /* Éteinte : son arrivée (`both`) fige l'opacité, l'éteinte passe par le filtre. */
+/* LE MENU DE CONSTRUCTION : le pictogramme du producteur à gauche de sa carte. */
+.amelioration-carte.construction-carte {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.construction-picto {
+  flex: none;
+  display: flex;
+  width: 4.4rem;
+  height: 4.4rem;
+}
+
+.construction-picto .mine-image,
+.construction-picto .mine-picto {
+  flex: none;
+  width: 100%;
+  height: 100%;
+}
+
+.construction-texte {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: 1;
+  min-width: 0;
+}
+
 .amelioration-carte:disabled {
   filter: grayscale(0.7) brightness(0.75);
   border-color: rgba(255, 246, 226, 0.2);

@@ -8,7 +8,7 @@
  */
 import type { CSSProperties, ReactElement } from 'react'
 import { NOMS_FORMES, nomSorte } from '../../ui/noms-clic.ts'
-import { couleurDe, formeDe, sorteDe } from '../../logic/clic/donnees.ts'
+import { couleurDe, formeDe, sorteDe, type Ressource } from '../../logic/clic/donnees.ts'
 import { boite, cheminDecoupe, cotesDuModule } from './pieces.ts'
 
 /** Une teinte par couleur : rouge, vert, bleu, jaune, cyan, violet. */
@@ -39,6 +39,11 @@ export function SymboleSorte({ sorte, classe }: { sorte: number; classe?: string
 /** LA PIÈCE D'OR, à la place du mot « or » (Keko, 02/11) : la même pièce que celle qui vole au compteur (`.piece`). */
 export function SymbolePiece({ classe = '' }: { classe?: string }): ReactElement {
   return <span className={`symbole-piece${classe === '' ? '' : ` ${classe}`}`} role="img" aria-label="or" />
+}
+
+/** Une ressource d'un producteur construit, à la taille du texte : le bois, une tranche de rondin ; la pierre, un caillou. */
+export function SymboleRessource({ ressource, classe = '' }: { ressource: Ressource; classe?: string }): ReactElement {
+  return <span className={`symbole-ressource symbole-${ressource}${classe === '' ? '' : ` ${classe}`}`} role="img" aria-label={ressource} />
 }
 
 const ENCOCHE_GLYPHE = { largeur: 11, profondeur: 7 }

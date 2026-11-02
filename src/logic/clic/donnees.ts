@@ -99,7 +99,8 @@ export interface Cout {
   quantite: number
 }
 
-export const GENRES = ['source', 'raffinerie', 'melangeur', 'mine'] as const
+/** `mine` : la BANQUE du départ (le nom de code est resté, Keko l'a renommée le 02/11) ; `ressource` : les producteurs qu'on construit (scierie, mine). */
+export const GENRES = ['source', 'raffinerie', 'melangeur', 'mine', 'ressource'] as const
 export type Genre = (typeof GENRES)[number]
 
 /** UN TYPE DE GÉNÉRATEUR : ce qu'il fait à chaque déclenchement, ce qu'il coûte, et les creux qu'il offre. */
@@ -115,7 +116,13 @@ export interface TypeProducteur {
   creux: readonly (number | null)[]
   /** Sa taille sur le plan, en pixels-monde, quand ce n'est pas celle de `PRODUCTEUR` (le rectangle de trois cases sur une). */
   taille?: { largeur: number; hauteur: number }
+  /** Un producteur construit : la ressource qu'il produit. */
+  ressource?: Ressource
 }
+
+/** LES RESSOURCES des producteurs qu'on construit (Keko, 02/11 : la scierie fait du bois, la mine de la pierre). */
+export const RESSOURCES = ['bois', 'pierre'] as const
+export type Ressource = (typeof RESSOURCES)[number]
 
 /**
  * LES SOURCES : la première, offerte en trois couleurs, puis des modèles qui
@@ -197,32 +204,54 @@ export const FABRICATION = {
  * carré de trois cases de côté ; sa barre et sa réserve, voir `EFFETS_MINE`. Pas de creux pour
  * l'instant : les héros viendront avec la brique suivante.
  */
-export const MINE: TypeProducteur = { id: 'mine', genre: 'mine', cout: { forme: 0, couleur: null, quantite: 0 }, lot: 1, creux: [_, _, _, _, _, _, _, _], taille: { largeur: 450, hauteur: 450 } }
+export const MINE: TypeProducteur = { id: 'banque', genre: 'mine', cout: { forme: 0, couleur: null, quantite: 0 }, lot: 1, creux: [_, _, _, _, _, _, _, _], taille: { largeur: 450, hauteur: 450 } }
 
 /**
- * LES QUÊTES, une à la fois, trois en tout (Keko, 02/11 : « quête 1 : gagner
- * 10, quête 2 : améliorer la mine au niveau 2, quête 3 : au niveau 3 », puis
- * « on arrête au niveau 3, ensuite on arrête les quêtes ») : la dernière
- * demande la mine au niveau `dernierNiveau`. La
- * première demande `bouton` or (l'or compte depuis son début), se RÉCLAME
- * d'une tape et fait apparaître LE BOUTON DES AMÉLIORATIONS de la mine, dont
- * le menu fait monter son niveau (voir `NIVEAU_MINE`). Les suivantes
- * demandent un niveau de la mine : sans récompense, elles s'accomplissent
- * d'elles-mêmes quand il est atteint. L'amélioration d'un niveau n'est PAS
- * leur récompense, c'est l'EFFET DU NIVEAU (Keko, 02/11 : « les améliorations
- * de niveau ne sont pas les récompenses de quêtes, c'est littéralement
- * l'effet du level up ») : chaque niveau gagné, à partir du troisième, offre
- * `offre` améliorations au choix.
+ * LES PRODUCTEURS QU'ON CONSTRUIT, l'étape deux (Keko, 02/11 : « l'onglet
+ * construction ; dedans, le choix entre plusieurs producteurs : scierie,
+ * mine… ») : des carrés comme la banque, qui produisent COMME ELLE — une tape
+ * remplit leur barre de `CONSTRUCTION.tape`, une barre pleine donne `lot` de
+ * leur ressource ; leur automatique viendra plus tard. Ils apparaissent à
+ * côté de la banque.
+ */
+export const SCIERIE: TypeProducteur = { id: 'scierie', genre: 'ressource', ressource: 'bois', cout: { forme: 0, couleur: null, quantite: 0 }, lot: 1, creux: [_, _, _, _, _, _, _, _], taille: { largeur: 450, hauteur: 450 } }
+export const MINE_DE_PIERRE: TypeProducteur = { id: 'minePierre', genre: 'ressource', ressource: 'pierre', cout: { forme: 0, couleur: null, quantite: 0 }, lot: 1, creux: [_, _, _, _, _, _, _, _], taille: { largeur: 450, hauteur: 450 } }
+
+/** Ce que coûte la construction : `premier` or la première, `croissance` fois plus chacune des suivantes (Keko : « 50 or, puis plus cher » ; la croissance est de moi). */
+export const CONSTRUCTION = { premier: 50, croissance: 2, tape: 0.1 }
+
+/**
+ * LES QUÊTES, une à la fois (Keko, 02/11 : « quête 1 : gagner 10, quête 2 :
+ * améliorer la mine au niveau 2, quête 3 : au niveau 3 », « on arrête au
+ * niveau 3 », puis « après le niveau 3 de la mine, la prochaine quête sera :
+ * construisez un producteur »). La première, gagner de l'or (il compte depuis
+ * son début), se RÉCLAME d'une tape et fait apparaître LE BOUTON DES
+ * AMÉLIORATIONS de la banque, dont le menu fait monter son niveau (voir
+ * `NIVEAU_MINE`). Les suivantes, sans récompense, s'accomplissent d'elles-mêmes
+ * : un niveau de la banque atteint, un producteur construit — et dès que
+ * celle-ci commence, le bouton de construction est là. L'amélioration d'un
+ * niveau n'est PAS une récompense de quête, c'est l'EFFET DU NIVEAU (Keko :
+ * « c'est littéralement l'effet du level up ») : chaque niveau gagné, à partir
+ * du troisième, offre `OFFRE_NIVEAU` améliorations au choix.
  */
 export type Recompense = 'bouton' | 'aucune'
 export interface Quete {
   id: string
-  /** Ce qu'elle demande : de l'or à gagner depuis son début, ou un niveau de la mine. */
-  objectif: 'or' | 'niveau'
+  /** Ce qu'elle demande : de l'or à gagner depuis son début, un niveau de la banque, ou des producteurs construits. */
+  objectif: 'or' | 'niveau' | 'construction'
   but: number
   recompense: Recompense
 }
-export const QUETE_CHOIX = { bouton: 10, dernierNiveau: 3, offre: 3 }
+export const QUETES: readonly Quete[] = [
+  { id: 'or', objectif: 'or', but: 10, recompense: 'bouton' },
+  { id: 'niveau-2', objectif: 'niveau', but: 2, recompense: 'aucune' },
+  { id: 'niveau-3', objectif: 'niveau', but: 3, recompense: 'aucune' },
+  { id: 'construire', objectif: 'construction', but: 1, recompense: 'aucune' },
+]
+/** Le rang de la quête qui ouvre la construction. */
+export const QUETE_CONSTRUCTION = QUETES.findIndex((q) => q.objectif === 'construction')
+/** Combien d'améliorations offre un niveau de la banque. */
+export const OFFRE_NIVEAU = 3
 
 /**
  * LE NIVEAU DE LA MINE (Keko, 02/11 : « le bouton amélioration ouvre le menu
@@ -317,15 +346,18 @@ export const EFFETS_MINE = {
 export const RESERVE_MINE = { capacite: 288 }
 
 /** Tous les types de générateurs, par famille. `type` d'un producteur est un indice ici. */
-export const PRODUCTEURS: readonly TypeProducteur[] = [...SOURCES, ...RAFFINERIES, ...MELANGEURS, MINE]
-/** L'indice de la mine dans `PRODUCTEURS`. */
-export const TYPE_MINE = PRODUCTEURS.length - 1
+export const PRODUCTEURS: readonly TypeProducteur[] = [...SOURCES, ...RAFFINERIES, ...MELANGEURS, MINE, SCIERIE, MINE_DE_PIERRE]
+/** L'indice de la banque dans `PRODUCTEURS`. Les producteurs construits viennent après : une partie sauvée garde ses indices. */
+export const TYPE_MINE = SOURCES.length + RAFFINERIES.length + MELANGEURS.length
+/** Les producteurs du menu de construction, dans son ordre. */
+export const TYPES_CONSTRUCTION: readonly number[] = [TYPE_MINE + 1, TYPE_MINE + 2]
 /** Les types d'une famille, dans l'ordre de `PRODUCTEURS`, et l'indice du premier. */
 export const FAMILLES: Record<Genre, { types: readonly TypeProducteur[]; premier: number }> = {
   source: { types: SOURCES, premier: 0 },
   raffinerie: { types: RAFFINERIES, premier: SOURCES.length },
   melangeur: { types: MELANGEURS, premier: SOURCES.length + RAFFINERIES.length },
   mine: { types: [MINE], premier: TYPE_MINE },
+  ressource: { types: [SCIERIE, MINE_DE_PIERRE], premier: TYPE_MINE + 1 },
 }
 
 /** Ce que vaut, en or, un module commun de niveau 1 de chaque forme (le rond n'est pas un module) : la base de sa fabrication et de ses niveaux. */
