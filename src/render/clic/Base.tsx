@@ -1277,32 +1277,43 @@ function pomperLaReserve(reserve: HTMLElement, impact: DOMRect, pleine: boolean)
  * accumule, sa jauge monte ; pleine, elle s'allume et la mine s'arrête. Elle
  * se tape à part de la mine (`data-reserve`) : une tape la récolte.
  */
-const RAYON_ANNEAU = 17
-const TOUR_ANNEAU = 2 * Math.PI * RAYON_ANNEAU
-
 function Reserve({ j, p }: { j: Joueur; p: Producteur }): ReactElement {
   const capacite = capaciteReserve(j, p)
   const pleine = reservePleine(j, p)
-  // LA PIÈCE QUI SE REMPLIT (Keko, 02/11 : « un simple indicateur visuel suffit », ni chiffre ni temps) : un anneau autour de la pièce de la réserve fait le tour à mesure que la pièce entamée se remplit. La table repeint chaque seconde, l'anneau glisse d'une seconde à l'autre ; à chaque pièce tombée, il en naît un neuf (la clé), qui repart de zéro sans revenir en arrière. Rien quand la réserve est pleine.
-  const entieres = Math.floor(p.reserve + 1e-9)
-  const avance = !pleine && vitesseAuto(j) > 0 ? Math.min(1, Math.max(0, p.reserve - entieres)) : null
   return (
     <span className={`reserve${pleine ? ' reserve-pleine' : ''}`} data-cliquable data-reserve data-id={p.id} aria-label="Récolter la réserve">
       <span className="reserve-jauge" style={{ width: `${(100 * Math.min(capacite, p.reserve)) / capacite}%` }} />
       <span className="reserve-eclat" />
       <span className="reserve-texte">
-        <Compteur valeur={p.reserve} cle="reserve" format={possede} duree={200} /> / {capacite}{' '}
-        <span className="reserve-piece">
-          {avance !== null && (
-            <svg className="reserve-anneau" viewBox="0 0 40 40" aria-hidden>
-              <circle className="reserve-anneau-fond" cx="20" cy="20" r={RAYON_ANNEAU} />
-              <circle key={entieres} className="reserve-anneau-plein" cx="20" cy="20" r={RAYON_ANNEAU} strokeDasharray={TOUR_ANNEAU} strokeDashoffset={TOUR_ANNEAU * (1 - avance)} />
-            </svg>
-          )}
-          <SymbolePiece />
-        </span>
+        <Compteur valeur={p.reserve} cle="reserve" format={possede} duree={200} /> / {capacite} <SymbolePiece />
       </span>
     </span>
+  )
+}
+
+const RAYON_ANNEAU = 14.5
+const TOUR_ANNEAU = 2 * Math.PI * RAYON_ANNEAU
+
+/**
+ * L'ANNEAU DE L'AUTOMATIQUE (Keko, 02/11 : « un simple indicateur visuel
+ * suffit », puis « épaissis un peu l'anneau et mets-le à gauche de la
+ * barre ») : il fait le tour à mesure que la pièce entamée de la réserve se
+ * remplit, habillé comme la barre (fond sombre, liseré crème). La table
+ * repeint chaque seconde, il glisse d'une seconde à l'autre ; à chaque pièce
+ * tombée, il en naît un neuf (la clé), qui repart de zéro sans revenir en
+ * arrière. Réserve pleine : il reste plein, éteint (la place ne bouge pas).
+ */
+function AnneauAutomatique({ j, p }: { j: Joueur; p: Producteur }): ReactElement {
+  const pleine = reservePleine(j, p)
+  const entieres = Math.floor(p.reserve + 1e-9)
+  const avance = pleine ? 1 : Math.min(1, Math.max(0, p.reserve - entieres))
+  return (
+    <svg className={`mine-anneau${pleine ? ' mine-anneau-arrete' : ''}`} viewBox="0 0 40 40" aria-hidden>
+      <circle className="mine-anneau-fond" cx="20" cy="20" r={RAYON_ANNEAU} />
+      <circle className="mine-anneau-lisere" cx="20" cy="20" r={RAYON_ANNEAU + 4.4} />
+      <circle className="mine-anneau-lisere" cx="20" cy="20" r={RAYON_ANNEAU - 4.4} />
+      <circle key={pleine ? 'pleine' : entieres} className="mine-anneau-plein" cx="20" cy="20" r={RAYON_ANNEAU} strokeDasharray={TOUR_ANNEAU} strokeDashoffset={TOUR_ANNEAU * (1 - avance)} />
+    </svg>
   )
 }
 
@@ -1339,6 +1350,7 @@ function TexteProducteur({ j, p, b, actif }: { j: Joueur; p: Producteur; b: Retu
         <ImageMine />
         <b className="mine-nom">{NOM_MINE}</b>
         <span className="mine-production">
+          {vitesseAuto(j) > 0 && <AnneauAutomatique j={j} p={p} />}
           <span className="mine-barre">
             <span className="mine-barre-remplie" />
             <span className="mine-barre-tete" />
