@@ -21,6 +21,7 @@ import { possede } from '../../ui/format.ts'
 import { LE_RESSOURCE, NOM_RESSOURCE } from '../../ui/noms-clic.ts'
 import { Feuille } from '../Feuille.tsx'
 import { SymbolePiece, SymboleRessource } from './Glyphe.tsx'
+import { cotationsDeTest, ressourcesDeTest } from './MarcheTest.tsx'
 
 type Sens = 'achat' | 'vente'
 
@@ -32,6 +33,38 @@ const lu = (texte: string): number => Number(texte.replace(',', '.').replace(/\s
 const VUES = 40
 const UNE_HEURE = Math.round(1 / MARCHE_RESSOURCES.bougie)
 
+/** Ce que l'écran du marché sait d'une ressource : la vraie, lue au moteur ; une fictive (le mode test, `MarcheTest.tsx`), simulée. */
+export interface Cotation {
+  cle: string
+  nom: string
+  symbole: ReactElement
+  prix: number
+  plein: number
+  bougies: Bougie[]
+  stock: number
+  coutAchat: (q: number) => number
+  gainVente: (q: number) => number
+  achetable: (or: number) => number
+  /** La vraie ressource, qu'on échange ; null pour une fictive : rien ne s'y échange. */
+  ressource: Ressource | null
+}
+
+function cotationReelle(m: Monde, j: Joueur, r: Ressource): Cotation {
+  return {
+    cle: r,
+    nom: majuscule(NOM_RESSOURCE[r]),
+    symbole: <SymboleRessource ressource={r} />,
+    prix: prixRessource(m, r),
+    plein: prixPleinRessource(r),
+    bougies: bougiesRessource(m, r),
+    stock: Math.floor(stockRessource(j, r) + 1e-9),
+    coutAchat: (q) => coutAchatRessource(m, r, q),
+    gainVente: (q) => gainVenteRessource(m, r, q),
+    achetable: (or) => quantiteAchetableRessource(m, r, or),
+    ressource: r,
+  }
+}
+
 interface Echanges {
   onAcheter: (r: Ressource, q: number, bouton: HTMLElement) => void
   onVendre: (r: Ressource, q: number, bouton: HTMLElement) => void
@@ -40,23 +73,24 @@ interface Echanges {
 }
 
 export function MenuMarche({ m, j, onFermer, ...echanges }: { m: Monde; j: Joueur; onFermer: () => void } & Echanges): ReactElement {
-  const [choisie, setChoisie] = useState<Ressource | null>(null)
+  const [choisie, setChoisie] = useState<string | null>(null)
+  const cotations = [...RESSOURCES.map((r) => cotationReelle(m, j, r)), ...cotationsDeTest(m.t, ressourcesDeTest())]
+  const c = cotations.find((x) => x.cle === choisie)
   return (
-    <Feuille titre={choisie === null ? 'Marché' : `Marché · ${majuscule(NOM_RESSOURCE[choisie])}`} onFermer={onFermer}>
-      {choisie === null ? (
-        <ListeDuMarche m={m} j={j} onChoisir={setChoisie} />
+    <Feuille titre={c === undefined ? 'Marché' : `Marché · ${c.nom}`} onFermer={onFermer}>
+      {c === undefined ? (
+        <ListeDuMarche j={j} cotations={cotations} onChoisir={setChoisie} />
       ) : (
-        <EcranDeTrade key={choisie} m={m} j={j} r={choisie} onRetour={() => setChoisie(null)} {...echanges} />
+        <EcranDeTrade key={c.cle} j={j} c={c} onRetour={() => setChoisie(null)} {...echanges} />
       )}
     </Feuille>
   )
 }
 
 /** La variation du prix d'une ressource sur l'heure écoulée (de −1 à …). */
-function variationSurUneHeure(m: Monde, r: Ressource): number {
-  const bougies = bougiesRessource(m, r)
-  const ilYAUneHeure = bougies[bougies.length - 1 - UNE_HEURE]?.c ?? bougies[0]?.o ?? prixPleinRessource(r)
-  return prixRessource(m, r) / ilYAUneHeure - 1
+function variationSurUneHeure(c: Cotation): number {
+  const ilYAUneHeure = c.bougies[c.bougies.length - 1 - UNE_HEURE]?.c ?? c.bougies[0]?.o ?? c.plein
+  return c.prix / ilYAUneHeure - 1
 }
 
 /** « ▲ 3,1 % », en vert ou en rouge. */
@@ -69,26 +103,26 @@ function Variation({ v }: { v: number }): ReactElement {
 }
 
 /** LA LISTE DES RESSOURCES À TRADER : une carte chacune — son prix, sa variation sur l'heure, sa tendance, ce qu'on en a, ses ordres en attente ; une tape ouvre son écran de trade. */
-function ListeDuMarche({ m, j, onChoisir }: { m: Monde; j: Joueur; onChoisir: (r: Ressource) => void }): ReactElement {
+function ListeDuMarche({ j, cotations, onChoisir }: { j: Joueur; cotations: Cotation[]; onChoisir: (cle: string) => void }): ReactElement {
   return (
     <div className="choix-ameliorations">
-      {RESSOURCES.map((r, k) => {
-        const v = variationSurUneHeure(m, r)
-        const enAttente = (j.ordres ?? []).filter((o) => o.ressource === r).length
+      {cotations.map((c, k) => {
+        const v = variationSurUneHeure(c)
+        const enAttente = (j.ordres ?? []).filter((o) => o.ressource === c.ressource).length
         return (
-          <button key={r} type="button" className="amelioration-carte marche-choix" style={{ animationDelay: `${120 + k * 110}ms` }} onClick={() => onChoisir(r)}>
+          <button key={c.cle} type="button" className="amelioration-carte marche-choix" style={{ animationDelay: `${120 + k * 60}ms` }} onClick={() => onChoisir(c.cle)}>
             <span className="amelioration-tete">
               <b className="amelioration-nom">
-                <SymboleRessource ressource={r} /> {majuscule(NOM_RESSOURCE[r])}
+                {c.symbole} {c.nom}
               </b>
               <span>
-                <b className="prix-grand">{deuxDecimales(prixRessource(m, r))}</b> <SymbolePiece />
+                <b className="prix-grand">{deuxDecimales(c.prix)}</b> <SymbolePiece />
               </span>
             </span>
-            <Tendance bougies={bougiesRessource(m, r)} hausse={v >= 0} />
+            <Tendance bougies={c.bougies} hausse={v >= 0} />
             <span className="amelioration-tete">
               <span className="sourd petit">
-                vous en avez {possede(stockRessource(j, r))}
+                vous en avez {possede(c.stock)}
                 {enAttente > 0 ? ` · ${enAttente} ordre${enAttente > 1 ? 's' : ''} en attente` : ''}
               </span>
               <span className="petit">
@@ -120,24 +154,26 @@ function Tendance({ bougies, hausse }: { bougies: Bougie[]; hausse: boolean }): 
 }
 
 /** L'ÉCRAN DE TRADE d'une ressource : acheter ou vendre en haut, puis son prix, ses bougies, l'ordre, les ordres. */
-function EcranDeTrade({ m, j, r, onRetour, onAcheter, onVendre, onPlacer, onAnnuler }: { m: Monde; j: Joueur; r: Ressource; onRetour: () => void } & Echanges): ReactElement {
+function EcranDeTrade({ j, c, onRetour, onAcheter, onVendre, onPlacer, onAnnuler }: { j: Joueur; c: Cotation; onRetour: () => void } & Echanges): ReactElement {
   const [sens, setSens] = useState<Sens>('achat')
   const [quantiteTexte, setQuantiteTexte] = useState('5')
   const [perso, setPerso] = useState(false)
-  const [prixTexte, setPrixTexte] = useState(() => deuxDecimales(prixRessource(m, r)))
+  const [prixTexte, setPrixTexte] = useState(() => deuxDecimales(c.prix))
 
-  const prix = prixRessource(m, r)
-  const bougies = bougiesRessource(m, r)
-  const variation = variationSurUneHeure(m, r)
-  const stock = Math.floor(stockRessource(j, r) + 1e-9)
+  const r = c.ressource
+  const prix = c.prix
+  const bougies = c.bougies
+  const variation = variationSurUneHeure(c)
+  const stock = c.stock
   const q = Math.max(0, Math.floor(lu(quantiteTexte) || 0))
   const limite = Math.max(0.01, Math.round((lu(prixTexte) || 0) * 100) / 100)
-  const total = perso ? (sens === 'achat' ? Math.ceil(limite * q - 1e-9) : Math.round(limite * q)) : sens === 'achat' ? coutAchatRessource(m, r, q) : gainVenteRessource(m, r, q)
-  const possible = q > 0 && (sens === 'achat' ? j.or + 1e-9 >= total : stock >= q)
-  const max = sens === 'achat' ? (perso ? Math.floor(j.or / limite + 1e-9) : quantiteAchetableRessource(m, r, j.or)) : stock
-  const ordres = (j.ordres ?? []).filter((o) => o.ressource === r)
-  const executes = [...(j.executes ?? [])].reverse().slice(0, 5)
-  const symbole = <SymboleRessource ressource={r} />
+  const total = perso ? (sens === 'achat' ? Math.ceil(limite * q - 1e-9) : Math.round(limite * q)) : sens === 'achat' ? c.coutAchat(q) : c.gainVente(q)
+  // Une ressource fictive (le mode test) ne s'échange pas.
+  const possible = r !== null && q > 0 && (sens === 'achat' ? j.or + 1e-9 >= total : stock >= q)
+  const max = sens === 'achat' ? (perso ? Math.floor(j.or / limite + 1e-9) : c.achetable(j.or)) : stock
+  const ordres = r === null ? [] : (j.ordres ?? []).filter((o) => o.ressource === r)
+  const executes = r === null ? [] : [...(j.executes ?? [])].reverse().slice(0, 5)
+  const symbole = c.symbole
 
   const passerEnPerso = (oui: boolean): void => {
     setPerso(oui)
@@ -165,7 +201,7 @@ function EcranDeTrade({ m, j, r, onRetour, onAcheter, onVendre, onPlacer, onAnnu
       {/* Son prix, qui bouge, et sa variation sur l'heure. */}
       <div className="trade-prix">
         <span>
-          <SymboleRessource ressource={r} /> <b className="trade-prix-valeur">{deuxDecimales(prix)}</b> <SymbolePiece /> <span className="sourd petit">l’unité</span>
+          {symbole} <b className="trade-prix-valeur">{deuxDecimales(prix)}</b> <SymbolePiece /> <span className="sourd petit">l’unité</span>
         </span>
         <span>
           <Variation v={variation} /> <span className="sourd petit">sur 1 h</span>
@@ -235,7 +271,7 @@ function EcranDeTrade({ m, j, r, onRetour, onAcheter, onVendre, onPlacer, onAnnu
       </div>
       {perso && (
         <p className="sourd petit trade-explication">
-          L’ordre attend que le prix {sens === 'achat' ? 'descende' : 'monte'} à {deuxDecimales(limite)} <SymbolePiece /> ; {sens === 'achat' ? 'l’or' : LE_RESSOURCE[r]} est mis de côté en attendant.
+          L’ordre attend que le prix {sens === 'achat' ? 'descende' : 'monte'} à {deuxDecimales(limite)} <SymbolePiece /> ; {sens === 'achat' ? 'l’or' : r === null ? 'la ressource' : LE_RESSOURCE[r]} est mis de côté en attendant.
         </p>
       )}
       <button
@@ -243,6 +279,7 @@ function EcranDeTrade({ m, j, r, onRetour, onAcheter, onVendre, onPlacer, onAnnu
         className={`trade-valider ${sens === 'achat' ? 'sens-achat' : 'sens-vente'}`}
         disabled={!possible}
         onClick={(e) => {
+          if (r === null) return
           if (perso) onPlacer(sens, r, q, limite, e.currentTarget)
           else if (sens === 'achat') onAcheter(r, q, e.currentTarget)
           else onVendre(r, q, e.currentTarget)
@@ -252,6 +289,7 @@ function EcranDeTrade({ m, j, r, onRetour, onAcheter, onVendre, onPlacer, onAnnu
         {sens === 'achat' ? (perso ? 'acheter' : 'Acheter') : perso ? 'vendre' : 'Vendre'} {q} {symbole}
         {perso ? ` à ${deuxDecimales(limite)}` : ' au prix du marché'}
       </button>
+      {r === null && <p className="sourd petit trade-explication">Ressource de test : elle ne s’échange pas.</p>}
 
       {/* Les ordres en attente, les derniers exécutés. */}
       {ordres.length > 0 && (
