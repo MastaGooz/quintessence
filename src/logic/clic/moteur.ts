@@ -25,8 +25,8 @@
  * n'y sert qu'à échanger.
  *
  * LE DÉPART (Keko, 02/11) : la partie s'ouvre sur LA MINE D'OR seule, un carré
- * fixe au centre du plan : la tape remplit sa barre (elle se remplit aussi
- * seule, un peu, plus avec l'amélioration « auto »), chaque barre pleine met de l'or dans sa réserve (`avancerBarre`). Les
+ * fixe au centre du plan : la tape remplit sa barre, qui paie la bourse ;
+ * l'automatique (débloqué par la première quête) remplit sa réserve, chaque barre pleine met de l'or dans sa réserve (`avancerBarre`). Les
  * sources de couleur ne sont plus offertes ; le reste du moteur est là, et se
  * dévoilera quand Keko posera les briques suivantes (donjons, héros, ateliers).
  */
@@ -83,6 +83,8 @@ export interface Joueur {
   /** La quête en cours (son rang), et l'or extrait quand elle a commencé. */
   quete: number
   queteDepuis: number
+  /** L'automatique de la mine débloqué par la première quête (0 ou 1) : il remplit la réserve. */
+  automatisation: number
   /** Le niveau de chaque amélioration de la mine (voir `AMELIORATIONS`). */
   ameliorations: Record<IdAmelioration, number>
   /** Les améliorations proposées par une quête de choix, en attendant qu'on en choisisse une. */
@@ -155,6 +157,7 @@ export function nouveauJoueur(id: number, nom: string): Joueur {
     orProduit: 0,
     quete: 0,
     queteDepuis: 0,
+    automatisation: 0,
     ameliorations: niveauxVides(),
     offre: null,
     pepites: 0,
@@ -542,9 +545,9 @@ export function bilanProducteur(j: Joueur, p: Producteur): Bilan {
   return bilan(lotDeBase(p), modulesDe(j, p), multiplicateurPrestige(j))
 }
 
-/** Ce que la barre de la mine se remplit seule par seconde (en barres) : un peu dès le départ, plus avec l'amélioration « auto ». */
+/** L'automatique de la mine, en barres par seconde : rien avant la première quête, puis `auto`, plus vite avec l'amélioration. Il remplit la réserve. */
 export function vitesseAuto(j: Joueur): number {
-  return EFFETS_MINE.autoBase + EFFETS_MINE.auto * j.ameliorations.auto
+  return j.automatisation > 0 ? EFFETS_MINE.auto * (1 + EFFETS_MINE.autoNiveau * j.ameliorations.auto) : 0
 }
 
 /** Ce qu'une tape remplit de la barre (en barres), avant le critique et l'élan : la pioche l'allonge (en nombre), la puissance la multiplie. */
@@ -559,10 +562,10 @@ export function orParBarre(j: Joueur, p: Producteur): number {
 }
 
 /**
- * LE BILAN DE LA MINE, par ses améliorations : la barre se remplit seule à la
- * vitesse de l'auto (la fréquence : des barres par seconde), et chaque barre
- * vaut son or ; une tape vaut la part de barre qu'elle remplit (en or), un
- * critique la multiplie.
+ * LE BILAN DE LA MINE, par ses améliorations : l'automatique remplit la
+ * réserve à sa vitesse (la fréquence : des barres par seconde, le débit : de
+ * l'or par seconde) ; une tape vaut la part de barre qu'elle remplit (en or),
+ * un critique la multiplie.
  */
 export function bilanMine(j: Joueur, p: Producteur): Bilan {
   const n = j.ameliorations
@@ -574,22 +577,20 @@ export function bilanMine(j: Joueur, p: Producteur): Bilan {
   return { lot, lotMoyen: lot, tape, tapeMoyenne: tape * (1 + (multCritique - 1) * chanceCritique), chanceCritique, chanceGrosLot: 0, frequence, debit: lot * frequence, multCritique }
 }
 
-/** La barre est arrêtée : la réserve est pleine, et aucun trop-plein ne la fait couler ailleurs. */
+/** L'automatique est arrêté : la réserve est pleine, et aucun trop-plein ne le fait couler ailleurs. */
 export function mineArretee(j: Joueur, p: Producteur): boolean {
   return reservePleine(j, p) && partTropPlein(j) <= 0
 }
 
-/** Remplit la barre de la mine de tant de barres ; chaque barre pleine met son or dans la réserve. Rend le nombre de barres remplies. */
+/** Remplit la barre de la mine de tant de barres (à la tape) ; chaque barre pleine paie son or dans la bourse. Rend le nombre de barres remplies. */
 function avancerBarre(j: Joueur, p: Producteur, part: number): number {
-  if (part <= 0 || mineArretee(j, p)) return 0
+  if (part <= 0) return 0
   p.progres = (p.progres ?? 0) + part
   const barres = Math.floor(p.progres + 1e-9)
   if (barres <= 0) return 0
   p.progres = Math.max(0, p.progres - barres)
-  remplirReserve(j, p, barres * orParBarre(j, p))
+  produireOr(j, barres * orParBarre(j, p))
   j.journal.barres += barres
-  // Pleine sans trop-plein, la barre s'arrête vide.
-  if (mineArretee(j, p)) p.progres = 0
   return barres
 }
 
@@ -766,8 +767,7 @@ export function declencher(m: Monde, j: Joueur, p: Producteur, alea?: number, se
   const or = estMine(p)
   const rien: Coup = { gain: 0, critique: false, grosLot: false, sorte: sortie(p), or }
   if (or) {
-    // LA MINE : la tape avance la barre (critique, élan de la série) ; les barres pleines vont dans la réserve ; une pépite peut tomber. Sans `alea` (les bots), la moyenne, pépites comprises.
-    if (mineArretee(j, p)) return rien
+    // LA MINE : la tape avance la barre (critique, élan de la série) ; les barres pleines paient la bourse ; une pépite peut tomber. Sans `alea` (les bots), la moyenne, pépites comprises.
     const critique = alea !== undefined && alea < b.chanceCritique
     const fois = alea === undefined ? 1 + (b.multCritique - 1) * b.chanceCritique : critique ? b.multCritique : 1
     const avance = avanceTape(j) * fois * facteurElan(j, serie)
@@ -977,19 +977,19 @@ export function ameliorerSource(j: Joueur, p: Producteur): boolean {
 // ---------------------------------------------------------------------------
 // LES QUÊTES ET CE QU'ELLES DÉBLOQUENT
 
-/** La quête en cours : récolter 10 or d'abord, puis les quêtes d'or, sans fin, l'objectif doublant. */
+/** La quête en cours : la première débloque l'automatique, les suivantes donnent un choix, sans fin, l'objectif doublant. */
 export function queteEnCours(j: Joueur): Quete | null {
-  if (j.quete === 0) return { id: 'recolter', genre: 'recolte', or: QUETE_CHOIX.recolte, recompense: 'choix' }
+  if (j.quete === 0) return { id: 'automatisation', or: QUETE_CHOIX.automatisation, recompense: 'automatisation' }
   const k = j.quete - 1
-  return { id: `or-${k + 1}`, genre: 'or', or: Math.round(QUETE_CHOIX.premier * Math.pow(QUETE_CHOIX.croissance, k)), recompense: 'choix' }
+  return { id: `choix-${k + 1}`, or: Math.round(QUETE_CHOIX.premier * Math.pow(QUETE_CHOIX.croissance, k)), recompense: 'choix' }
 }
 
-/** Ce que la quête en cours demande : l'or à récolter ou à gagner. */
+/** Ce que la quête en cours demande : l'or à gagner. */
 export function objectifQuete(j: Joueur): number {
   return queteEnCours(j)?.or ?? 0
 }
 
-/** L'or récolté ou gagné pour la quête en cours, depuis son début, borné à son objectif. */
+/** L'or gagné pour la quête en cours, depuis son début, borné à son objectif. */
 export function progresQuete(j: Joueur): number {
   return Math.min(objectifQuete(j), Math.max(0, j.orProduit - j.queteDepuis))
 }
@@ -1007,7 +1007,8 @@ export function queteAccomplie(j: Joueur): boolean {
 export function reclamerQuete(m: Monde, j: Joueur): Quete | null {
   const q = queteEnCours(j)
   if (q === null || !queteAccomplie(j) || j.offre !== null) return null
-  j.offre = tirerOffre(m, j)
+  if (q.recompense === 'automatisation') j.automatisation = 1
+  else j.offre = tirerOffre(m, j)
   j.quete += 1
   j.queteDepuis = j.orProduit
   return q
@@ -1017,7 +1018,9 @@ export function reclamerQuete(m: Monde, j: Joueur): Quete | null {
 export function ameliorationPossible(j: Joueur, id: IdAmelioration): boolean {
   const a = AMELIORATIONS.find((x) => x.id === id)
   if (a === undefined || j.ameliorations[id] >= a.max) return false
-  return a.requiert === null || j.ameliorations[a.requiert] > 0
+  if (a.requiert === null) return true
+  if (a.requiert === 'automatisation') return j.automatisation > 0
+  return j.ameliorations[a.requiert] > 0
 }
 
 /** Tire l'offre d'une quête de choix : `QUETE_CHOIX.offre` améliorations possibles, au hasard du joueur. */
@@ -1442,9 +1445,9 @@ export function avancer(m: Monde, dt: number): void {
   for (const j of m.joueurs) {
     const ordonnes = [...j.producteurs].sort((a, b) => ORDRE[genreDe(a)] - ORDRE[genreDe(b)])
     for (const p of ordonnes) {
-      // LA MINE remplit sa barre toute seule, un peu de base, plus avec l'amélioration « auto » ; ses barres pleines vont dans la réserve, qu'il faut récolter.
+      // LA MINE : l'automatique remplit la réserve, qu'il faut récolter ; la barre, elle, n'avance qu'à la tape.
       if (estMine(p)) {
-        avancerBarre(j, p, vitesseAuto(j) * dt * 3600)
+        remplirReserve(j, p, vitesseAuto(j) * orParBarre(j, p) * dt * 3600)
         continue
       }
       const b = bilanProducteur(j, p)

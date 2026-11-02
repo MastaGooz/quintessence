@@ -200,57 +200,58 @@ export const FABRICATION = {
 export const MINE: TypeProducteur = { id: 'mine', genre: 'mine', cout: { forme: 0, couleur: null, quantite: 0 }, lot: 1, creux: [_, _, _, _, _, _, _, _], taille: { largeur: 450, hauteur: 450 } }
 
 /**
- * LES QUÊTES (Keko, 02/11 : « X or pour obtenir une amélioration au choix »).
- * Une à la fois, sans fin : d'abord RÉCOLTER `recolte` or de la réserve de la
- * mine (Keko : « on va plutôt être permissif et demander de récolter 10 or,
- * sans forcément remplir la réserve en entier »), puis GAGNER de l'or. L'or
- * compte depuis le début de la quête ; remplie, une quête se RÉCLAME d'une
- * tape, et sa récompense est le CHOIX d'une amélioration parmi `offre` tirées
- * au hasard. La k-ième quête d'or demande `premier × croissance^k` or.
- * Chiffres de moi, à rejuger (sauf les 10 de la première).
+ * LES QUÊTES : GAGNER de l'or, une à la fois, sans fin ; l'or compte depuis
+ * le début de la quête ; remplie, une quête se RÉCLAME d'une tape. La
+ * première demande `automatisation` or (à la tape : il n'y a encore rien
+ * d'autre) et DÉBLOQUE L'AUTOMATIQUE (Keko, 02/11 : « on enlève le
+ * remplissage auto dès le début et on le met en récompense de la première
+ * quête »). Les suivantes demandent `premier × croissance^k` or et donnent le
+ * CHOIX d'une amélioration parmi `offre` tirées au hasard (Keko : « X or pour
+ * obtenir une amélioration au choix »). Chiffres de moi, validés par Keko.
  */
-export type Recompense = 'choix'
+export type Recompense = 'automatisation' | 'choix'
 export interface Quete {
   id: string
-  /** Récolter l'or de la réserve (la première), ou en gagner : l'or compte pareil, depuis le début de la quête — au départ, il ne vient que de la réserve. */
-  genre: 'recolte' | 'or'
-  /** L'or à récolter ou à gagner depuis son début. */
+  /** L'or à gagner depuis le début de la quête. */
   or: number
   recompense: Recompense
 }
-export const QUETE_CHOIX = { recolte: 10, premier: 20, croissance: 2, offre: 3 }
+export const QUETE_CHOIX = { automatisation: 10, premier: 20, croissance: 2, offre: 3 }
 
 /**
  * LES AMÉLIORATIONS DE LA MINE, la liste de Keko (02/11). Chacune se prend
  * niveau par niveau, jusqu'à `max` ; elle n'entre dans le tirage que si sa
- * condition est remplie (`requiert` : une autre amélioration) — une
- * amélioration qui ne ferait rien n'est pas proposée.
+ * condition est remplie (`requiert` : une autre amélioration, ou
+ * l'automatique débloqué) — une amélioration qui ne ferait rien n'est pas
+ * proposée. Les cinq premières agissent sur LA TAPE, les quatre dernières sur
+ * LA RÉSERVE, que remplit l'automatique.
  */
 export const IDS_AMELIORATIONS = ['pioche', 'puissance', 'critique', 'forceCritique', 'elan', 'pepite', 'auto', 'reserve', 'prime', 'tropPlein'] as const
 export type IdAmelioration = (typeof IDS_AMELIORATIONS)[number]
-export const AMELIORATIONS: readonly { id: IdAmelioration; max: number; requiert: IdAmelioration | null }[] = [
+export const AMELIORATIONS: readonly { id: IdAmelioration; max: number; requiert: IdAmelioration | 'automatisation' | null }[] = [
   { id: 'pioche', max: 99, requiert: null },
   { id: 'puissance', max: 99, requiert: 'pioche' },
   { id: 'critique', max: 10, requiert: null },
   { id: 'forceCritique', max: 99, requiert: 'critique' },
   { id: 'elan', max: 10, requiert: null },
   { id: 'pepite', max: 10, requiert: null },
-  { id: 'auto', max: 20, requiert: null },
-  { id: 'reserve', max: 99, requiert: null },
-  { id: 'prime', max: 99, requiert: null },
-  // La barre se remplit un peu seule dès le départ : une réserve pleine déborde déjà, le trop-plein a un effet.
-  { id: 'tropPlein', max: 10, requiert: null },
+  { id: 'auto', max: 20, requiert: 'automatisation' },
+  { id: 'reserve', max: 99, requiert: 'automatisation' },
+  { id: 'prime', max: 99, requiert: 'automatisation' },
+  { id: 'tropPlein', max: 10, requiert: 'automatisation' },
 ]
 
 /**
  * LA MINE, UN MOYEN GARANTI MAIS FAIBLE (Keko, 02/11 : « les vrais gains
  * viendront plus tard du commerce et des productions ») : une BARRE que la
  * TAPE remplit, de `tape` (une fraction de barre) à chaque coup ; chaque barre
- * pleine met `orParBarre` or dans la réserve. La barre se remplit aussi SEULE,
- * un peu, dès le départ : `autoBase` par seconde ; l'amélioration « auto »
- * l'accélère (Keko : « l'auto devient un remplissage en % de la barre toutes
- * les secondes » ; puis « l'automatisation dès le départ à 0,5 %, et le clic
- * à 5 % »).
+ * pleine paie `orParBarre` or DANS LA BOURSE. L'AUTOMATIQUE, débloqué par la
+ * première quête, remplit LA RÉSERVE toute seule, à `auto` barre par seconde
+ * (une pièce toutes les 100 s, 36 par heure), sans passer par la barre : la
+ * tape est le gain actif, la réserve le gain d'absence (Keko, 02/11 : « c'est
+ * pas très intuitif que le tap envoie l'or dans la réserve, qui est censée se
+ * remplir en idle » ; il a validé : une tape vaut 10 s d'automatique, une
+ * minute de tapes environ une heure d'idle).
  *
  * CE QUE FAIT CHAQUE NIVEAU D'AMÉLIORATION (chiffres de moi, à rejuger) :
  * - pioche : une tape remplit `pioche` de barre de plus (en nombre — Keko) ;
@@ -261,15 +262,14 @@ export const AMELIORATIONS: readonly { id: IdAmelioration; max: number; requiert
  *   précédente, jusqu'à `elanPlafond` (les deux par niveau) ;
  * - pepite : `pepiteChance` par tape qu'une pépite tombe ; tapée avant
  *   `pepiteDuree` secondes, elle met `pepiteValeur` or dans la bourse ;
- * - auto : la barre se remplit seule de `auto` de plus par seconde ;
+ * - auto : l'automatique va `autoNiveau` plus vite ;
  * - reserve : la réserve contient 50 % de plus ;
  * - prime : une réserve PLEINE récoltée rapporte 25 % de plus ;
  * - tropPlein : la réserve pleine laisse couler 10 % de l'or dans la bourse.
  */
 export const EFFETS_MINE = {
   orParBarre: 1,
-  tape: 0.05,
-  autoBase: 0.005,
+  tape: 0.1,
   pioche: 0.1,
   puissance: 0.25,
   critique: 0.05,
@@ -281,7 +281,8 @@ export const EFFETS_MINE = {
   pepiteValeur: 5,
   pepiteDuree: 5,
   pepitesMax: 3,
-  auto: 0.05,
+  auto: 0.01,
+  autoNiveau: 0.5,
   reserve: 0.5,
   prime: 0.25,
   tropPlein: 0.1,
@@ -290,12 +291,14 @@ export const EFFETS_MINE = {
 /**
  * LA RÉSERVE DE LA MINE (Keko, 02/11 : « une limite à la quantité d'or
  * obtenue en auto, qu'elle ne soit pas ajoutée à l'or mais dans la réserve de
- * la mine, et que le joueur doive cliquer pour l'ajouter ») : l'or des barres
- * s'y accumule jusqu'à `capacite` ; pleine, la barre s'arrête. Une tape sur la
- * réserve la récolte. Au départ, dix pièces (Keko, 02/11 : « mets la réserve à
- * 10 max au début ») ; la Grande réserve l'agrandit.
+ * la mine, et que le joueur doive cliquer pour l'ajouter ») : l'or de
+ * l'automatique s'y accumule jusqu'à `capacite` ; pleine, l'automatique
+ * s'arrête. Une tape sur la réserve la récolte. HUIT HEURES d'automatique
+ * (Keko, 02/11 : « on ne veut pas pénaliser les joueurs qui ne passent pas
+ * toutes les 5 minutes, ni générer trop d'or ») : une nuit tient dedans, trois
+ * visites par jour récoltent presque tout. La Grande réserve l'agrandit.
  */
-export const RESERVE_MINE = { capacite: 10 }
+export const RESERVE_MINE = { capacite: 288 }
 
 /** Tous les types de générateurs, par famille. `type` d'un producteur est un indice ici. */
 export const PRODUCTEURS: readonly TypeProducteur[] = [...SOURCES, ...RAFFINERIES, ...MELANGEURS, MINE]

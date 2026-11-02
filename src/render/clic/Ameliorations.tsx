@@ -6,7 +6,7 @@
  */
 import type { ReactElement, ReactNode } from 'react'
 import { EFFETS_MINE, type IdAmelioration } from '../../logic/clic/donnees.ts'
-import { avanceTape, bilanMine, capaciteReserve, chancePepite, estMine, partTropPlein, valeurPepite, vitesseAuto, type Joueur } from '../../logic/clic/moteur.ts'
+import { avanceTape, bilanMine, capaciteReserve, chancePepite, estMine, partTropPlein, valeurPepite, type Joueur } from '../../logic/clic/moteur.ts'
 import { NOM_AMELIORATION } from '../../ui/noms-clic.ts'
 import { Feuille } from '../Feuille.tsx'
 import { SymbolePiece } from './Glyphe.tsx'
@@ -69,7 +69,7 @@ export function effetAmelioration(j: Joueur, id: IdAmelioration): ReactNode {
     case 'auto':
       return (
         <>
-          La barre se remplit seule : <Fleche avant={pourcent(vitesseAuto(j))} apres={pourcent(vitesseAuto(j2))} /> par seconde
+          L’automatique : <Fleche avant={abregeFin(b1.debit * 3600)} apres={abregeFin(b2.debit * 3600)} /> <SymbolePiece /> par heure
         </>
       )
     case 'reserve':
