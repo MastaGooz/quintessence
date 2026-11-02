@@ -288,9 +288,10 @@ export const EFFETS_MINE = {
  * obtenue en auto, qu'elle ne soit pas ajoutée à l'or mais dans la réserve de
  * la mine, et que le joueur doive cliquer pour l'ajouter ») : l'or des barres
  * s'y accumule jusqu'à `capacite` ; pleine, la barre s'arrête. Une tape sur la
- * réserve la récolte. Chiffre de moi, à rejuger.
+ * réserve la récolte. Au départ, dix pièces (Keko, 02/11 : « mets la réserve à
+ * 10 max au début ») ; la Grande réserve l'agrandit.
  */
-export const RESERVE_MINE = { capacite: 60 }
+export const RESERVE_MINE = { capacite: 10 }
 
 /** Tous les types de générateurs, par famille. `type` d'un producteur est un indice ici. */
 export const PRODUCTEURS: readonly TypeProducteur[] = [...SOURCES, ...RAFFINERIES, ...MELANGEURS, MINE]
