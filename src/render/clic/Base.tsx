@@ -18,7 +18,7 @@
  * moteur n'est touché qu'au lâcher. Entre les deux, un rendu peut survenir
  * (la seconde qui passe) : il lit `traine` pour laisser la pièce sous le doigt.
  */
-import { useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from 'react'
 import { COULEURS, FAMILLES, FORMES, MELANGE, MODULE, PIECE, PRIMAIRES, PRODUCTEURS, TAPES_MAX_PAR_S, aDuBleu, couleurDe, sorteDe } from '../../logic/clic/donnees.ts'
 import {
   DIRECTIONS, acheter, ameliorer, ameliorerSource, bilan, bilanProducteur, boiteModule, branches, brancher, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, debitTotal,
@@ -35,11 +35,11 @@ import {
 import { sonBatir, sonTape } from '../../ui/sons.ts'
 import { Compteur } from '../Compteur.tsx'
 import { DUREE_GLISSE, monterCarte, type Carte, type Point } from '../carte/carte.ts'
-import { eclater, effetDepense, effetGainOr, flotter, mouvementReduit } from '../effets.ts'
+import { SERIE_MS, eclater, effetDepense, effetGainOr, flotter, flotterOr, mouvementReduit } from '../effets.ts'
 import { Feuille } from '../Feuille.tsx'
 import { BoutonCout, Boutique, COULEURS_RARETE } from './Boutique.tsx'
 import { Choix } from './Choix.tsx'
-import { Glyphe, Symbole, SymboleSorte, TEINTES } from './Glyphe.tsx'
+import { Glyphe, Symbole, SymbolePiece, SymboleSorte, TEINTES } from './Glyphe.tsx'
 import { boite, cheminDecoupe, cotesDuModule, cotesDuProducteur } from './pieces.ts'
 import type { PagePropsClic } from './props.ts'
 import { Soute } from './Soute.tsx'
@@ -53,8 +53,6 @@ const ZOOM_MIN = 60 / PIECE.taille
 const DESSOUS_HUD = 320
 /** La pièce s'écrase puis rebondit, à chaque tape. */
 const ECRASER: Keyframe[] = [{ transform: 'scale(0.96)' }, { transform: 'scale(1.015)', offset: 0.6 }, { transform: 'scale(1)' }]
-/** Deux tapes à moins de ce délai forment une série : le son monte, le « +1 » grossit. */
-const SERIE_MS = 450
 /** Une horloge plus rapide que ça ne fait plus flotter ses lots : la pulsation suffit. */
 const FLOTTE_MIN_MS = 1500
 /** La couleur d'éclat de chaque couleur de matière. */
@@ -189,8 +187,8 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     sonTape(coup.critique ? n + 6 : n)
     vibrer(coup.critique ? [10, 30, 25] : coup.grosLot ? [10, 20, 15] : 8)
     if (coup.or) {
-      // L'OR DE LA MINE : une pièce vole au compteur, le « +1 or » flotte, des étincelles d'or de temps en temps.
-      effetGainOr(x, y, coup.gain, coup.critique ? 2 : coup.grosLot ? 1.6 : Math.min(1.7, 1 + n * 0.05))
+      // L'OR DE LA MINE : le nombre de la série grossit au-dessus du doigt, une pièce vole au compteur, des étincelles d'or de temps en temps.
+      effetGainOr(x, y, coup.gain, coup.critique ? 3 : coup.grosLot ? 2 : 1)
       if (coup.critique) eclater(x, y, 22)
       else if (coup.grosLot) eclater(x, y, 16)
       else if (n > 0 && n % 10 === 9) eclater(x, y, 14)
@@ -522,7 +520,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
         prochains.set(p.id, Math.max(prochain + periode, maintenant + periode / 2))
         const s = surLaPage({ x: p.x, y: p.y - tailleDe(p).hauteur / 2 })
         if (s !== null && s.x > r.left && s.x < r.right && s.y > r.top && s.y < r.bottom) {
-          if (estMine(p)) flotter(s.x, s.y, `+${abregeFin(b.lotMoyen)} ${NOM_OR}`, 'flottant-or', 0.9)
+          if (estMine(p)) flotterOr(s.x, s.y, b.lotMoyen, 0.9)
           else flotter(s.x, s.y, `+${abregeFin(b.lotMoyen)}`, `flottant-couleur flottant-couleur-${p.couleur}`, 0.9)
         }
       }
@@ -544,8 +542,13 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
   const aSources = j.producteurs.some(estSource)
 
   // UN INDICE à la fois : le premier geste, puis ce qui bloque.
-  let indice: string | null = null
-  if (debut) indice = `Tapez la mine : chaque tape rapporte 1 ${NOM_OR}.`
+  let indice: ReactNode = null
+  if (debut)
+    indice = (
+      <>
+        Tapez la mine : chaque tape rapporte 1 <SymbolePiece />.
+      </>
+    )
   else if (rien) indice = null
   else if (aSources && raffineries.length === 0 && !peutPayer(j, coutR1)) indice = `Une raffinerie coûte ${coutR1.quantite} ronds d’une couleur : tapez vos sources.`
   else if (aSources && raffineries.length === 0) indice = 'Achetez une raffinerie dans la boutique : elle donne une forme à vos ronds.'
@@ -897,9 +900,13 @@ function TexteProducteur({ j, p, b, actif }: { j: Joueur; p: Producteur; b: Retu
         <ImageMine />
         <span className="mine-legende">
           <b className="mine-nom">{NOM_MINE}</b>
-          {b.frequence > 0 && <small className="gain">{parSeconde(b.debit)} d’{NOM_OR}</small>}
+          {b.frequence > 0 && (
+            <small className="gain">
+              <SymbolePiece /> {parSeconde(b.debit)}
+            </small>
+          )}
           <small className="sourd">
-            +{abregeFin(b.tapeMoyenne)} {NOM_OR} par tape
+            {abregeFin(b.tapeMoyenne)} <SymbolePiece /> par tape
           </small>
         </span>
       </span>

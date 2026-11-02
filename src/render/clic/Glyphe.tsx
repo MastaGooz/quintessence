@@ -36,6 +36,11 @@ export function SymboleSorte({ sorte, classe }: { sorte: number; classe?: string
   return <Symbole couleur={couleurDe(sorte)} forme={formeDe(sorte)} classe={classe} />
 }
 
+/** LA PIÈCE D'OR, à la place du mot « or » (Keko, 02/11) : la même pièce que celle qui vole au compteur (`.piece`). */
+export function SymbolePiece({ classe = '' }: { classe?: string }): ReactElement {
+  return <span className={`symbole-piece${classe === '' ? '' : ` ${classe}`}`} role="img" aria-label="or" />
+}
+
 const ENCOCHE_GLYPHE = { largeur: 11, profondeur: 7 }
 const BOITE_GLYPHE = boite(14, 10, ENCOCHE_GLYPHE)
 const CHEMINS = [0, 1, 2, 3].map((forme) => cheminDecoupe(14, 10, cotesDuModule(forme), ENCOCHE_GLYPHE))

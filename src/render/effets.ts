@@ -173,10 +173,84 @@ export function effetVente(bouton: DOMRect, gain: number): void {
   flotter(x, bouton.top - 16, `+${Math.round(gain).toLocaleString('fr-FR')} or`, 'flottant-or', 1.05)
 }
 
-/** L'or d'une tape sur la mine : le « +N or » flotte au point tapé, une pièce vole de là au compteur, qui ne bouge qu'à son arrivée et sursaute. */
-export function effetGainOr(x: number, y: number, gain: number, taille = 1): void {
+/** Deux tapes à moins de ce délai forment une série : leurs gains s'additionnent dans un seul nombre, le son monte. */
+export const SERIE_MS = 450
+
+/** Un nombre d'or : le nombre, puis la pièce (Keko, 02/11 : « à la place du texte or, un symbole de pièce ; pas de + avant »). */
+function nombreOr(el: HTMLElement, n: number): void {
+  el.textContent = `${Math.round(n).toLocaleString('fr-FR')} `
+  const piece = document.createElement('span')
+  piece.className = 'symbole-piece'
+  el.appendChild(piece)
+}
+
+/** Un nombre d'or qui flotte et s'efface, comme `flotter`. */
+export function flotterOr(x: number, y: number, n: number, taille = 1): void {
+  if (mouvementReduit()) return
+  const el = poser('flottant flottant-or', x, y)
+  if (el === null) return
+  nombreOr(el, n)
+  const dx = (Math.random() - 0.5) * 40
+  animer(
+    el,
+    [
+      { transform: `translate(-50%, -50%) scale(${0.5 * taille})`, opacity: 0 },
+      { transform: `translate(calc(-50% + ${dx * 0.3}px), -150%) scale(${1.15 * taille})`, opacity: 1, offset: 0.18 },
+      { transform: `translate(calc(-50% + ${dx}px), -270%) scale(${taille})`, opacity: 0 },
+    ],
+    { duration: 750, easing: 'cubic-bezier(.2,.7,.3,1)' },
+  )
+}
+
+/**
+ * LA SÉRIE D'OR (Keko, 02/11 : « additionne les taps proches pour voir le
+ * nombre total généré par une série de taps ») : la première tape pose un
+ * nombre au-dessus du doigt ; chaque tape qui suit à moins de `SERIE_MS` lui
+ * ajoute son gain, et le nombre sursaute et grossit avec le total. Une pause,
+ * et il monte en s'effaçant.
+ */
+let serieOr: { el: HTMLElement; total: number; minuteur: number } | null = null
+
+const baseSerie = (total: number): string => `translate(-50%, -50%) scale(${Math.min(2, 1 + 0.2 * Math.log2(Math.max(1, total)))})`
+
+function finirLaSerie(): void {
+  const s = serieOr
+  serieOr = null
+  if (s === null) return
+  const base = baseSerie(s.total)
+  animer(s.el, [{ transform: base, opacity: 1 }, { transform: `${base} translateY(-70%)`, opacity: 1, offset: 0.35 }, { transform: `${base} translateY(-160%)`, opacity: 0 }], {
+    duration: 650,
+    easing: 'cubic-bezier(.3,.6,.4,1)',
+  })
+}
+
+/** Ajoute le gain d'une tape à la série en cours, ou en commence une à (x, y). `force` : le sursaut (plus fort pour un critique). */
+export function gainEnSerie(x: number, y: number, gain: number, force = 1): void {
+  if (gain <= 0 || mouvementReduit()) return
+  if (serieOr === null) {
+    const el = poser('flottant flottant-or flottant-serie', x, y)
+    if (el === null) return
+    serieOr = { el, total: 0, minuteur: 0 }
+  }
+  const s = serieOr
+  window.clearTimeout(s.minuteur)
+  s.total += gain
+  nombreOr(s.el, s.total)
+  const base = baseSerie(s.total)
+  s.el.style.transform = base
+  s.el.animate(
+    s.total === gain
+      ? [{ transform: 'translate(-50%, -50%) scale(0.5)', opacity: 0 }, { transform: `${base} scale(1.2)`, opacity: 1, offset: 0.5 }, { transform: base, opacity: 1 }]
+      : [{ transform: `${base} scale(${1 + 0.18 * force})` }, { transform: base }],
+    { duration: 220, easing: 'cubic-bezier(.2,1.4,.4,1)' },
+  )
+  s.minuteur = window.setTimeout(finirLaSerie, SERIE_MS)
+}
+
+/** L'or d'une tape sur la mine : le nombre de la série grossit au-dessus du doigt, une pièce vole de là au compteur, qui ne bouge qu'à son arrivée et sursaute. */
+export function effetGainOr(x: number, y: number, gain: number, force = 1): void {
   if (gain <= 0) return
-  flotter(x, y - 10, `+${Math.round(gain).toLocaleString('fr-FR')} or`, 'flottant-or', taille)
+  gainEnSerie(x, y - 50, gain, force)
   const cible = cibleOr?.getBoundingClientRect()
   if (cible === undefined) return
   const arrivee = volerDesPieces(new DOMRect(x - 10, y - 10, 20, 20), cible, 1, () => secouerLOr())

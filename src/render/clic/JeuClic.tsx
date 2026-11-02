@@ -17,6 +17,7 @@ import { Compteur } from '../Compteur.tsx'
 import { declarerCibleOr, monterCouche } from '../effets.ts'
 import { IconeSon } from '../Jeu.tsx'
 import { Base } from './Base.tsx'
+import { SymbolePiece } from './Glyphe.tsx'
 import { MarcheClic } from './MarcheClic.tsx'
 import { RivauxClic } from './RivauxClic.tsx'
 
@@ -45,7 +46,9 @@ function Accueil({ onCommencer }: { onCommencer: (nom: string) => void }): React
     <div className="accueil">
       <h1>Quintessence</h1>
       <p className="sourd petit">Prototype : le jeu se pose brique par brique.</p>
-      <p>Vous commencez avec une mine d’{NOM_OR}. Tapez-la : chaque tape rapporte 1 {NOM_OR}.</p>
+      <p>
+        Vous commencez avec une mine d’{NOM_OR}. Tapez-la : chaque tape rapporte 1 <SymbolePiece />.
+      </p>
       <label>
         Votre nom
         <input type="text" value={nom} maxLength={16} placeholder="Nicolas" onChange={(e) => setNom(e.target.value)} />
@@ -134,7 +137,7 @@ function Table({ partie, reelAuDepart, onRecommencer }: { partie: Partie; reelAu
           <b ref={declarerCibleOr}>
             <Compteur valeur={j.or} cle="or" format={abrege} />
           </b>{' '}
-          {NOM_OR}
+          <SymbolePiece />
         </span>
         <span className="entete-heure">
           {ouvert && horloge(m.t)}
