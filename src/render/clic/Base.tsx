@@ -24,16 +24,17 @@ import {
   DIRECTIONS, acheter, ameliorer, ameliorerSource, bilan, choisirAmelioration, perdrePepite, ramasserPepite, bilanProducteur, boiteModule, branches, brancher, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, debitTotal,
   capaciteReserve, debrancher, mineArretee, declencher, deplacerProducteur, disponible, disposition, effetsDe, entrees, estFixe, estMine, estSource, etendue, force, fusibles, genreDe, lotDeBase, meilleurePrise, moduleDe,
   modulesDe, multiplicateurPrestige, peutAmeliorer, peutAmeliorerSource, peutFabriquer, peutPayer, placeSurProducteur, pointsSi, prisesPour, producteurDe, producteurTient, progresQuete,
-  objectifQuete, queteAccomplie, queteEnCours, reclamerQuete, recolter, regler, reservePleine, sortesFormees,
-  sortie, soute, surLesCases, tailleDe, typeDe, visibleProducteur, type Coup, type Joueur, type Module, type Monde, type Place, type Prise, type Producteur,
+  objectifQuete, orParBarre, queteAccomplie, queteEnCours, reclamerQuete, recolter, regler, reservePleine, sortesFormees,
+  sortie, soute, surLesCases, tailleDe, typeDe, visibleProducteur, vitesseAuto, type Coup, type Joueur, type Module, type Monde, type Place, type Prise, type Producteur,
 } from '../../logic/clic/moteur.ts'
 import { joueur } from '../../logic/clic/partie.ts'
-import { abrege, parSeconde, possede } from '../../ui/format.ts'
+import { abrege, compteARebours, parSeconde, possede } from '../../ui/format.ts'
 import { vibrer } from '../../ui/haptique.ts'
 import {
   EXPLICATION_TRAIT, LETTRE_PRODUCTEUR, NOM_AMELIORATION, NOM_COULEUR, NOM_MATIERE, NOM_MINE, NOM_OR, NOM_RECOMPENSE, NOM_RARETE, NOM_SOUTE, NOM_TRAIT, NOMS_FORMES, explicationModule, nomProducteur, nomSorte, nomSortePluriel,
 } from '../../ui/noms-clic.ts'
 import { sonBarre, sonBatir, sonEtape, sonReserve, sonTape } from '../../ui/sons.ts'
+import { vitesseDemandee } from '../../ui/vitesse-clic.ts'
 import { Compteur } from '../Compteur.tsx'
 import { DUREE_GLISSE, monterCarte, type Carte, type Point } from '../carte/carte.ts'
 import { SERIE_MS, eclater, effetDepense, effetVente, flotter, impact, mouvementReduit, onde } from '../effets.ts'
@@ -1280,12 +1281,18 @@ function pomperLaReserve(reserve: HTMLElement, impact: DOMRect, pleine: boolean)
 function Reserve({ j, p }: { j: Joueur; p: Producteur }): ReactElement {
   const capacite = capaciteReserve(j, p)
   const pleine = reservePleine(j, p)
+  // LE TEMPS AVANT LE PROCHAIN +1 (Keko, 02/11 : « montrer le timer qui tourne avant le prochain +1 »), en secondes réelles : ce qui manque à la pièce entamée, au débit de l'automatique. La table repeint chaque seconde. Rien quand la réserve est pleine, ni quand les pièces tombent plus vite que deux secondes (le compte n'aurait pas le temps de se lire).
+  const parSecondeReelle = vitesseAuto(j) * orParBarre(j, p) * vitesseDemandee()
+  const attente = !pleine && parSecondeReelle > 0 && parSecondeReelle <= 0.5 ? (Math.floor(p.reserve + 1e-9) + 1 - p.reserve) / parSecondeReelle : null
   return (
     <span className={`reserve${pleine ? ' reserve-pleine' : ''}`} data-cliquable data-reserve data-id={p.id} aria-label="Récolter la réserve">
       <span className="reserve-jauge" style={{ width: `${(100 * Math.min(capacite, p.reserve)) / capacite}%` }} />
       <span className="reserve-eclat" />
       <span className="reserve-texte">
-        <Compteur valeur={p.reserve} cle="reserve" format={possede} duree={200} /> / {capacite} <SymbolePiece />
+        <span className="reserve-montant">
+          <Compteur valeur={p.reserve} cle="reserve" format={possede} duree={200} /> / {capacite} <SymbolePiece />
+        </span>
+        {attente !== null && <span className="reserve-attente">+1 dans {compteARebours(attente)}</span>}
       </span>
     </span>
   )

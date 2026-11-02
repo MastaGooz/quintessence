@@ -10,9 +10,10 @@ import { SAISON_H } from '../../logic/clic/donnees.ts'
 import { debitOr } from '../../logic/clic/moteur.ts'
 import { classement, finie, joueur, nouvellePartie, rattraper, type Partie } from '../../logic/clic/partie.ts'
 import { ecrireSauvegardeClic, effacerSauvegardeClic, lireSauvegardeClic } from '../../ui/stockage-clic.ts'
-import { abrege, duree, horloge, parSeconde } from '../../ui/format.ts'
+import { abrege, duree, horloge, parSeconde, possede } from '../../ui/format.ts'
 import { NOM_OR } from '../../ui/noms-clic.ts'
 import { basculerSon, sonActif, sonClic } from '../../ui/sons.ts'
+import { vitesseDemandee } from '../../ui/vitesse-clic.ts'
 import { Compteur } from '../Compteur.tsx'
 import { declarerCibleOr, monterCouche } from '../effets.ts'
 import { IconeSon } from '../Jeu.tsx'
@@ -28,11 +29,6 @@ const PAGES: { id: Page; nom: string }[] = [
   { id: 'marche', nom: 'Marché' },
   { id: 'rivaux', nom: 'Rivaux' },
 ]
-
-function vitesseDemandee(): number {
-  const v = Number(new URLSearchParams(location.search).get('vitesse') ?? '1')
-  return Number.isFinite(v) && v > 0 ? v : 1
-}
 
 export function JeuClic(): ReactElement {
   const [sauvegarde, setSauvegarde] = useState(() => lireSauvegardeClic())
@@ -142,7 +138,8 @@ function Table({ partie, reelAuDepart, onRecommencer }: { partie: Partie; reelAu
       <header className="entete">
         <span className="entete-or">
           <b ref={declarerCibleOr}>
-            <Compteur valeur={j.or} cle="or" format={abrege} />
+            {/* L'OR EN ENTIER (Keko, 02/11 : « à 1,34 k on ne voit plus le chiffre monter ») : chaque pièce se voit arriver. */}
+            <Compteur valeur={j.or} cle="or" format={possede} />
           </b>{' '}
           <SymbolePiece />
         </span>

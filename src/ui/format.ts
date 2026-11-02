@@ -12,7 +12,8 @@ export function nombre(n: number): string {
  * ne promet que ce qu'on peut dépenser. (L'epsilon absorbe 99,999999…)
  */
 export function possede(n: number): string {
-  return Math.floor(n + 1e-9).toLocaleString('fr-FR')
+  // L'espace des milliers est une espace insécable ENTIÈRE : la fine du français (U+202F) ne fait que 2 pixels en Baloo 2, et « 1 234 » se lisait « 1234 ».
+  return Math.floor(n + 1e-9).toLocaleString('fr-FR').replace(/ /g, ' ')
 }
 
 /** Un nombre avec une décimale quand il est petit : « 0,5 », « 12 ». */
@@ -51,6 +52,16 @@ export function parSeconde(n: number): string {
   if (n < 10) return `${n.toLocaleString('fr-FR', { minimumFractionDigits: n < 1 ? 3 : 2, maximumFractionDigits: n < 1 ? 3 : 2 })}/s`
   if (n < 1000) return `${n.toLocaleString('fr-FR', { maximumFractionDigits: 1 })}/s`
   return `${abrege(n)}/s`
+}
+
+/** Un compte à rebours, à la seconde : « 42 s », « 1:40 », « 1:02:05 ». */
+export function compteARebours(secondes: number): string {
+  const s = Math.max(0, Math.ceil(secondes - 1e-6))
+  if (s < 60) return `${s} s`
+  const h = Math.floor(s / 3600)
+  const min = Math.floor((s % 3600) / 60)
+  const sec = String(s % 60).padStart(2, '0')
+  return h > 0 ? `${h}:${String(min).padStart(2, '0')}:${sec}` : `${min}:${sec}`
 }
 
 /** « 3 h 15 », « 45 min », « 2 j 4 h ». */
