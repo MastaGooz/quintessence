@@ -96,6 +96,20 @@ export function sonPiece(rang: number): void {
   jouer((c, t) => note(c, t, 1320 * Math.pow(1.06, rang % 8), 0.07, 'sine', 0.28))
 }
 
+/** Une pièce tombe dans la réserve de la mine : un tintement qui monte d'une octave à mesure qu'elle se remplit ; pleine, un petit accord qui s'ouvre. */
+export function sonReserve(remplissage: number, pleine: boolean): void {
+  jouer((c, t) => {
+    const f = 880 * Math.pow(2, Math.min(1, Math.max(0, remplissage)))
+    note(c, t, f, 0.1, 'sine', 0.3)
+    note(c, t + 0.025, f * 1.5, 0.14, 'triangle', 0.1)
+    if (pleine) {
+      note(c, t + 0.09, f * 1.26, 0.28, 'triangle', 0.22)
+      note(c, t + 0.18, f * 1.5, 0.4, 'triangle', 0.22)
+      note(c, t + 0.18, f * 2, 0.45, 'sine', 0.1)
+    }
+  })
+}
+
 /** Une dépense : une pièce qui part, plus grave. */
 export function sonDepense(): void {
   jouer((c, t) => note(c, t, 520, 0.12, 'triangle', 0.3, 330))

@@ -33,10 +33,10 @@ import { vibrer } from '../../ui/haptique.ts'
 import {
   EXPLICATION_TRAIT, LETTRE_PRODUCTEUR, NOM_AMELIORATION, NOM_COULEUR, NOM_MATIERE, NOM_MINE, NOM_OR, NOM_RECOMPENSE, NOM_RARETE, NOM_SOUTE, NOM_TRAIT, NOMS_FORMES, explicationModule, nomProducteur, nomSorte, nomSortePluriel,
 } from '../../ui/noms-clic.ts'
-import { sonBatir, sonEtape, sonPiece, sonTape } from '../../ui/sons.ts'
+import { sonBatir, sonEtape, sonReserve, sonTape } from '../../ui/sons.ts'
 import { Compteur } from '../Compteur.tsx'
 import { DUREE_GLISSE, monterCarte, type Carte, type Point } from '../carte/carte.ts'
-import { SERIE_MS, eclater, effetDepense, effetVente, flotter, mouvementReduit, retarderLeCompteur, volerDesPieces } from '../effets.ts'
+import { SERIE_MS, eclater, effetDepense, effetVente, flotter, mouvementReduit, onde, retarderLeCompteur, volerDesPieces } from '../effets.ts'
 import { Feuille } from '../Feuille.tsx'
 import { ChoixAmelioration } from './Ameliorations.tsx'
 import { BoutonCout, Boutique, COULEURS_RARETE } from './Boutique.tsx'
@@ -651,6 +651,9 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rayon, bas])
 
+  /** Jusqu'à cet instant, la barre de la mine se montre PLEINE : elle vient d'envoyer sa pièce, on la voit pleine avant qu'elle ne se vide. */
+  const barrePleineJusqua = useRef(0)
+
   // LA BARRE DE LA MINE : posée image par image ; avec l'auto, elle avance en continu entre deux passages du moteur (une fois par seconde, et à chaque tape).
   useEffect(() => {
     let image = 0
@@ -660,7 +663,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
       const el = mine === undefined ? undefined : producteursEl.current.get(mine.id)
       if (mine !== undefined && el !== undefined) {
         if (mine.progres !== vu.progres) vu = { progres: mine.progres, t: maintenant }
-        const montre = mineArretee(j, mine) ? 0 : Math.min(1, vu.progres + ((maintenant - vu.t) / 1000) * vitesseAuto(j))
+        const montre = maintenant < barrePleineJusqua.current ? 1 : mineArretee(j, mine) ? 0 : Math.min(1, vu.progres + ((maintenant - vu.t) / 1000) * vitesseAuto(j))
         const remplie = el.querySelector<HTMLElement>('.mine-barre-remplie')
         if (remplie !== null) remplie.style.transform = `scaleX(${montre})`
       }
@@ -694,10 +697,25 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     const depuis = el?.querySelector('.mine-barre-gain .symbole-piece')?.getBoundingClientRect()
     const reserve = el?.querySelector<HTMLElement>('.reserve')
     const vers = reserve?.querySelector('.reserve-texte .symbole-piece')?.getBoundingClientRect()
-    if (depuis === undefined || vers === undefined) return
-    volerDesPieces(depuis, vers, Math.min(5, k), (rang) => {
-      sonPiece(rang)
-      reserve?.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.06)', offset: 0.3 }, { transform: 'scale(1)' }], { duration: 240, easing: 'ease-out' })
+    if (depuis === undefined || vers === undefined || mineVue === undefined) return
+    // AU DÉPART : la barre reste pleine un instant, gonfle et s'allume ; le « +1 » pompe en lâchant sa pièce.
+    barrePleineJusqua.current = performance.now() + 170
+    el?.querySelector('.mine-barre')?.animate(
+      [
+        { transform: 'scaleY(1)', filter: 'brightness(1)' },
+        { transform: 'scaleY(1.45)', filter: 'brightness(2.1)', offset: 0.3 },
+        { transform: 'scaleY(1)', filter: 'brightness(1)' },
+      ],
+      { duration: 320, easing: 'ease-out' },
+    )
+    el?.querySelector('.mine-barre-gain')?.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.5)', offset: 0.3 }, { transform: 'scale(1)' }], { duration: 320, easing: 'ease-out' })
+    // À L'ARRIVÉE de chaque pièce : la réserve pompe et s'illumine, le tintement monte avec son remplissage ; pleine, tout est plus fort.
+    const n = Math.min(5, k)
+    const capacite = capaciteReserve(j, mineVue)
+    volerDesPieces(depuis, vers, n, (rang) => {
+      const pleine = rang === n - 1 && reservePleine(j, mineVue)
+      sonReserve((mineVue.reserve - (n - 1 - rang)) / capacite, pleine)
+      if (reserve !== null && reserve !== undefined) pomperLaReserve(reserve, vers, pleine)
     })
   })
 
@@ -1150,6 +1168,55 @@ function Objectif({
 }
 
 /**
+ * LE JUICE DE LA RÉSERVE quand une pièce y tombe (Keko, 02/11 : « quand la
+ * réserve se remplit, je veux plus de juice, avec pump des chiffres et de la
+ * barre, petit effet de lumière ») : la réserve gonfle et rebondit sous un
+ * halo d'or, son nombre grossit en brillant, sa jauge s'allume et un reflet la
+ * balaie, une onde et des étincelles partent du point d'impact. Pleine : plus
+ * fort, et une seconde onde, large, autour de la réserve.
+ */
+function pomperLaReserve(reserve: HTMLElement, impact: DOMRect, pleine: boolean): void {
+  if (mouvementReduit()) return
+  const fort = pleine ? 1.6 : 1
+  reserve.animate(
+    [
+      { transform: 'scale(1)', filter: 'brightness(1)', boxShadow: '0 0 0 0 rgba(255, 198, 31, 0)' },
+      { transform: `scale(${1 + 0.12 * fort})`, filter: 'brightness(1.45)', boxShadow: `0 0 ${Math.round(32 * fort)}px ${Math.round(8 * fort)}px rgba(255, 198, 31, 0.8)`, offset: 0.25 },
+      { transform: 'scale(0.96)', offset: 0.55 },
+      { transform: 'scale(1.02)', offset: 0.78 },
+      { transform: 'scale(1)', filter: 'brightness(1)', boxShadow: '0 0 0 0 rgba(255, 198, 31, 0)' },
+    ],
+    { duration: 480, easing: 'ease-out' },
+  )
+  reserve.querySelector('.reserve-texte')?.animate(
+    [
+      { transform: 'scale(1)', filter: 'drop-shadow(0 0 0 rgba(255, 220, 110, 0))' },
+      { transform: `scale(${1 + 0.28 * fort})`, filter: 'drop-shadow(0 0 10px rgba(255, 220, 110, 1))', offset: 0.28 },
+      { transform: 'scale(0.95)', offset: 0.6 },
+      { transform: 'scale(1)', filter: 'drop-shadow(0 0 0 rgba(255, 220, 110, 0))' },
+    ],
+    { duration: 420, easing: 'ease-out' },
+  )
+  reserve.querySelector('.reserve-jauge')?.animate([{ filter: 'brightness(1)' }, { filter: 'brightness(2)', offset: 0.2 }, { filter: 'brightness(1)' }], { duration: 460, easing: 'ease-out' })
+  reserve.querySelector('.reserve-eclat')?.animate(
+    [
+      { transform: 'translateX(-160%) skewX(-20deg)', opacity: 0 },
+      { opacity: 1, offset: 0.15 },
+      { transform: 'translateX(460%) skewX(-20deg)', opacity: 0 },
+    ],
+    { duration: 600, easing: 'cubic-bezier(.3,.7,.4,1)' },
+  )
+  const x = impact.left + impact.width / 2
+  const y = impact.top + impact.height / 2
+  eclater(x, y, pleine ? 28 : 10, '#ffe27a')
+  onde(x, y, pleine ? 64 : 34)
+  if (pleine) {
+    const r = reserve.getBoundingClientRect()
+    window.setTimeout(() => onde(r.left + r.width / 2, r.top + r.height / 2, r.width * 0.75), 90)
+  }
+}
+
+/**
  * LA RÉSERVE de la mine (Keko, 02/11) : l'or des barres s'y
  * accumule, sa jauge monte ; pleine, elle s'allume et la mine s'arrête. Elle
  * se tape à part de la mine (`data-reserve`) : une tape la récolte.
@@ -1160,6 +1227,7 @@ function Reserve({ j, p }: { j: Joueur; p: Producteur }): ReactElement {
   return (
     <span className={`reserve${pleine ? ' reserve-pleine' : ''}`} data-cliquable data-reserve data-id={p.id} aria-label="Récolter la réserve">
       <span className="reserve-jauge" style={{ width: `${(100 * Math.min(capacite, p.reserve)) / capacite}%` }} />
+      <span className="reserve-eclat" />
       <span className="reserve-texte">
         <Compteur valeur={p.reserve} cle="reserve" format={possede} duree={200} /> / {capacite} <SymbolePiece />
       </span>

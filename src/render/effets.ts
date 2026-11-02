@@ -103,6 +103,24 @@ export function eclater(x: number, y: number, n = 6, couleur = 'var(--or)'): voi
   }
 }
 
+/** Une onde de lumière qui s'élargit depuis (x, y) et s'efface : l'impact d'une pièce. */
+export function onde(x: number, y: number, rayon = 40, couleur = 'rgba(255, 214, 90, 0.95)'): void {
+  if (mouvementReduit()) return
+  const el = poser('onde', x, y)
+  if (el === null) return
+  el.style.width = `${rayon * 2}px`
+  el.style.height = `${rayon * 2}px`
+  el.style.color = couleur
+  animer(
+    el,
+    [
+      { transform: 'translate(-50%, -50%) scale(0.15)', opacity: 1 },
+      { transform: 'translate(-50%, -50%) scale(1)', opacity: 0 },
+    ],
+    { duration: 520, easing: 'cubic-bezier(.2,.8,.3,1)' },
+  )
+}
+
 /** Un petit sursaut du compteur d'or, à chaque pièce qui arrive. */
 export function secouerLOr(): void {
   cibleOr?.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.18)', offset: 0.35 }, { transform: 'scale(1)' }], { duration: 220, easing: 'ease-out' })
