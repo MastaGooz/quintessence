@@ -1175,49 +1175,6 @@ select {
   width: 340px;
 }
 
-/* L'anneau de l'automatique, à gauche de la barre : la barre lui cède sa place. */
-.mine-production:has(.mine-anneau) {
-  width: 376px;
-  gap: 12px;
-}
-
-.mine-anneau {
-  flex: none;
-  width: 40px;
-  height: 40px;
-  /* Le tour part d'en haut. */
-  transform: rotate(-90deg);
-  overflow: visible;
-  pointer-events: none;
-}
-
-.mine-anneau circle {
-  fill: none;
-}
-
-.mine-anneau-fond {
-  stroke: rgba(20, 8, 28, 0.65);
-  stroke-width: 8.8;
-}
-
-.mine-anneau-lisere {
-  stroke: rgba(255, 246, 226, 0.25);
-  stroke-width: 1.6;
-}
-
-.mine-anneau-plein {
-  stroke: var(--or);
-  stroke-width: 6;
-  stroke-linecap: round;
-  filter: drop-shadow(0 0 3px rgba(255, 214, 90, 0.7));
-  /* D'une seconde à l'autre, il glisse. */
-  transition: stroke-dashoffset 1s linear;
-}
-
-.mine-anneau-arrete {
-  opacity: 0.45;
-}
-
 .mine-barre {
   position: relative;
   flex: 1;
@@ -1346,6 +1303,42 @@ select {
   line-height: 1;
   color: var(--creme);
   text-shadow: 1.5px 0 0 rgba(20, 8, 28, 0.85), -1.5px 0 0 rgba(20, 8, 28, 0.85), 0 1.5px 0 rgba(20, 8, 28, 0.85), 0 -1.5px 0 rgba(20, 8, 28, 0.85), 0 3px 0 rgba(20, 8, 28, 0.9);
+}
+
+/* L'anneau de l'automatique, dans la réserve à gauche : centré sur le bout arrondi de la pilule. */
+.reserve-anneau {
+  position: absolute;
+  left: 13px;
+  top: 50%;
+  width: 52px;
+  height: 52px;
+  /* Le tour part d'en haut. */
+  transform: translateY(-50%) rotate(-90deg);
+  overflow: visible;
+  pointer-events: none;
+}
+
+.reserve-anneau circle {
+  fill: none;
+}
+
+.reserve-anneau-fond {
+  stroke: rgba(20, 8, 28, 0.65);
+  stroke-width: 8.8;
+}
+
+.reserve-anneau-lisere {
+  stroke: rgba(255, 246, 226, 0.25);
+  stroke-width: 1.6;
+}
+
+.reserve-anneau-plein {
+  stroke: var(--or);
+  stroke-width: 6;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 3px rgba(255, 214, 90, 0.7));
+  /* D'une seconde à l'autre, il glisse. */
+  transition: stroke-dashoffset 1s linear;
 }
 
 .reserve.enfonce {

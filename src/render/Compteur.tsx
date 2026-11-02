@@ -10,6 +10,11 @@
  * somme des gains encore en vol et montre la valeur moins cette somme ; chaque
  * pièce qui arrive retire la sienne. Un changement sans retard (une dépense)
  * s'applique tout de suite, sans faire oublier les pièces en vol.
+ *
+ * IL NE SURSAUTE QUE SI CE QU'IL MONTRE CHANGE (Keko, 02/11 : « fais pulser le
+ * chiffre de la réserve uniquement quand il augmente ») : la réserve gagne un
+ * centième de pièce par seconde, et son « 12 » battait chaque seconde sans
+ * bouger. `sursautEnBaisse={false}` le fait aussi se taire quand il baisse.
  */
 import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { possede } from '../ui/format.ts'
@@ -18,7 +23,19 @@ import { mouvementReduit, prendreLeRetard } from './effets.ts'
 const HAUT: Keyframe[] = [{ transform: 'scale(1)' }, { transform: 'scale(1.3)', color: '#ffffff', offset: 0.3 }, { transform: 'scale(1)' }]
 const BAS: Keyframe[] = [{ transform: 'scale(1)' }, { transform: 'scale(0.82)', color: 'var(--rouge)', offset: 0.3 }, { transform: 'scale(1)' }]
 
-export function Compteur({ valeur, duree = 420, cle, format = possede }: { valeur: number; duree?: number; cle?: string; format?: (n: number) => string }): ReactElement {
+export function Compteur({
+  valeur,
+  duree = 420,
+  cle,
+  format = possede,
+  sursautEnBaisse = true,
+}: {
+  valeur: number
+  duree?: number
+  cle?: string
+  format?: (n: number) => string
+  sursautEnBaisse?: boolean
+}): ReactElement {
   const ref = useRef<HTMLSpanElement>(null)
   const [montre, setMontre] = useState(valeur)
   const affiche = useRef(valeur)
@@ -31,6 +48,10 @@ export function Compteur({ valeur, duree = 420, cle, format = possede }: { valeu
   const minuteurs = useRef(new Set<number>())
   const dureeRef = useRef(duree)
   dureeRef.current = duree
+  const formatRef = useRef(format)
+  formatRef.current = format
+  const enBaisseRef = useRef(sursautEnBaisse)
+  enBaisseRef.current = sursautEnBaisse
 
   /** Glisse de ce qui est montré vers la valeur reçue moins ce qui vole encore. */
   const allerVers = (): void => {
@@ -40,7 +61,9 @@ export function Compteur({ valeur, duree = 420, cle, format = possede }: { valeu
     cancelAnimationFrame(image.current)
     const t0 = performance.now()
     const d = mouvementReduit() || Math.abs(vers - depuis) <= 2 ? 0 : dureeRef.current
-    ref.current?.animate(vers > depuis ? HAUT : BAS, { duration: 340, easing: 'cubic-bezier(.2,1.4,.4,1)' })
+    if (formatRef.current(vers) !== formatRef.current(depuis) && (vers > depuis || enBaisseRef.current)) {
+      ref.current?.animate(vers > depuis ? HAUT : BAS, { duration: 340, easing: 'cubic-bezier(.2,1.4,.4,1)' })
+    }
     const pas = (t: number): void => {
       const u = d === 0 ? 1 : Math.min(1, (t - t0) / d)
       const e = 1 - Math.pow(1 - u, 3)
