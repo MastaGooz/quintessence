@@ -217,8 +217,42 @@ export const MINE: TypeProducteur = { id: 'banque', genre: 'mine', cout: { forme
 export const SCIERIE: TypeProducteur = { id: 'scierie', genre: 'ressource', ressource: 'bois', cout: { forme: 0, couleur: null, quantite: 0 }, lot: 1, creux: [_, _, _, _, _, _, _, _], taille: { largeur: 450, hauteur: 450 } }
 export const MINE_DE_PIERRE: TypeProducteur = { id: 'minePierre', genre: 'ressource', ressource: 'pierre', cout: { forme: 0, couleur: null, quantite: 0 }, lot: 1, creux: [_, _, _, _, _, _, _, _], taille: { largeur: 450, hauteur: 450 } }
 
-/** Ce que coûte la construction : `premier` or la première, `croissance` fois plus chacune des suivantes (Keko : « 50 or, puis plus cher » ; la croissance est de moi). */
-export const CONSTRUCTION = { premier: 50, croissance: 2, tape: 0.1 }
+/**
+ * Ce que coûte la construction (Keko, 02/11 : « le premier producteur coûte
+ * uniquement de l'or, mais ensuite, si le joueur en veut d'autres, ils coûtent
+ * pierre, bois et or ») : le PREMIER DE CHAQUE SORTE, `premier` or — sinon le
+ * joueur qui commence par la scierie n'aurait jamais la pierre de sa mine —,
+ * les suivants `autres`, `croissance` fois plus à chaque exemplaire. Chiffres
+ * de moi.
+ */
+export const CONSTRUCTION = { premier: 50, autres: { or: 100, bois: 20, pierre: 20 }, croissance: 2 }
+
+/**
+ * LES NIVEAUX DES PRODUCTEURS CONSTRUITS (Keko, 02/11 : « un bouton level sur
+ * les producteurs », « comme la banque », payé « en or, bois, pierre ») :
+ * chacun a le sien. Le niveau 2 donne SON AUTOMATIQUE (sa barre avance seule et
+ * remplit sa réserve) ; les suivants, trois améliorations au choix parmi les
+ * huit de Keko. Prix du niveau n → n + 1 : la base × `croissance`^(n−1).
+ * Chiffres de moi.
+ */
+export const NIVEAU_PRODUCTEUR = { or: 20, bois: 5, pierre: 5, croissance: 2 }
+
+/** LES AMÉLIORATIONS DES PRODUCTEURS, la liste retenue par Keko (02/11). */
+export const IDS_AMELIORATIONS_PRODUCTEUR = ['outils', 'rendement', 'cadence', 'entrepot', 'coupDouble', 'prime', 'tropPlein', 'elan'] as const
+export type IdAmeliorationProducteur = (typeof IDS_AMELIORATIONS_PRODUCTEUR)[number]
+/** Le niveau le plus haut de chacune. */
+export const MAX_AMELIORATION_PRODUCTEUR: Record<IdAmeliorationProducteur, number> = { outils: 99, rendement: 99, cadence: 20, entrepot: 99, coupDouble: 20, prime: 99, tropPlein: 10, elan: 10 }
+/**
+ * Ce que fait un producteur construit, et chaque niveau de ses améliorations :
+ * la tape remplit `tape` de sa barre (+`outils` par niveau) ; une barre pleine
+ * donne `lot` + `rendement` par niveau ; son automatique remplit `auto` barre
+ * par seconde (+`cadence` par niveau, en part) ; sa réserve tient `reserve`
+ * (+`entrepot` en part) ; `coupDouble` de chance qu'une tape compte double ;
+ * `prime` de plus à la récolte d'une réserve pleine ; `tropPlein` de la
+ * production d'une réserve pleine qui arrive quand même ; l'élan comme celui
+ * de la banque. Calqué sur la banque (`EFFETS_MINE`).
+ */
+export const EFFETS_PRODUCTEUR = { tape: 0.1, outils: 0.05, rendement: 1, auto: 0.01, cadence: 0.5, reserve: 288, entrepot: 0.5, coupDouble: 0.05, prime: 0.25, tropPlein: 0.1, elanPas: 0.05, elanPlafond: 0.5 }
 
 /**
  * LES QUÊTES, une à la fois (Keko, 02/11 : « quête 1 : gagner 10, quête 2 :

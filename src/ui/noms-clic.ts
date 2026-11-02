@@ -3,7 +3,7 @@
  * 01/11 : « revenons au système abstrait »). Une matière se nomme par sa forme
  * et sa couleur (« carré rouge », « rond bleu ») ; l'habillage viendra après.
  */
-import { FABRICATION, PRIMAIRES, PRODUCTEURS, RARETES, couleurDe, formeDe, partsDe, type Genre, type IdAmelioration, type Recompense, type Trait, type Ressource } from '../logic/clic/donnees.ts'
+import { FABRICATION, PRIMAIRES, PRODUCTEURS, RARETES, couleurDe, formeDe, partsDe, type Genre, type IdAmelioration, type IdAmeliorationProducteur, type Recompense, type Trait, type Ressource } from '../logic/clic/donnees.ts'
 import { rangDe } from '../logic/clic/moteur.ts'
 
 /** La ressource, en un mot. */
@@ -70,6 +70,18 @@ export const NOM_AMELIORATION: Record<IdAmelioration, string> = {
   reserve: 'Grande réserve',
   prime: 'Prime de réserve pleine',
   tropPlein: 'Trop-plein',
+}
+
+/** Les améliorations des producteurs construits (Keko, 02/11). */
+export const NOM_AMELIORATION_PRODUCTEUR: Record<IdAmeliorationProducteur, string> = {
+  outils: 'Outils',
+  rendement: 'Rendement',
+  cadence: 'Cadence',
+  entrepot: 'Entrepôt',
+  coupDouble: 'Coup double',
+  prime: 'Prime d’entrepôt plein',
+  tropPlein: 'Trop-plein',
+  elan: 'Élan',
 }
 
 export const NOM_GENRE: Record<Genre, string> = { source: 'source', raffinerie: 'raffinerie', melangeur: 'mélangeur', mine: 'banque', ressource: 'producteur' }

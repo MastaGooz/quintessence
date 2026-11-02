@@ -223,7 +223,10 @@ export function monterCarte(el: HTMLElement, c: HTMLCanvasElement, m: HTMLElemen
     const sy = e.clientY - r.top
     if (doigts.size === 0) {
       const saisissable = t.closest<HTMLElement>('[data-saisissable]')
-      if (saisissable !== null && inter.onSaisir?.(saisissable, versMonde(sx, sy)) === true) {
+      // Ce qui se clique DANS une pièce saisissable (la flèche, la réserve d'un producteur construit) se clique : on ne saisit pas la pièce par lui.
+      const cliquableDedans = t.closest<HTMLElement>('[data-cliquable]')
+      const parUnBouton = saisissable !== null && cliquableDedans !== null && cliquableDedans !== saisissable && saisissable.contains(cliquableDedans)
+      if (saisissable !== null && !parUnBouton && inter.onSaisir?.(saisissable, versMonde(sx, sy)) === true) {
         saisi = true
         saisie = { depart: { x: sx, y: sy }, bouge: false }
         el.setPointerCapture(e.pointerId)

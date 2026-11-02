@@ -1295,6 +1295,34 @@ select {
   display: inline-block;
 }
 
+/* LE NIVEAU D'UN BÂTIMENT, en pastille dans le coin haut gauche, en face de la flèche. */
+.batiment-niveau {
+  position: absolute;
+  top: 24px;
+  left: 20px;
+  padding: 6px 16px 8px;
+  border-radius: 999px;
+  background: rgba(20, 8, 28, 0.75);
+  border: 3px solid rgba(255, 198, 31, 0.55);
+  color: var(--creme);
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* Un prix en plusieurs parts : or, bois, pierre. */
+.prix-vu {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.2rem 0.6rem;
+}
+
+.prix-vu > span {
+  white-space: nowrap;
+}
+
 /* LE BOUTON DES AMÉLIORATIONS, en haut à droite de la mine ; doré et battant quand quelque chose s'achète. */
 .mine-ameliorer {
   position: absolute;

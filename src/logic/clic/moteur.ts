@@ -32,9 +32,9 @@
  */
 import {
   ACHAT, CASE, COULEURS, EFFETS, EMPLACEMENTS, FABRICATION, FAMILLES, FORMES, FUSION, MARCHE, MELANGE, MODULE, NIVEAU, NIVEAU_SOURCE, PIECE, PRESTIGE, PRIMAIRES, PRODUCTEUR,
-  CONSTRUCTION, NIVEAU_MINE, OFFRE_NIVEAU, PRODUCTEURS, QUETE_CONSTRUCTION, QUETES, RARETES, RESERVE_MINE, RESSOURCES, SORTES, AMELIORATIONS, EFFETS_MINE, IDS_AMELIORATIONS, TRAITS, TYPE_MINE, VALEUR_MODULE,
+  CONSTRUCTION, EFFETS_PRODUCTEUR, IDS_AMELIORATIONS_PRODUCTEUR, MAX_AMELIORATION_PRODUCTEUR, NIVEAU_MINE, NIVEAU_PRODUCTEUR, OFFRE_NIVEAU, PRODUCTEURS, QUETE_CONSTRUCTION, QUETES, RARETES, RESERVE_MINE, RESSOURCES, SORTES, AMELIORATIONS, EFFETS_MINE, IDS_AMELIORATIONS, TRAITS, TYPE_MINE, VALEUR_MODULE,
   aDuBleu, couleurDe, formeDe, partsDe, sorteDe,
-  type Cout, type Genre, type IdAmelioration, type Qualite, type Quete, type Ressource, type Trait, type TypeProducteur,
+  type Cout, type Genre, type IdAmelioration, type IdAmeliorationProducteur, type Qualite, type Quete, type Ressource, type Trait, type TypeProducteur,
 } from './donnees.ts'
 import { graineDe, rngDe } from '../rng.ts'
 
@@ -55,6 +55,10 @@ export interface Producteur {
   reserve: number
   /** Mine : où en est sa barre, de 0 à 1 ; la tape et l'automatique la remplissent ensemble. */
   progres: number
+  /** Producteur construit : le niveau de chacune de ses améliorations (absentes : 0). */
+  ameliorations?: Partial<Record<IdAmeliorationProducteur, number>>
+  /** Producteur construit : les améliorations que son dernier niveau offre, en attendant qu'on en choisisse une. */
+  offre?: IdAmeliorationProducteur[] | null
 }
 
 /** UN MODULE : une pièce d'une couleur et d'une forme, d'une rareté, emboîtée sur un générateur ou dans la soute. */
@@ -608,18 +612,21 @@ export function bilanMine(j: Joueur, p: Producteur): Bilan {
 
 /** L'automatique est arrêté : la réserve est pleine, et aucun trop-plein ne le fait couler ailleurs. */
 export function mineArretee(j: Joueur, p: Producteur): boolean {
-  return reservePleine(j, p) && partTropPlein(j) <= 0
+  return reservePleine(j, p) && (estConstruit(p) ? partTropPleinProducteur(p) : partTropPlein(j)) <= 0
 }
 
-/** Remplit la barre de la mine de tant de barres (à la tape, ou le trop-plein) ; chaque barre pleine paie son or dans la bourse. Rend le nombre de barres remplies. */
+/** Remplit la barre de tant de barres (à la tape, ou le trop-plein) ; chaque barre pleine paie : l'or de la banque dans la bourse, la ressource d'un producteur construit dans son stock. Rend le nombre de barres remplies. */
 function avancerBarre(j: Joueur, p: Producteur, part: number): number {
   if (part <= 0) return 0
   p.progres = (p.progres ?? 0) + part
   const barres = Math.floor(p.progres + 1e-9)
   if (barres <= 0) return 0
   p.progres = Math.max(0, p.progres - barres)
-  produireOr(j, barres * orParBarre(j, p))
-  j.journal.barres += barres
+  if (estConstruit(p)) gagnerRessource(j, ressourceDe(p), barres * lotProducteur(p))
+  else {
+    produireOr(j, barres * orParBarre(j, p))
+    j.journal.barres += barres
+  }
   return barres
 }
 
@@ -720,7 +727,7 @@ function produireOr(j: Joueur, q: number): void {
 
 /** Ce que la réserve d'une mine peut contenir : sa capacité, grandie par l'amélioration. */
 export function capaciteReserve(j: Joueur, p: Producteur): number {
-  void p
+  if (estConstruit(p)) return Math.round(EFFETS_PRODUCTEUR.reserve * (1 + EFFETS_PRODUCTEUR.entrepot * niveauAP(p, 'entrepot')))
   return Math.round(RESERVE_MINE.capacite * (1 + EFFETS_MINE.reserve * j.ameliorations.reserve))
 }
 
@@ -730,7 +737,7 @@ export function partTropPlein(j: Joueur): number {
 }
 
 export function reservePleine(j: Joueur, p: Producteur): boolean {
-  return estMine(p) && (p.reserve ?? 0) + 1e-9 >= capaciteReserve(j, p)
+  return (estMine(p) || estConstruit(p)) && (p.reserve ?? 0) + 1e-9 >= capaciteReserve(j, p)
 }
 
 /**
@@ -744,10 +751,13 @@ export function reservePleine(j: Joueur, p: Producteur): boolean {
  */
 function avancerBarreAuto(j: Joueur, p: Producteur, part: number): void {
   const capacite = capaciteReserve(j, p)
+  // Un producteur construit a son trop-plein et son lot ; la banque, ceux du joueur.
+  const tropPlein = estConstruit(p) ? partTropPleinProducteur(p) : partTropPlein(j)
+  const lot = estConstruit(p) ? lotProducteur(p) : orParBarre(j, p)
   let reste = part
   while (reste > 1e-12) {
     if (p.reserve + 1e-9 >= capacite) {
-      avancerBarre(j, p, reste * partTropPlein(j))
+      avancerBarre(j, p, reste * tropPlein)
       return
     }
     const manque = 1 - p.progres
@@ -757,19 +767,21 @@ function avancerBarreAuto(j: Joueur, p: Producteur, part: number): void {
     }
     reste -= manque
     p.progres = 0
-    p.reserve = Math.min(capacite, p.reserve + orParBarre(j, p))
+    p.reserve = Math.min(capacite, p.reserve + lot)
   }
 }
 
 /** RÉCOLTER la réserve d'une mine : ses pièces entières passent dans la bourse du joueur (et à son score) ; pas avant la première (Keko, 02/11). Rend l'or récolté. */
 export function recolter(j: Joueur, p: Producteur): number {
-  const pieces = estMine(p) ? Math.floor((p.reserve ?? 0) + 1e-9) : 0
+  const pieces = estMine(p) || estConstruit(p) ? Math.floor((p.reserve ?? 0) + 1e-9) : 0
   if (pieces < 1) return 0
   // Une réserve PLEINE récoltée rapporte la prime, en pièces entières elle aussi.
-  const prime = reservePleine(j, p) ? 1 + EFFETS_MINE.prime * j.ameliorations.prime : 1
+  const prime = reservePleine(j, p) ? 1 + (estConstruit(p) ? EFFETS_PRODUCTEUR.prime * niveauAP(p, 'prime') : EFFETS_MINE.prime * j.ameliorations.prime) : 1
   const q = Math.floor(pieces * prime + 1e-9)
   p.reserve = Math.max(0, p.reserve - pieces)
-  produireOr(j, q)
+  // La réserve d'un producteur construit va dans son stock ; celle de la banque, dans la bourse.
+  if (estConstruit(p)) gagnerRessource(j, ressourceDe(p), q)
+  else produireOr(j, q)
   j.journal.recoltes += 1
   return q
 }
@@ -832,15 +844,14 @@ export function declencher(m: Monde, j: Joueur, p: Producteur, alea?: number, se
     return { gain: barres * orParBarre(j, p), critique, grosLot: false, sorte: sortie(p), or, pepite, avance }
   }
   if (estConstruit(p)) {
-    // UN PRODUCTEUR CONSTRUIT, comme la banque sans ses améliorations : la tape avance sa barre, une barre pleine donne sa ressource.
-    const r = ressourceDe(p)
-    p.progres = (p.progres ?? 0) + CONSTRUCTION.tape
-    const barres = Math.floor(p.progres + 1e-9)
-    p.progres = Math.max(0, p.progres - barres)
-    const gain = barres * typeDe(p).lot
-    if (gain > 0) gagnerRessource(j, r, gain)
+    // UN PRODUCTEUR CONSTRUIT, comme la banque avec ses améliorations à lui : la tape avance sa barre (outils, coup double, élan), une barre pleine donne sa ressource.
+    const chance = chanceCoupDouble(p)
+    const critique = alea !== undefined && alea < chance
+    const fois = alea === undefined ? 1 + chance : critique ? 2 : 1
+    const avance = avanceTapeProducteur(p) * fois * facteurElanProducteur(p, serie)
+    const barres = avancerBarre(j, p, avance)
     j.journal.tapes += 1
-    return { gain, critique: false, grosLot: false, sorte: sortie(p), or: false, avance: CONSTRUCTION.tape, ressource: r }
+    return { gain: barres * lotProducteur(p), critique, grosLot: false, sorte: sortie(p), or: false, avance, ressource: ressourceDe(p) }
   }
   const critique = alea !== undefined && alea < b.chanceCritique
   const grosLot = alea !== undefined && (alea * 7919) % 1 < b.chanceGrosLot
@@ -1094,9 +1105,29 @@ export function constructionOuverte(j: Joueur): boolean {
   return QUETE_CONSTRUCTION >= 0 && j.quete >= QUETE_CONSTRUCTION
 }
 
-/** Le prix de la prochaine construction, le même pour tous les producteurs : il monte avec ceux qu'on a déjà. */
-export function prixConstruction(j: Joueur): number {
-  return Math.round(CONSTRUCTION.premier * Math.pow(CONSTRUCTION.croissance, j.producteurs.filter(estConstruit).length))
+/** Un prix en or et en ressources. */
+export interface Prix {
+  or: number
+  bois: number
+  pierre: number
+}
+
+export function peutPayerPrix(j: Joueur, c: Prix): boolean {
+  return j.or + 1e-9 >= c.or && RESSOURCES.every((r) => stockRessource(j, r) + 1e-9 >= c[r])
+}
+
+function payerPrix(j: Joueur, c: Prix): void {
+  j.or -= c.or
+  j.ressources = { ...ressourcesVides(), ...j.ressources }
+  for (const r of RESSOURCES) j.ressources[r] -= c[r]
+}
+
+/** Le prix de la prochaine construction de ce type : le premier de chaque sorte en or seul, les suivants en or, bois et pierre, plus chers à chaque exemplaire (voir `CONSTRUCTION`). */
+export function prixConstruction(j: Joueur, type: number): Prix {
+  const k = j.producteurs.filter((p) => p.type === type).length
+  if (k === 0) return { or: CONSTRUCTION.premier, bois: 0, pierre: 0 }
+  const f = Math.pow(CONSTRUCTION.croissance, k - 1)
+  return { or: Math.round(CONSTRUCTION.autres.or * f), bois: Math.round(CONSTRUCTION.autres.bois * f), pierre: Math.round(CONSTRUCTION.autres.pierre * f) }
 }
 
 /**
@@ -1135,14 +1166,96 @@ function placeDeConstruction(j: Joueur, type: number): { x: number; y: number } 
 /** CONSTRUIRE un producteur (un indice de `TYPES_CONSTRUCTION`) : payé en or, posé à côté de la banque. Rend le producteur, ou null. */
 export function construire(j: Joueur, type: number): Producteur | null {
   const t = PRODUCTEURS[type]
-  const prix = prixConstruction(j)
-  if (t?.genre !== 'ressource' || !constructionOuverte(j) || j.or + 1e-9 < prix) return null
-  j.or -= prix
+  const prix = prixConstruction(j, type)
+  if (t?.genre !== 'ressource' || !constructionOuverte(j) || !peutPayerPrix(j, prix)) return null
+  payerPrix(j, prix)
   const place = placeDeConstruction(j, type)
   const p: Producteur = { id: j.prochainId++, type, x: place.x, y: place.y, couleur: 0, forme: 0, niveau: 1, reserve: 0, progres: 0 }
   j.producteurs.push(p)
   avancerLesQuetes(j)
   return p
+}
+
+// ---------------------------------------------------------------------------
+// LES PRODUCTEURS CONSTRUITS : LEURS NIVEAUX ET LEURS AMÉLIORATIONS (voir `NIVEAU_PRODUCTEUR`)
+
+/** Le niveau d'une amélioration d'un producteur construit. */
+export function niveauAP(p: Producteur, id: IdAmeliorationProducteur): number {
+  return p.ameliorations?.[id] ?? 0
+}
+
+/** Ce qu'une tape remplit de sa barre, avant le coup double et l'élan. */
+export function avanceTapeProducteur(p: Producteur): number {
+  return EFFETS_PRODUCTEUR.tape + EFFETS_PRODUCTEUR.outils * niveauAP(p, 'outils')
+}
+
+/** Ce que donne une barre pleine. */
+export function lotProducteur(p: Producteur): number {
+  return typeDe(p).lot + EFFETS_PRODUCTEUR.rendement * niveauAP(p, 'rendement')
+}
+
+/** Son automatique : le niveau 2 le donne. */
+export function automatiqueProducteur(p: Producteur): boolean {
+  return estConstruit(p) && p.niveau >= 2
+}
+
+/** Ce que son automatique remplit de barre par seconde. */
+export function vitesseAutoProducteur(p: Producteur): number {
+  return automatiqueProducteur(p) ? EFFETS_PRODUCTEUR.auto * (1 + EFFETS_PRODUCTEUR.cadence * niveauAP(p, 'cadence')) : 0
+}
+
+export function chanceCoupDouble(p: Producteur): number {
+  return Math.min(1, EFFETS_PRODUCTEUR.coupDouble * niveauAP(p, 'coupDouble'))
+}
+
+export function partTropPleinProducteur(p: Producteur): number {
+  return Math.min(1, EFFETS_PRODUCTEUR.tropPlein * niveauAP(p, 'tropPlein'))
+}
+
+export function facteurElanProducteur(p: Producteur, serie: number): number {
+  const n = niveauAP(p, 'elan')
+  return 1 + Math.min(EFFETS_PRODUCTEUR.elanPlafond * n, EFFETS_PRODUCTEUR.elanPas * n * Math.max(0, serie))
+}
+
+/** Le prix de son niveau suivant, en or, bois et pierre. */
+export function prixNiveauProducteur(p: Producteur): Prix {
+  const f = Math.pow(NIVEAU_PRODUCTEUR.croissance, p.niveau - 1)
+  return { or: Math.round(NIVEAU_PRODUCTEUR.or * f), bois: Math.round(NIVEAU_PRODUCTEUR.bois * f), pierre: Math.round(NIVEAU_PRODUCTEUR.pierre * f) }
+}
+
+/** Ce que donne son niveau suivant : l'automatique d'abord, puis une amélioration au choix. */
+export function gainNiveauProducteur(p: Producteur): 'automatique' | 'choix' {
+  return p.niveau < 2 ? 'automatique' : 'choix'
+}
+
+/** Il peut monter d'un niveau : aucune amélioration n'attend son choix, le prix est là. */
+export function peutMonterLeProducteur(j: Joueur, p: Producteur): boolean {
+  return estConstruit(p) && (p.offre ?? null) === null && peutPayerPrix(j, prixNiveauProducteur(p))
+}
+
+/** MONTER UN PRODUCTEUR D'UN NIVEAU : payé en or, bois et pierre ; le niveau 2 donne son automatique, les suivants l'offre de trois améliorations. Rend vrai s'il est monté. */
+export function monterLeProducteur(m: Monde, j: Joueur, p: Producteur): boolean {
+  if (!peutMonterLeProducteur(j, p)) return false
+  payerPrix(j, prixNiveauProducteur(p))
+  if (gainNiveauProducteur(p) === 'choix') p.offre = tirerOffreProducteur(m, j, p)
+  p.niveau += 1
+  return true
+}
+
+/** Tire l'offre d'un niveau de producteur : `OFFRE_NIVEAU` améliorations sous leur maximum, au hasard du joueur. */
+function tirerOffreProducteur(m: Monde, j: Joueur, p: Producteur): IdAmeliorationProducteur[] | null {
+  const possibles = IDS_AMELIORATIONS_PRODUCTEUR.filter((id) => niveauAP(p, id) < MAX_AMELIORATION_PRODUCTEUR[id])
+  const offre: IdAmeliorationProducteur[] = []
+  while (offre.length < OFFRE_NIVEAU && possibles.length > 0) offre.push(possibles.splice(Math.floor(tirer(m, j) * possibles.length), 1)[0]!)
+  return offre.length > 0 ? offre : null
+}
+
+/** Choisit une amélioration de l'offre d'un producteur : elle prend un niveau, l'offre se referme. */
+export function choisirAmeliorationProducteur(p: Producteur, id: IdAmeliorationProducteur): boolean {
+  if (!(p.offre ?? []).includes(id)) return false
+  p.ameliorations = { ...p.ameliorations, [id]: niveauAP(p, id) + 1 }
+  p.offre = null
+  return true
 }
 
 /** Le prix du niveau suivant de la mine. */
@@ -1607,8 +1720,11 @@ export function avancer(m: Monde, dt: number): void {
         avancerBarreAuto(j, p, vitesseAuto(j) * dt * 3600)
         continue
       }
-      // Les producteurs construits n'avancent qu'à la tape, pour l'instant.
-      if (estConstruit(p)) continue
+      // UN PRODUCTEUR CONSTRUIT : son automatique (niveau 2) remplit sa barre, et ses barres pleines tombent dans sa réserve.
+      if (estConstruit(p)) {
+        avancerBarreAuto(j, p, vitesseAutoProducteur(p) * dt * 3600)
+        continue
+      }
       const b = bilanProducteur(j, p)
       if (b.frequence <= 0) continue
       if (estSource(p)) produire(j, sortie(p), b.debit * 3600 * dt)

@@ -237,26 +237,31 @@ export function intensiteRecolte(gain: number, capacite: number): number {
  * — qui monte au rythme de leur arrivée et sursaute fort à la dernière, et
  * un son qui monte. Tout grandit avec `intensite` (`intensiteRecolte`).
  */
-export function effetRecolte(source: DOMRect, gain: number, intensite: number): void {
-  const cible = cibleOr?.getBoundingClientRect()
-  if (cible === undefined || gain <= 0) return
+export function effetRecolte(source: DOMRect, gain: number, intensite: number, ressource?: string): void {
+  // L'or de la banque vole à la bourse ; la ressource d'un producteur construit, à son compteur.
+  const compteur = ressource === undefined ? cibleOr : (ciblesRessources[ressource] ?? null)
+  const cible = compteur?.getBoundingClientRect()
+  if (compteur === null || cible === undefined || gain <= 0) return
   const k = Math.min(1, Math.max(0, intensite))
   sonRecolte(k)
   const n = Math.max(1, Math.min(Math.round(gain), 6 + Math.round(24 * k)))
   const ecart = n > 12 ? 32 : 55
+  const force = (rang: number): number => (rang === n - 1 ? 1 + 2.2 * k : 1)
   const arrivee = volerDesPieces(
     source,
     cible,
     n,
     (rang) => {
       sonPiece(rang)
-      secouerLOr(rang === n - 1 ? 1 + 2.2 * k : 1)
+      if (ressource === undefined) secouerLOr(force(rang))
+      else compteur.animate([{ transform: 'scale(1)' }, { transform: `scale(${1 + 0.18 * force(rang)})`, offset: 0.35 }, { transform: 'scale(1)' }], { duration: 220, easing: 'ease-out' })
     },
     ecart,
+    ressource === undefined ? 'piece' : `piece piece-${ressource}`,
   )
-  retarderLeCompteur('or', arrivee, (n - 1) * ecart + 160)
+  retarderLeCompteur(ressource ?? 'or', arrivee, (n - 1) * ecart + 160)
   const [x, y] = centre(source)
-  flotterOr(x, source.top - 16, gain, 1.1 + 1.3 * k)
+  flotterOr(x, source.top - 16, gain, 1.1 + 1.3 * k, false, ressource === undefined ? 'symbole-piece' : `symbole-ressource symbole-${ressource}`)
   impact(x, y, 90 + 260 * k)
   onde(x, y, 50 + 170 * k)
   if (k > 0.45) window.setTimeout(() => onde(x, y, 80 + 240 * k, 'rgba(255, 250, 225, 0.9)'), 110)
@@ -300,28 +305,15 @@ export function effetRessource(depuis: DOMRect, r: string, gain: number): void {
     `piece piece-${r}`,
   )
   retarderLeCompteur(r, arrivee)
-  if (mouvementReduit()) return
-  const el = poser('flottant flottant-or', depuis.left + depuis.width / 2, depuis.top - 16)
-  if (el === null) return
-  nombreOr(el, gain, '', `symbole-ressource symbole-${r}`)
-  const dx = (Math.random() - 0.5) * 40
-  animer(
-    el,
-    [
-      { transform: 'translate(-50%, -50%) scale(0.5)', opacity: 0 },
-      { transform: `translate(calc(-50% + ${dx * 0.3}px), -150%) scale(1.15)`, opacity: 1, offset: 0.18 },
-      { transform: `translate(calc(-50% + ${dx}px), -270%) scale(1)`, opacity: 0 },
-    ],
-    { duration: 750, easing: 'cubic-bezier(.2,.7,.3,1)' },
-  )
+  flotterOr(depuis.left + depuis.width / 2, depuis.top - 16, gain, 1, false, `symbole-ressource symbole-${r}`)
 }
 
 /** Un nombre d'or qui flotte et s'efface, comme `flotter` ; une dépense en rouge, avec son « − ». */
-export function flotterOr(x: number, y: number, n: number, taille = 1, depense = false): void {
+export function flotterOr(x: number, y: number, n: number, taille = 1, depense = false, symbole = 'symbole-piece'): void {
   if (mouvementReduit()) return
   const el = poser(`flottant ${depense ? 'flottant-rouge' : 'flottant-or'}`, x, y)
   if (el === null) return
-  nombreOr(el, n, depense ? '−' : '')
+  nombreOr(el, n, depense ? '−' : '', symbole)
   const dx = (Math.random() - 0.5) * 40
   animer(
     el,

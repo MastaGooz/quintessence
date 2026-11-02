@@ -5,11 +5,14 @@
  * une —, et LE MENU de ce qui s'achète.
  */
 import type { ReactElement, ReactNode } from 'react'
-import { EFFETS_MINE, type IdAmelioration } from '../../logic/clic/donnees.ts'
-import { avanceTape, bilanMine, capaciteReserve, chancePepite, estMine, gainNiveauMine, partTropPlein, prixNiveauMine, valeurPepite, type Joueur } from '../../logic/clic/moteur.ts'
-import { NOM_AMELIORATION, NOM_MINE } from '../../ui/noms-clic.ts'
+import { EFFETS_MINE, EFFETS_PRODUCTEUR, RESSOURCES, type IdAmelioration, type IdAmeliorationProducteur } from '../../logic/clic/donnees.ts'
+import {
+  avanceTape, avanceTapeProducteur, bilanMine, capaciteReserve, chanceCoupDouble, chancePepite, estMine, gainNiveauMine, gainNiveauProducteur, lotProducteur, niveauAP, partTropPlein,
+  partTropPleinProducteur, peutPayerPrix, prixNiveauMine, prixNiveauProducteur, ressourceDe, stockRessource, valeurPepite, vitesseAutoProducteur, type Joueur, type Prix, type Producteur,
+} from '../../logic/clic/moteur.ts'
+import { NOM_AMELIORATION, NOM_AMELIORATION_PRODUCTEUR, nomProducteur } from '../../ui/noms-clic.ts'
 import { Feuille } from '../Feuille.tsx'
-import { SymbolePiece } from './Glyphe.tsx'
+import { SymbolePiece, SymboleRessource } from './Glyphe.tsx'
 import { abregeFin, pourcent } from './texte.ts'
 
 /** Le joueur tel qu'il serait avec un niveau de plus dans cette amélioration. */
@@ -93,22 +96,124 @@ export function effetAmelioration(j: Joueur, id: IdAmelioration): ReactNode {
   }
 }
 
-/**
- * LE MENU DES AMÉLIORATIONS de la mine (Keko, 02/11 : « le bouton amélioration ouvre le menu ; il permet d'augmenter de 1 le niveau
- * de la mine ») : une carte, le niveau suivant, son prix en face, ce qu'il donne — l'automatique d'abord, puis une amélioration au
- * choix parmi trois ; une tape le prend. Éteinte quand l'or manque ; quand une amélioration attend son choix, la carte y mène.
- */
-export function MenuAmeliorations({ j, onMonter, onChoisir, onFermer }: { j: Joueur; onMonter: () => void; onChoisir: () => void; onFermer: () => void }): ReactElement | null {
-  const mine = j.producteurs.find(estMine)
-  if (mine === undefined) return null
-  const prix = prixNiveauMine(mine)
-  const payable = j.or + 1e-9 >= prix
-  // Ce que l'automatique rapportera, une fois là.
-  const parHeure = bilanMine({ ...j, automatisation: 1 }, mine).debit * 3600
+/** Ce que fait un niveau de plus d'une amélioration d'un producteur construit (Keko, 02/11), en une ligne : la valeur d'aujourd'hui, celle d'après. */
+export function effetAmeliorationProducteur(j: Joueur, p: Producteur, id: IdAmeliorationProducteur): ReactNode {
+  const p2: Producteur = { ...p, ameliorations: { ...p.ameliorations, [id]: niveauAP(p, id) + 1 } }
+  const n2 = niveauAP(p2, id)
+  const s = <SymboleRessource ressource={ressourceDe(p)} />
+  const parHeure = (q: Producteur): string => abregeFin(vitesseAutoProducteur(q) * lotProducteur(q) * 3600)
+  switch (id) {
+    case 'outils':
+      return (
+        <>
+          Une tape remplit <Fleche avant={pourcent(avanceTapeProducteur(p))} apres={pourcent(avanceTapeProducteur(p2))} /> de la barre
+        </>
+      )
+    case 'rendement':
+      return (
+        <>
+          Une barre pleine donne <Fleche avant={lotProducteur(p)} apres={lotProducteur(p2)} /> {s}
+        </>
+      )
+    case 'cadence':
+      return (
+        <>
+          L’automatique : <Fleche avant={parHeure(p)} apres={parHeure(p2)} /> {s} par heure
+        </>
+      )
+    case 'entrepot':
+      return (
+        <>
+          Réserve : <Fleche avant={capaciteReserve(j, p)} apres={capaciteReserve(j, p2)} /> {s}
+        </>
+      )
+    case 'coupDouble':
+      return (
+        <>
+          Une tape compte double : <Fleche avant={pourcent(chanceCoupDouble(p))} apres={pourcent(chanceCoupDouble(p2))} /> de chance
+        </>
+      )
+    case 'prime':
+      return (
+        <>
+          Réserve pleine récoltée : <Fleche avant={`+${pourcent(EFFETS_PRODUCTEUR.prime * niveauAP(p, 'prime'))}`} apres={`+${pourcent(EFFETS_PRODUCTEUR.prime * n2)}`} />
+        </>
+      )
+    case 'tropPlein':
+      return (
+        <>
+          Réserve pleine : <Fleche avant={pourcent(partTropPleinProducteur(p))} apres={pourcent(partTropPleinProducteur(p2))} /> de la production arrive quand même
+        </>
+      )
+    case 'elan':
+      return (
+        <>
+          Chaque tape d’une série : +{pourcent(EFFETS_PRODUCTEUR.elanPas * n2)}, jusqu’à <b className="gain">+{pourcent(EFFETS_PRODUCTEUR.elanPlafond * n2)}</b>
+        </>
+      )
+  }
+}
+
+/** Un prix en or et en ressources : chaque part non nulle, son nombre et son symbole. */
+export function PrixVu({ prix }: { prix: Prix }): ReactElement {
   return (
-    <Feuille titre={`${NOM_MINE} · niveau ${mine.niveau}`} onFermer={onFermer}>
+    <span className="prix-vu">
+      {prix.or > 0 && (
+        <span>
+          {prix.or} <SymbolePiece />
+        </span>
+      )}
+      {RESSOURCES.map(
+        (r) =>
+          prix[r] > 0 && (
+            <span key={r}>
+              {prix[r]} <SymboleRessource ressource={r} />
+            </span>
+          ),
+      )}
+    </span>
+  )
+}
+
+/** Ce qui manque pour payer un prix, part par part ; rien quand il est payable. */
+export function Manque({ j, prix }: { j: Joueur; prix: Prix }): ReactElement | null {
+  const parts = [
+    { cle: 'or', n: Math.ceil(prix.or - j.or - 1e-9), symbole: <SymbolePiece /> },
+    ...RESSOURCES.map((r) => ({ cle: r, n: Math.ceil(prix[r] - stockRessource(j, r) - 1e-9), symbole: <SymboleRessource ressource={r} /> })),
+  ].filter((x) => x.n > 0)
+  if (parts.length === 0) return null
+  return (
+    <span className="amelioration-manque">
+      Il manque{' '}
+      {parts.map((x, k) => (
+        <span key={x.cle}>
+          {k > 0 ? ', ' : ''}
+          {x.n} {x.symbole}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+/**
+ * LE MENU DES AMÉLIORATIONS d'un bâtiment — la banque, un producteur construit (Keko, 02/11 : « le bouton amélioration ouvre le menu ;
+ * il permet d'augmenter de 1 le niveau », puis « un bouton level sur les producteurs, comme la banque ») : une carte, le niveau
+ * suivant, son prix en face, ce qu'il donne — l'automatique d'abord, puis une amélioration au choix parmi trois ; une tape le prend.
+ * Éteinte quand le prix manque ; quand une amélioration attend son choix, la carte y mène.
+ */
+export function MenuAmeliorations({ j, p, onMonter, onChoisir, onFermer }: { j: Joueur; p: Producteur; onMonter: () => void; onChoisir: () => void; onFermer: () => void }): ReactElement {
+  const banque = estMine(p)
+  const prix: Prix = banque ? { or: prixNiveauMine(p), bois: 0, pierre: 0 } : prixNiveauProducteur(p)
+  const payable = peutPayerPrix(j, prix)
+  const offre = banque ? j.offre : (p.offre ?? null)
+  const gain = banque ? gainNiveauMine(j) : gainNiveauProducteur(p)
+  // Ce que l'automatique rapportera, une fois là.
+  const parHeure = banque ? bilanMine({ ...j, automatisation: 1 }, p).debit * 3600 : vitesseAutoProducteur({ ...p, niveau: 2 }) * lotProducteur(p) * 3600
+  const symbole = banque ? <SymbolePiece /> : <SymboleRessource ressource={ressourceDe(p)} />
+  return (
+    <Feuille titre={`${nomProducteur(p)} · niveau ${p.niveau}`} onFermer={onFermer}>
       <div className="choix-ameliorations">
-        {j.offre !== null ? (
+        {offre !== null ? (
           <button type="button" className="amelioration-carte" style={{ animationDelay: '120ms' }} onClick={onChoisir}>
             <span className="amelioration-tete">
               <b className="amelioration-nom">Une amélioration vous attend</b>
@@ -118,25 +223,22 @@ export function MenuAmeliorations({ j, onMonter, onChoisir, onFermer }: { j: Jou
         ) : (
           <button type="button" className="amelioration-carte" style={{ animationDelay: '120ms' }} disabled={!payable} onClick={onMonter}>
             <span className="amelioration-tete">
-              <b className="amelioration-nom">Niveau {mine.niveau + 1}</b>
+              <b className="amelioration-nom">Niveau {p.niveau + 1}</b>
               <span className="amelioration-prix">
-                {prix} <SymbolePiece />
+                <PrixVu prix={prix} />
               </span>
             </span>
             <span className="amelioration-effet">
-              {gainNiveauMine(j) === 'automatique' ? (
+              {gain === 'automatique' ? (
                 <>
-                  L’automatique : la barre de la banque se remplit seule, même sans vous — <b className="gain">{abregeFin(parHeure)}</b> <SymbolePiece /> par heure, dans la réserve
+                  L’automatique : {banque ? 'la barre de la banque' : 'sa barre'} se remplit seule, même sans vous — <b className="gain">{abregeFin(parHeure)}</b> {symbole} par heure,{' '}
+                  {banque ? 'dans la réserve' : 'dans sa réserve'}
                 </>
               ) : (
                 <>Une amélioration au choix, parmi trois</>
               )}
             </span>
-            {!payable && (
-              <span className="amelioration-manque">
-                Il manque {Math.ceil(prix - j.or - 1e-9)} <SymbolePiece />
-              </span>
-            )}
+            <Manque j={j} prix={prix} />
           </button>
         )}
       </div>
@@ -144,20 +246,22 @@ export function MenuAmeliorations({ j, onMonter, onChoisir, onFermer }: { j: Jou
   )
 }
 
-/** LE CHOIX d'un niveau de la mine — son effet : les cartes de l'offre, qui arrivent l'une après l'autre ; une tape en prend une. */
-export function ChoixAmelioration({ j, onChoisir, onFermer }: { j: Joueur; onChoisir: (id: IdAmelioration, carte: HTMLElement) => void; onFermer: () => void }): ReactElement | null {
-  if (j.offre === null) return null
-  const niveau = j.producteurs.find(estMine)?.niveau ?? 1
+/** LE CHOIX d'un niveau d'un bâtiment — son effet : les cartes de l'offre, qui arrivent l'une après l'autre ; une tape en prend une. */
+export function ChoixAmelioration({ j, p, onChoisir, onFermer }: { j: Joueur; p: Producteur; onChoisir: (id: string, carte: HTMLElement) => void; onFermer: () => void }): ReactElement | null {
+  const cartes = estMine(p)
+    ? (j.offre ?? []).map((id: IdAmelioration) => ({ id: id as string, nom: NOM_AMELIORATION[id], niveau: j.ameliorations[id], effet: effetAmelioration(j, id) }))
+    : (p.offre ?? []).map((id: IdAmeliorationProducteur) => ({ id: id as string, nom: NOM_AMELIORATION_PRODUCTEUR[id], niveau: niveauAP(p, id), effet: effetAmeliorationProducteur(j, p, id) }))
+  if (cartes.length === 0) return null
   return (
-    <Feuille titre={`Niveau ${niveau} : une amélioration au choix`} onFermer={onFermer}>
+    <Feuille titre={`${nomProducteur(p)}, niveau ${p.niveau} : une amélioration au choix`} onFermer={onFermer}>
       <div className="choix-ameliorations">
-        {j.offre.map((id, k) => (
-          <button key={id} type="button" className="amelioration-carte" style={{ animationDelay: `${120 + k * 110}ms` }} onClick={(e) => onChoisir(id, e.currentTarget)}>
+        {cartes.map((c, k) => (
+          <button key={c.id} type="button" className="amelioration-carte" style={{ animationDelay: `${120 + k * 110}ms` }} onClick={(e) => onChoisir(c.id, e.currentTarget)}>
             <span className="amelioration-tete">
-              <b className="amelioration-nom">{NOM_AMELIORATION[id]}</b>
-              <span className="amelioration-niveau">{j.ameliorations[id] === 0 ? 'nouveau' : `niveau ${j.ameliorations[id] + 1}`}</span>
+              <b className="amelioration-nom">{c.nom}</b>
+              <span className="amelioration-niveau">{c.niveau === 0 ? 'nouveau' : `niveau ${c.niveau + 1}`}</span>
             </span>
-            <span className="amelioration-effet">{effetAmelioration(j, id)}</span>
+            <span className="amelioration-effet">{c.effet}</span>
           </button>
         ))}
       </div>
