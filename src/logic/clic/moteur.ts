@@ -98,6 +98,9 @@ export interface Joueur {
   pepites: number
   /** Les ressources des producteurs construits (absentes des parties d'avant : rien). */
   ressources: Record<Ressource, number>
+  /** Ses ordres à prix perso en attente au marché des ressources, et les derniers exécutés. */
+  ordres?: Ordre[]
+  executes?: OrdreExecute[]
   /** La matière en stock, par sorte (voir `sorteDe`). */
   matiere: number[]
   producteurs: Producteur[]
@@ -135,6 +138,8 @@ export interface Marche {
   historique: number[][]
   /** Le bois et la pierre (voir `MARCHE_RESSOURCES`) ; absents d'une partie d'avant : au repos. */
   ressources?: Partial<Record<Ressource, CoteRessource>>
+  /** Les tirages des marchands (voir `MARCHE_RESSOURCES.agitation`). */
+  tirages?: number
 }
 
 /** La cote d'une ressource au marché : son volume net vendu récemment, sa demande, et son prix heure par heure. */
@@ -142,6 +147,38 @@ export interface CoteRessource {
   volume: number
   demande: number
   historique: number[]
+  /** Le prix en bougies (voir `MARCHE_RESSOURCES.bougie`), la dernière en dernier. */
+  bougies?: Bougie[]
+}
+
+/** Une bougie : le rang de sa période, et le prix à son ouverture, au plus haut, au plus bas, à sa clôture. */
+export interface Bougie {
+  t: number
+  o: number
+  h: number
+  l: number
+  c: number
+}
+
+/** UN ORDRE À PRIX PERSO, en attente : il s'exécute quand le prix du marché atteint le sien. `bloque` : l'or mis de côté pour un achat. */
+export interface Ordre {
+  id: number
+  sens: 'achat' | 'vente'
+  ressource: Ressource
+  quantite: number
+  prix: number
+  bloque: number
+}
+
+/** Un ordre exécuté : ce qui s'est échangé, à quel prix, quand. */
+export interface OrdreExecute {
+  id: number
+  sens: 'achat' | 'vente'
+  ressource: Ressource
+  quantite: number
+  prix: number
+  montant: number
+  t: number
 }
 
 export interface Monde {
@@ -1334,7 +1371,15 @@ export function acheterRessource(m: Monde, j: Joueur, r: Ressource, q: number): 
   const c = coteEcrite(m, r)
   c.volume -= q
   bornerRessource(c)
+  noterBougie(m, r)
   return prix
+}
+
+/** Ce qu'on peut acheter d'une ressource avec `or`, au prix du marché. */
+export function quantiteAchetableRessource(m: Monde, r: Ressource, or: number): number {
+  if (or <= 0) return 0
+  const c = cote(m, r)
+  return Math.floor(c.demande * Math.log1p(or / (MARCHE_RESSOURCES.prix[r] * c.demande * Math.exp(-c.volume / c.demande))) + 1e-9)
 }
 
 /** VENDRE `q` d'une ressource au marché (pas plus qu'on n'en a) : le prix baisse. Rend l'or gagné. */
@@ -1347,20 +1392,121 @@ export function vendreRessource(m: Monde, j: Joueur, r: Ressource, q: number): n
   const c = coteEcrite(m, r)
   c.volume += quantite
   bornerRessource(c)
+  noterBougie(m, r)
   return gain
 }
 
-/** Le marché des ressources respire : le volume fond, la demande suit la production, le prix s'inscrit à chaque heure pleine. */
+/** Les bougies d'une ressource, la dernière en dernier. */
+export function bougiesRessource(m: Monde, r: Ressource): Bougie[] {
+  return cote(m, r).bougies ?? []
+}
+
+/** Le prix inscrit dans la bougie de la période en cours ; une nouvelle période ouvre une bougie au dernier prix. */
+function noterBougie(m: Monde, r: Ressource): void {
+  const c = coteEcrite(m, r)
+  const p = prixRessource(m, r)
+  const t = Math.floor(m.t / MARCHE_RESSOURCES.bougie + 1e-9)
+  const bougies = c.bougies ?? []
+  c.bougies = bougies
+  const derniere = bougies[bougies.length - 1]
+  if (derniere !== undefined && derniere.t === t) {
+    derniere.h = Math.max(derniere.h, p)
+    derniere.l = Math.min(derniere.l, p)
+    derniere.c = p
+    return
+  }
+  const o = derniere?.c ?? p
+  bougies.push({ t, o, h: Math.max(o, p), l: Math.min(o, p), c: p })
+  if (bougies.length > MARCHE_RESSOURCES.bougies) bougies.shift()
+}
+
+/** Un tirage des marchands, de loi normale, de la graine du monde et de leur compte de tirages. */
+function tirageMarchands(m: Monde): number {
+  const n = (m.marche.tirages ?? 0) + 1
+  m.marche.tirages = n
+  const alea = rngDe(graineDe(m.graine, 9001, n))
+  const u = Math.max(1e-12, alea())
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * alea())
+}
+
+// LES ORDRES À PRIX PERSO (Keko, 02/11 : « un prix perso, auquel cas l'ordre se lance quand le prix demandé trouve un acheteur »)
+
+/** POSER UN ORDRE : acheter au plus, ou vendre au moins, à `prix` l'unité. L'or (arrondi au-dessus) ou la ressource est mis de côté. Rend l'ordre, ou null. */
+export function placerOrdre(m: Monde, j: Joueur, sens: 'achat' | 'vente', r: Ressource, quantite: number, prix: number): Ordre | null {
+  const q = Math.floor(quantite + 1e-9)
+  const p = Math.round(prix * 100) / 100
+  if (!marcheOuvert(j) || q <= 0 || !(p > 0)) return null
+  let bloque = 0
+  if (sens === 'achat') {
+    bloque = Math.ceil(p * q - 1e-9)
+    if (j.or + 1e-9 < bloque) return null
+    j.or -= bloque
+  } else {
+    if (stockRessource(j, r) + 1e-9 < q) return null
+    gagnerRessource(j, r, -q)
+  }
+  const ordre: Ordre = { id: j.prochainId++, sens, ressource: r, quantite: q, prix: p, bloque }
+  j.ordres = [...(j.ordres ?? []), ordre]
+  executerOrdres(m, j)
+  return ordre
+}
+
+/** ANNULER un ordre en attente : ce qui était mis de côté revient. */
+export function annulerOrdre(j: Joueur, id: number): boolean {
+  const o = (j.ordres ?? []).find((x) => x.id === id)
+  if (o === undefined) return false
+  if (o.sens === 'achat') j.or += o.bloque
+  else gagnerRessource(j, o.ressource, o.quantite)
+  j.ordres = (j.ordres ?? []).filter((x) => x.id !== id)
+  return true
+}
+
+/** Les ordres que le prix a atteints s'exécutent, au prix du marché (jamais moins bon que le leur) ; l'échange pousse le prix. */
+function executerOrdres(m: Monde, j: Joueur): void {
+  if ((j.ordres ?? []).length === 0) return
+  const restants: Ordre[] = []
+  for (const o of j.ordres ?? []) {
+    const p = prixRessource(m, o.ressource)
+    const achat = o.sens === 'achat' && p <= o.prix + 1e-9
+    const vente = o.sens === 'vente' && p >= o.prix - 1e-9
+    if (!achat && !vente) {
+      restants.push(o)
+      continue
+    }
+    const c = coteEcrite(m, o.ressource)
+    let montant: number
+    if (achat) {
+      montant = Math.min(o.bloque, Math.round(p * o.quantite))
+      j.or += o.bloque - montant
+      gagnerRessource(j, o.ressource, o.quantite)
+      c.volume -= o.quantite
+    } else {
+      montant = Math.round(p * o.quantite)
+      j.or += montant
+      c.volume += o.quantite
+    }
+    bornerRessource(c)
+    noterBougie(m, o.ressource)
+    j.executes = [...(j.executes ?? []), { id: j.prochainId++, sens: o.sens, ressource: o.ressource, quantite: o.quantite, prix: montant / o.quantite, montant, t: m.t }].slice(-10)
+  }
+  j.ordres = restants
+}
+
+/** Le marché des ressources respire : le volume fond, les marchands le secouent, la demande suit la production ; le prix s'inscrit dans sa bougie ; les ordres atteints s'exécutent. */
 function respirerRessources(m: Monde, dt: number, heurePleine: boolean): void {
   for (const r of RESSOURCES) {
     const c = coteEcrite(m, r)
     c.volume *= Math.pow(0.5, dt / MARCHE.demiVie)
+    c.volume += MARCHE_RESSOURCES.agitation * c.demande * Math.sqrt(dt) * tirageMarchands(m)
+    bornerRessource(c)
     c.demande += (demandeViseeRessource(m, r) - c.demande) * (1 - Math.pow(0.5, dt / MARCHE.inertie))
+    noterBougie(m, r)
     if (heurePleine) {
       c.historique.push(prixRessource(m, r))
       if (c.historique.length > 24 * 8) c.historique.shift()
     }
   }
+  for (const j of m.joueurs) executerOrdres(m, j)
 }
 
 /** Tire l'offre d'un niveau de producteur : `OFFRE_NIVEAU` améliorations sous leur maximum, au hasard du joueur. */

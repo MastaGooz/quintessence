@@ -296,9 +296,28 @@ export const QUETE_CONSTRUCTION = QUETES.findIndex((q) => q.objectif === 'constr
  * en `MARCHE.tampon` heures, au moins `demandeMin`. Vendre fait baisser le
  * prix, acheter le fait monter ; un gros lot d'un coup se paie plus cher (ou
  * se vend moins cher) que le même étalé. Les montants se règlent en pièces
- * entières. Par `lots`. Chiffres de moi.
+ * entières.
+ *
+ * IL VIT (Keko, 02/11 : « une chart autre qu'une ligne, comme si le marché
+ * était vraiment vivant ») : des MARCHANDS, hors des joueurs, achètent et
+ * vendent sans cesse — le volume reçoit à chaque instant un choc tiré au
+ * hasard de la graine, d'écart-type `agitation` × D × √(heures) ; avec la
+ * fonte du volume, le prix erre autour du plein (±10 % d'ordinaire), sans
+ * jamais s'enfuir. Il s'inscrit en BOUGIES de `bougie` heure (ouverture,
+ * haut, bas, clôture), les `bougies` dernières gardées. Les ORDRES À PRIX
+ * PERSO attendent que le prix les atteigne (« l'ordre se lance quand le prix
+ * demandé trouve un acheteur ») : leur or ou leur ressource est mis de côté
+ * à la pose, rendu à l'annulation. `lots` : les quantités proposées d'un
+ * doigt. Chiffres de moi.
  */
-export const MARCHE_RESSOURCES: { prix: Record<Ressource, number>; demandeMin: number; lots: readonly number[] } = { prix: { bois: 2, pierre: 2 }, demandeMin: 200, lots: [1, 5, 20] }
+export const MARCHE_RESSOURCES: {
+  prix: Record<Ressource, number>
+  demandeMin: number
+  lots: readonly number[]
+  agitation: number
+  bougie: number
+  bougies: number
+} = { prix: { bois: 2, pierre: 2 }, demandeMin: 200, lots: [1, 5, 20], agitation: 0.08, bougie: 1 / 12, bougies: 96 }
 
 /** Combien d'améliorations offre un niveau de la banque. */
 export const OFFRE_NIVEAU = 3

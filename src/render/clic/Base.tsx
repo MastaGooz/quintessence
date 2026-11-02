@@ -22,7 +22,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactElement, typ
 import { CONSTRUCTION, COULEURS, EFFETS_MINE, FAMILLES, FORMES, MELANGE, MODULE, PIECE, PRIMAIRES, PRODUCTEURS, TAPES_MAX_PAR_S, aDuBleu, couleurDe, sorteDe, type IdAmelioration, type IdAmeliorationProducteur, type Quete, type Ressource, RESSOURCES } from '../../logic/clic/donnees.ts'
 import {
   DIRECTIONS, acheter, ameliorationsOuvertes, ameliorer, automatiqueProducteur, choisirAmeliorationProducteur, construire, constructionOuverte, estConstruit, gainNiveauProducteur,
-  acheterRessource, lotProducteur, marcheOuvert, monterLeProducteur, premierConstruit, vendreRessource, niveauAP, peutMonterLeProducteur, prixConstruction, prixNiveauProducteur, ressourceDe, gainNiveauMine, monterLaMine, peutMonterLaMine, prixNiveauMine, ameliorerSource, bilan, choisirAmelioration, perdrePepite, ramasserPepite, bilanProducteur, boiteModule, branches, brancher, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, debitTotal,
+  acheterRessource, annulerOrdre, lotProducteur, marcheOuvert, monterLeProducteur, placerOrdre, premierConstruit, vendreRessource, niveauAP, peutMonterLeProducteur, prixConstruction, prixNiveauProducteur, ressourceDe, gainNiveauMine, monterLaMine, peutMonterLaMine, prixNiveauMine, ameliorerSource, bilan, choisirAmelioration, perdrePepite, ramasserPepite, bilanProducteur, boiteModule, branches, brancher, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, debitTotal,
   capaciteReserve, debrancher, mineArretee, declencher, deplacerProducteur, disponible, disposition, effetsDe, entrees, estFixe, estMine, estSource, etendue, force, fusibles, genreDe, lotDeBase, meilleurePrise, moduleDe,
   modulesDe, multiplicateurPrestige, peutAmeliorer, peutAmeliorerSource, peutFabriquer, peutPayer, placeSurProducteur, pointsSi, prisesPour, producteurDe, producteurTient, progresQuete,
   objectifQuete, queteAccomplie, queteEnCours, reclamerQuete, recolter, regler, reservePleine, sortesFormees,
@@ -32,7 +32,7 @@ import { joueur } from '../../logic/clic/partie.ts'
 import { abrege, parSeconde, possede } from '../../ui/format.ts'
 import { vibrer } from '../../ui/haptique.ts'
 import {
-  EXPLICATION_TRAIT, LE_RESSOURCE, LETTRE_PRODUCTEUR, NOM_AMELIORATION, NOM_AMELIORATION_PRODUCTEUR, NOM_COULEUR, NOM_MATIERE, NOM_MINE, NOM_OR, NOM_RECOMPENSE, NOM_RARETE, NOM_SOUTE, NOM_TRAIT, NOMS_FORMES, explicationModule, nomProducteur, nomSorte, nomSortePluriel,
+  EXPLICATION_TRAIT, LE_RESSOURCE, LETTRE_PRODUCTEUR, NOM_RESSOURCE, NOM_AMELIORATION, NOM_AMELIORATION_PRODUCTEUR, NOM_COULEUR, NOM_MATIERE, NOM_MINE, NOM_OR, NOM_RECOMPENSE, NOM_RARETE, NOM_SOUTE, NOM_TRAIT, NOMS_FORMES, explicationModule, nomProducteur, nomSorte, nomSortePluriel,
 } from '../../ui/noms-clic.ts'
 import { sonBarre, sonBatir, sonEtape, sonReserve, sonTape } from '../../ui/sons.ts'
 import { Compteur } from '../Compteur.tsx'
@@ -623,6 +623,29 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     window.setTimeout(() => effetRessource(rect, r, q), 260)
   }
 
+  /** POSER UN ORDRE à prix perso : l'or d'un achat part vers le bouton, mis de côté ; l'ordre attend son prix (son exécution se voit plus bas). */
+  const placerOrdreIci = (sens: 'achat' | 'vente', r: Ressource, q: number, prix: number, bouton: HTMLElement): void => {
+    const fait: { bloque: number; ok: boolean } = { bloque: 0, ok: false }
+    agir(() => {
+      const o = placerOrdre(m, j, sens, r, q, prix)
+      fait.ok = o !== null
+      fait.bloque = o?.bloque ?? 0
+    })
+    if (!fait.ok) return
+    const rect = bouton.getBoundingClientRect()
+    if (fait.bloque > 0) effetDepense(rect, fait.bloque)
+    vibrer([10, 20])
+    flotter(rect.left + rect.width / 2, rect.top - 8, 'Ordre posé', 'flottant-or', 1)
+  }
+
+  /** ANNULER un ordre : ce qui était mis de côté revient. */
+  const annulerOrdreIci = (id: number): void => {
+    agir(() => {
+      annulerOrdre(j, id)
+    })
+    vibrer(8)
+  }
+
   /** VENDRE une ressource au marché : ses pièces volent du bouton au compteur d'or, qui ne bouge qu'à leur arrivée. */
   const vendreRessourceIci = (r: Ressource, q: number, bouton: HTMLElement): void => {
     const fait = { gain: 0 }
@@ -951,6 +974,26 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
   // L'AUTOMATIQUE A FINI LA BARRE : sa pièce vole de la barre à la réserve (seul l'automatique remplit la réserve : la tape paie la bourse), qui
   // pompe et tinte à l'arrivée, plus fort quand elle devient pleine. Le retard du compteur de la réserve se pose PENDANT le rendu, avant
   // que ce compteur (un enfant) ne voie sa nouvelle valeur.
+  // UN ORDRE EXÉCUTÉ (en jeu ou pendant l'absence) : il se fête au bouton du marché — l'or d'une vente vole à la bourse, la ressource d'un achat à son compteur.
+  const executesVus = useRef<number | null>(null)
+  const dernierExecute = (j.executes ?? []).reduce((a, e) => Math.max(a, e.id), 0)
+  useEffect(() => {
+    if (executesVus.current === null || dernierExecute <= executesVus.current) {
+      executesVus.current = Math.max(executesVus.current ?? 0, dernierExecute)
+      return
+    }
+    const vus = executesVus.current
+    executesVus.current = dernierExecute
+    const bouton = document.querySelector('.bouton-marche')?.getBoundingClientRect()
+    if (bouton === undefined) return
+    sonEtape()
+    for (const e of (j.executes ?? []).filter((x) => x.id > vus)) {
+      if (e.sens === 'vente') effetVente(bouton, e.montant)
+      else effetRessource(bouton, e.ressource, e.quantite)
+      flotter(bouton.left + bouton.width / 2, bouton.top - 12, `Ordre exécuté : ${e.sens === 'vente' ? '−' : '+'}${e.quantite} ${NOM_RESSOURCE[e.ressource]}`, 'flottant-or', 1.1)
+    }
+  })
+
   // Chaque bâtiment à réserve — la banque, les producteurs construits — a la sienne, et son compteur sa clé (`reserve-<id>`).
   const reservesVues = useRef(new Map<number, number>())
   const aVerser = useRef(new Map<number, number>())
@@ -1371,7 +1414,9 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
       {/* LE MENU DE CONSTRUCTION, qu'ouvre son bouton. */}
       {menuConstruction && <MenuConstruction j={j} onConstruire={construireIci} onFermer={() => setMenuConstruction(false)} />}
       {/* LE MARCHÉ DES RESSOURCES, qu'ouvre son bouton. */}
-      {menuMarche && <MenuMarche m={m} j={j} onAcheter={acheterRessourceIci} onVendre={vendreRessourceIci} onFermer={() => setMenuMarche(false)} />}
+      {menuMarche && (
+        <MenuMarche m={m} j={j} onAcheter={acheterRessourceIci} onVendre={vendreRessourceIci} onPlacer={placerOrdreIci} onAnnuler={annulerOrdreIci} onFermer={() => setMenuMarche(false)} />
+      )}
       {/* LE MENU DES AMÉLIORATIONS, qu'ouvre le bouton en haut à droite. */}
       {menuVu !== undefined && (
         <MenuAmeliorations
