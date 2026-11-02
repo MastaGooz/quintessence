@@ -32,7 +32,7 @@
  */
 import {
   ACHAT, CASE, COULEURS, EFFETS, EMPLACEMENTS, FABRICATION, FAMILLES, FORMES, FUSION, MARCHE, MELANGE, MODULE, NIVEAU, NIVEAU_SOURCE, PIECE, PRESTIGE, PRIMAIRES, PRODUCTEUR,
-  PRIX_AUTOMATIQUE, PRODUCTEURS, QUETE_CHOIX, RARETES, RESERVE_MINE, SORTES, AMELIORATIONS, EFFETS_MINE, IDS_AMELIORATIONS, TRAITS, TYPE_MINE, VALEUR_MODULE, aDuBleu, couleurDe, formeDe, partsDe, sorteDe,
+  NIVEAU_MINE, PRODUCTEURS, QUETE_CHOIX, RARETES, RESERVE_MINE, SORTES, AMELIORATIONS, EFFETS_MINE, IDS_AMELIORATIONS, TRAITS, TYPE_MINE, VALEUR_MODULE, aDuBleu, couleurDe, formeDe, partsDe, sorteDe,
   type Cout, type Genre, type IdAmelioration, type Qualite, type Quete, type Trait, type TypeProducteur,
 } from './donnees.ts'
 import { graineDe, rngDe } from '../rng.ts'
@@ -48,7 +48,7 @@ export interface Producteur {
   couleur: number
   /** Raffinerie : la forme qu'elle fait (1 à 3). Source, mélangeur : 0. */
   forme: number
-  /** Source : son niveau, qui multiplie son lot de base. */
+  /** Source : son niveau, qui multiplie son lot de base. Mine : son niveau, qui ouvre ses améliorations (voir `NIVEAU_MINE`). */
   niveau: number
   /** Mine : les pièces ENTIÈRES qui attendent d'être récoltées (voir `RESERVE_MINE`). */
   reserve: number
@@ -83,7 +83,7 @@ export interface Joueur {
   /** La quête en cours (son rang), et l'or extrait quand elle a commencé. */
   quete: number
   queteDepuis: number
-  /** L'automatique de la mine (0 ou 1), acheté dans le menu des améliorations que la première quête ouvre : il remplit la barre, et la réserve. */
+  /** L'automatique de la mine (0 ou 1), que donne son premier niveau gagné : il remplit la barre, et la réserve. */
   automatisation: number
   /** Le niveau de chaque amélioration de la mine (voir `AMELIORATIONS`). */
   ameliorations: Record<IdAmelioration, number>
@@ -536,7 +536,8 @@ export function bilan(lot0: number, mods: readonly ModuleAgissant[], prestige: n
 
 /** Le lot de base d'un générateur : celui de son type, fois le niveau d'une source ou de la mine. */
 export function lotDeBase(p: Producteur): number {
-  return typeDe(p).lot * (estSource(p) || estMine(p) ? p.niveau : 1)
+  // Le niveau de la mine ne multiplie pas son or : il ouvre ses améliorations.
+  return typeDe(p).lot * (estSource(p) ? p.niveau : 1)
 }
 
 /** Le bilan d'un générateur tel qu'il est équipé ; la mine, par ses améliorations. */
@@ -1038,16 +1039,28 @@ export function ameliorationsOuvertes(j: Joueur): boolean {
   return j.quete >= 1
 }
 
-/** L'automatique est dans le menu des améliorations : ouvert, pas encore acheté. */
-export function automatiqueEnVente(j: Joueur): boolean {
-  return ameliorationsOuvertes(j) && j.automatisation === 0
+/** Le prix du niveau suivant de la mine. */
+export function prixNiveauMine(p: Producteur): number {
+  return Math.round(NIVEAU_MINE.premier * Math.pow(NIVEAU_MINE.croissance, p.niveau - 1))
 }
 
-/** ACHETER L'AUTOMATIQUE dans le menu des améliorations, `PRIX_AUTOMATIQUE` or. Rend vrai s'il est acheté. */
-export function acheterAutomatique(j: Joueur): boolean {
-  if (!automatiqueEnVente(j) || j.or + 1e-9 < PRIX_AUTOMATIQUE) return false
-  j.or -= PRIX_AUTOMATIQUE
-  j.automatisation = 1
+/** Ce que donne le niveau suivant de la mine : l'automatique d'abord, puis une amélioration au choix. */
+export function gainNiveauMine(j: Joueur): 'automatique' | 'choix' {
+  return j.automatisation === 0 ? 'automatique' : 'choix'
+}
+
+/** La mine peut monter d'un niveau : le menu est ouvert, aucune amélioration n'attend son choix, l'or suffit. */
+export function peutMonterLaMine(j: Joueur, p: Producteur): boolean {
+  return estMine(p) && ameliorationsOuvertes(j) && j.offre === null && j.or + 1e-9 >= prixNiveauMine(p)
+}
+
+/** MONTER LA MINE D'UN NIVEAU (voir `NIVEAU_MINE`) : le premier niveau gagné donne l'automatique, les suivants tirent l'offre de trois améliorations. Rend vrai si elle est montée. */
+export function monterLaMine(m: Monde, j: Joueur, p: Producteur): boolean {
+  if (!peutMonterLaMine(j, p)) return false
+  j.or -= prixNiveauMine(p)
+  if (gainNiveauMine(j) === 'automatique') j.automatisation = 1
+  else j.offre = tirerOffre(m, j)
+  p.niveau += 1
   return true
 }
 

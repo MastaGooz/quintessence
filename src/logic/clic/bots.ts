@@ -15,7 +15,7 @@ import { FABRICATION, PRIMAIRES, PRODUCTEURS, PRESTIGE, SORTES, couleurDe, forme
 import {
   acheter, acheterProducteur, ameliorer, ameliorerSource, besoins, brancherAuMieux, completerAuMarche, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, declencher, disponible,
   entrees, esperanceEffet, estMine, estSource, fabriquerModule, fondre, force, fusibles, genreDe, manquePour, meilleureSource, modulesDe, multiplicateurPrestige, peutFabriquer, peutPayer, pointsSi,
-  prestiger, acheterAutomatique, choisirAmelioration, queteAccomplie, reclamerQuete, recolter,
+  prestiger, monterLaMine, choisirAmelioration, queteAccomplie, reclamerQuete, recolter,
   prisesLibres, production, regler, sortePourPayer, sortie, sortesFormees, soute, typeDe, valeurCout, valeurDe, vendre, venteRaisonnable, visibleProducteur, visibleQualite,
   type Joueur, type Monde, type Producteur,
 } from './moteur.ts'
@@ -350,8 +350,9 @@ export function visiter(m: Monde, j: Joueur, s: Strategie): void {
     if (reclamerQuete(m, j) === null) break
     if (j.offre !== null) choisirAmelioration(j, j.offre[0]!)
   }
-  // L'AUTOMATIQUE, acheté dès que le bouton est là et que l'or suffit.
-  acheterAutomatique(j)
+  // LA MINE monte de niveau tant que l'or suffit ; la première amélioration de chaque offre est choisie.
+  const mine = j.producteurs.find(estMine)
+  for (let n = 0; n < 20 && mine !== undefined && monterLaMine(m, j, mine); n++) if (j.offre !== null) choisirAmelioration(j, j.offre[0]!)
   recolterSiPermis()
   // LES TRANSFORMATEURS : réglés sur ce qui manque, puis la matière convertie à la main.
   let voulues = sortesVoulues(m, j)

@@ -203,10 +203,8 @@ export const MINE: TypeProducteur = { id: 'mine', genre: 'mine', cout: { forme: 
  * LES QUÊTES : GAGNER de l'or, une à la fois, sans fin ; l'or compte depuis
  * le début de la quête ; remplie, une quête se RÉCLAME d'une tape. La
  * première demande `bouton` or (à la tape : il n'y a encore rien d'autre) et
- * fait apparaître LE BOUTON DES AMÉLIORATIONS, dont le menu vend
- * l'automatique `PRIX_AUTOMATIQUE` or (Keko, 02/11 : « un bouton générique
- * d'upgrade en haut à droite, qui ouvre le menu upgrade ; on l'utilisera
- * ensuite à la place des quêtes »). Les suivantes demandent `premier × croissance^k` or et donnent le
+ * fait apparaître LE BOUTON DES AMÉLIORATIONS de la mine, dont le menu fait
+ * monter son niveau (voir `NIVEAU_MINE`). Les suivantes demandent `premier × croissance^k` or et donnent le
  * CHOIX d'une amélioration parmi `offre` tirées au hasard (Keko : « X or pour
  * obtenir une amélioration au choix »). Chiffres de moi, validés par Keko.
  */
@@ -219,8 +217,15 @@ export interface Quete {
 }
 export const QUETE_CHOIX = { bouton: 10, premier: 20, croissance: 2, offre: 3 }
 
-/** Le prix de l'automatique, dans le menu des améliorations. */
-export const PRIX_AUTOMATIQUE = 10
+/**
+ * LE NIVEAU DE LA MINE (Keko, 02/11 : « le bouton amélioration ouvre le menu
+ * d'amélioration ; il permet d'augmenter de 1 le niveau de la mine ; à chaque
+ * niveau le prix pour level up augmente ; le premier niveau donne accès
+ * uniquement à l'amélioration auto, puis les autres proposent 3 au choix ») :
+ * passer du niveau n au suivant coûte `premier × croissance^(n−1)` or —
+ * 10, 20, 40… Chiffres de moi, à rejuger.
+ */
+export const NIVEAU_MINE = { premier: 10, croissance: 2 }
 
 /**
  * LES AMÉLIORATIONS DE LA MINE, la liste de Keko (02/11). Chacune se prend

@@ -5,9 +5,9 @@
  * une —, et LE MENU de ce qui s'achète.
  */
 import type { ReactElement, ReactNode } from 'react'
-import { EFFETS_MINE, PRIX_AUTOMATIQUE, type IdAmelioration } from '../../logic/clic/donnees.ts'
-import { automatiqueEnVente, avanceTape, bilanMine, capaciteReserve, chancePepite, estMine, partTropPlein, valeurPepite, type Joueur } from '../../logic/clic/moteur.ts'
-import { NOM_AMELIORATION } from '../../ui/noms-clic.ts'
+import { EFFETS_MINE, type IdAmelioration } from '../../logic/clic/donnees.ts'
+import { avanceTape, bilanMine, capaciteReserve, chancePepite, estMine, gainNiveauMine, partTropPlein, prixNiveauMine, valeurPepite, type Joueur } from '../../logic/clic/moteur.ts'
+import { NOM_AMELIORATION, NOM_MINE } from '../../ui/noms-clic.ts'
 import { Feuille } from '../Feuille.tsx'
 import { SymbolePiece } from './Glyphe.tsx'
 import { abregeFin, pourcent } from './texte.ts'
@@ -94,37 +94,50 @@ export function effetAmelioration(j: Joueur, id: IdAmelioration): ReactNode {
 }
 
 /**
- * LE MENU DES AMÉLIORATIONS (Keko, 02/11 : « un bouton générique d'upgrade en haut à droite, qui ouvre le menu upgrade qu'on a déjà ;
- * on l'utilisera ensuite à la place des quêtes ») : ce qui s'achète, une carte chacun, comme celles du choix ; une tape achète. Pour
- * l'instant, l'automatique.
+ * LE MENU DES AMÉLIORATIONS de la mine (Keko, 02/11 : « le bouton amélioration ouvre le menu ; il permet d'augmenter de 1 le niveau
+ * de la mine ») : une carte, le niveau suivant, son prix en face, ce qu'il donne — l'automatique d'abord, puis une amélioration au
+ * choix parmi trois ; une tape le prend. Éteinte quand l'or manque ; quand une amélioration attend son choix, la carte y mène.
  */
-export function MenuAmeliorations({ j, onAcheterAutomatique, onFermer }: { j: Joueur; onAcheterAutomatique: () => void; onFermer: () => void }): ReactElement {
+export function MenuAmeliorations({ j, onMonter, onChoisir, onFermer }: { j: Joueur; onMonter: () => void; onChoisir: () => void; onFermer: () => void }): ReactElement | null {
   const mine = j.producteurs.find(estMine)
-  const payable = j.or + 1e-9 >= PRIX_AUTOMATIQUE
-  // Ce que l'automatique rapportera, une fois acheté.
-  const parHeure = mine === undefined ? 0 : bilanMine({ ...j, automatisation: 1 }, mine).debit * 3600
+  if (mine === undefined) return null
+  const prix = prixNiveauMine(mine)
+  const payable = j.or + 1e-9 >= prix
+  // Ce que l'automatique rapportera, une fois là.
+  const parHeure = bilanMine({ ...j, automatisation: 1 }, mine).debit * 3600
   return (
-    <Feuille titre="Améliorations" onFermer={onFermer}>
+    <Feuille titre={`${NOM_MINE} · niveau ${mine.niveau}`} onFermer={onFermer}>
       <div className="choix-ameliorations">
-        {automatiqueEnVente(j) ? (
-          <button type="button" className="amelioration-carte" style={{ animationDelay: '120ms' }} disabled={!payable} onClick={onAcheterAutomatique}>
+        {j.offre !== null ? (
+          <button type="button" className="amelioration-carte" style={{ animationDelay: '120ms' }} onClick={onChoisir}>
             <span className="amelioration-tete">
-              <b className="amelioration-nom">Automatique</b>
+              <b className="amelioration-nom">Une amélioration vous attend</b>
+            </span>
+            <span className="amelioration-effet">Choisissez-la avant de monter au niveau suivant.</span>
+          </button>
+        ) : (
+          <button type="button" className="amelioration-carte" style={{ animationDelay: '120ms' }} disabled={!payable} onClick={onMonter}>
+            <span className="amelioration-tete">
+              <b className="amelioration-nom">Niveau {mine.niveau + 1}</b>
               <span className="amelioration-prix">
-                {PRIX_AUTOMATIQUE} <SymbolePiece />
+                {prix} <SymbolePiece />
               </span>
             </span>
             <span className="amelioration-effet">
-              La barre de la mine se remplit seule, même sans vous : <b className="gain">{abregeFin(parHeure)}</b> <SymbolePiece /> par heure, dans la réserve
+              {gainNiveauMine(j) === 'automatique' ? (
+                <>
+                  L’automatique : la barre de la mine se remplit seule, même sans vous — <b className="gain">{abregeFin(parHeure)}</b> <SymbolePiece /> par heure, dans la réserve
+                </>
+              ) : (
+                <>Une amélioration au choix, parmi trois</>
+              )}
             </span>
             {!payable && (
               <span className="amelioration-manque">
-                Il manque {Math.ceil(PRIX_AUTOMATIQUE - j.or - 1e-9)} <SymbolePiece />
+                Il manque {Math.ceil(prix - j.or - 1e-9)} <SymbolePiece />
               </span>
             )}
           </button>
-        ) : (
-          <p className="sourd">Rien à acheter pour l’instant.</p>
         )}
       </div>
     </Feuille>

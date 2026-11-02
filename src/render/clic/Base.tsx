@@ -19,9 +19,9 @@
  * (la seconde qui passe) : il lit `traine` pour laisser la pièce sous le doigt.
  */
 import { useEffect, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from 'react'
-import { COULEURS, EFFETS_MINE, FAMILLES, FORMES, MELANGE, MODULE, PIECE, PRIMAIRES, PRIX_AUTOMATIQUE, PRODUCTEURS, TAPES_MAX_PAR_S, aDuBleu, couleurDe, sorteDe, type IdAmelioration, type Quete } from '../../logic/clic/donnees.ts'
+import { COULEURS, EFFETS_MINE, FAMILLES, FORMES, MELANGE, MODULE, PIECE, PRIMAIRES, PRODUCTEURS, TAPES_MAX_PAR_S, aDuBleu, couleurDe, sorteDe, type IdAmelioration, type Quete } from '../../logic/clic/donnees.ts'
 import {
-  DIRECTIONS, acheter, acheterAutomatique, ameliorationsOuvertes, ameliorer, automatiqueEnVente, ameliorerSource, bilan, choisirAmelioration, perdrePepite, ramasserPepite, bilanProducteur, boiteModule, branches, brancher, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, debitTotal,
+  DIRECTIONS, acheter, ameliorationsOuvertes, ameliorer, gainNiveauMine, monterLaMine, peutMonterLaMine, prixNiveauMine, ameliorerSource, bilan, choisirAmelioration, perdrePepite, ramasserPepite, bilanProducteur, boiteModule, branches, brancher, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, debitTotal,
   capaciteReserve, debrancher, mineArretee, declencher, deplacerProducteur, disponible, disposition, effetsDe, entrees, estFixe, estMine, estSource, etendue, force, fusibles, genreDe, lotDeBase, meilleurePrise, moduleDe,
   modulesDe, multiplicateurPrestige, peutAmeliorer, peutAmeliorerSource, peutFabriquer, peutPayer, placeSurProducteur, pointsSi, prisesPour, producteurDe, producteurTient, progresQuete,
   objectifQuete, queteAccomplie, queteEnCours, reclamerQuete, recolter, regler, reservePleine, sortesFormees,
@@ -568,26 +568,42 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
   }
 
   /**
-   * ACHETER L'AUTOMATIQUE dans le menu des améliorations (Keko, 02/11) : le menu se ferme, la réserve naît dans le carré de la mine, et
-   * les pièces du prix partent du compteur vers elle.
+   * MONTER LA MINE D'UN NIVEAU depuis son menu (Keko, 02/11) : le menu se ferme, les pièces du prix partent du compteur vers la mine,
+   * « Niveau N ! » éclate dessus. Le premier niveau : la réserve naît, l'automatique est en marche. Les suivants : le choix de trois
+   * améliorations s'ouvre, le temps de voir l'éclat.
    */
-  const acheterAutomatiqueIci = (): void => {
+  const monterLaMineIci = (): void => {
+    const mine = j.producteurs.find(estMine)
+    if (mine === undefined) return
+    const prix = prixNiveauMine(mine)
+    const gain = gainNiveauMine(j)
     const fait = { ok: false }
     agir(() => {
-      fait.ok = acheterAutomatique(j)
+      fait.ok = monterLaMine(m, j, mine)
     })
     if (!fait.ok) return
     setMenuOuvert(false)
     sonBatir()
     vibrer([20, 30, 60])
-    const mine = j.producteurs.find(estMine)
-    faireNaitre(
-      () => (mine === undefined ? undefined : producteursEl.current.get(mine.id)?.querySelector<HTMLElement>('.reserve')),
-      (r) => {
-        effetDepense(r, PRIX_AUTOMATIQUE)
-        flotter(r.left + r.width / 2, r.top - 6, 'L’automatique est en marche !', 'flottant-or', 1.2)
-      },
-    )
+    const el = producteursEl.current.get(mine.id)
+    const bouton = el?.querySelector<HTMLElement>('.mine-ameliorer')
+    if (bouton !== null && bouton !== undefined) {
+      const r = bouton.getBoundingClientRect()
+      effetDepense(r, prix)
+      eclater(r.left + r.width / 2, r.top + r.height / 2, 26)
+      onde(r.left + r.width / 2, r.top + r.height / 2, r.width)
+      if (!mouvementReduit()) el?.animate(ECRASER, { duration: 220, easing: 'ease-out' })
+    }
+    const nom = el?.querySelector('.mine-nom')?.getBoundingClientRect()
+    if (nom !== undefined) flotter(nom.left + nom.width / 2, nom.top - 10, `Niveau ${mine.niveau} !`, 'flottant-or', 1.5)
+    if (gain === 'automatique') {
+      faireNaitre(
+        () => el?.querySelector<HTMLElement>('.reserve'),
+        (r) => flotter(r.left + r.width / 2, r.top - 6, 'L’automatique est en marche !', 'flottant-or', 1.2),
+      )
+      return
+    }
+    window.setTimeout(() => setChoixOuvert(true), 650)
   }
 
   /** Une pépite quitte l'écran (tapée ou perdue) : son minuteur s'arrête. */
@@ -912,10 +928,10 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
       </>
     )
   else if (rien && mine !== undefined && mineArretee(j, mine)) indice = 'La réserve est pleine : tapez-la pour récolter ses pièces.'
-  else if (rien && automatiqueEnVente(j))
+  else if (rien && mine !== undefined && ameliorationsOuvertes(j) && j.automatisation === 0)
     indice = (
       <>
-        Touchez la flèche de la mine : l’automatique remplit sa barre même sans vous, pour {PRIX_AUTOMATIQUE} <SymbolePiece />.
+        Touchez la flèche de la mine : au niveau 2, pour {prixNiveauMine(mine)} <SymbolePiece />, l’automatique remplit sa barre même sans vous.
       </>
     )
   else if (rien && mine !== undefined && j.journal.recoltes === 0 && mine.reserve >= 1) indice = 'L’automatique remplit la réserve, même en votre absence : tapez-la pour récolter.'
@@ -1224,7 +1240,17 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
       {/* LE CHOIX d'une amélioration, qu'ouvre une quête. */}
       {choixOuvert && j.offre !== null && <ChoixAmelioration j={j} onChoisir={choisirIci} onFermer={() => setChoixOuvert(false)} />}
       {/* LE MENU DES AMÉLIORATIONS, qu'ouvre le bouton en haut à droite. */}
-      {menuOuvert && <MenuAmeliorations j={j} onAcheterAutomatique={acheterAutomatiqueIci} onFermer={() => setMenuOuvert(false)} />}
+      {menuOuvert && (
+        <MenuAmeliorations
+          j={j}
+          onMonter={monterLaMineIci}
+          onChoisir={() => {
+            setMenuOuvert(false)
+            setChoixOuvert(true)
+          }}
+          onFermer={() => setMenuOuvert(false)}
+        />
+      )}
       {souteOuverte && (
         <Soute
           partie={partie}
@@ -1386,11 +1412,11 @@ function Reserve({ j, p }: { j: Joueur; p: Producteur }): ReactElement {
 
 /**
  * LE BOUTON DES AMÉLIORATIONS, en haut à droite de la mine (Keko, 02/11 : « un bouton générique d'upgrade en haut à droite de la
- * mine, qui ouvre le menu upgrade qu'on a déjà ») : doré et battant quand quelque chose s'achète. Il se tape à part de la mine
- * (`data-ameliorer`).
+ * mine, qui ouvre le menu upgrade qu'on a déjà ») : doré et battant quand la mine peut monter d'un niveau. Il se tape à part de la
+ * mine (`data-ameliorer`) et ouvre son menu.
  */
 function BoutonAmeliorer({ j, p }: { j: Joueur; p: Producteur }): ReactElement {
-  const pret = automatiqueEnVente(j) && j.or + 1e-9 >= PRIX_AUTOMATIQUE
+  const pret = peutMonterLaMine(j, p)
   return (
     <span className={`mine-ameliorer${pret ? ' mine-ameliorer-pret' : ''}`} data-cliquable data-ameliorer data-id={p.id} role="button" aria-label="Améliorations">
       <svg viewBox="0 0 24 24" aria-hidden>
