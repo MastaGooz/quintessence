@@ -19,10 +19,10 @@
  * (la seconde qui passe) : il lit `traine` pour laisser la pièce sous le doigt.
  */
 import { useEffect, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from 'react'
-import { CONSTRUCTION, COULEURS, EFFETS_MINE, FAMILLES, FORMES, MELANGE, MODULE, PIECE, PRIMAIRES, PRODUCTEURS, TAPES_MAX_PAR_S, aDuBleu, couleurDe, sorteDe, type IdAmelioration, type IdAmeliorationProducteur, type Quete } from '../../logic/clic/donnees.ts'
+import { CONSTRUCTION, COULEURS, EFFETS_MINE, FAMILLES, FORMES, MELANGE, MODULE, PIECE, PRIMAIRES, PRODUCTEURS, TAPES_MAX_PAR_S, aDuBleu, couleurDe, sorteDe, type IdAmelioration, type IdAmeliorationProducteur, type Quete, type Ressource, RESSOURCES } from '../../logic/clic/donnees.ts'
 import {
   DIRECTIONS, acheter, ameliorationsOuvertes, ameliorer, automatiqueProducteur, choisirAmeliorationProducteur, construire, constructionOuverte, estConstruit, gainNiveauProducteur,
-  lotProducteur, monterLeProducteur, niveauAP, peutMonterLeProducteur, prixConstruction, prixNiveauProducteur, ressourceDe, gainNiveauMine, monterLaMine, peutMonterLaMine, prixNiveauMine, ameliorerSource, bilan, choisirAmelioration, perdrePepite, ramasserPepite, bilanProducteur, boiteModule, branches, brancher, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, debitTotal,
+  acheterRessource, lotProducteur, marcheOuvert, monterLeProducteur, premierConstruit, prixAchatRessource, niveauAP, peutMonterLeProducteur, prixConstruction, prixNiveauProducteur, ressourceDe, gainNiveauMine, monterLaMine, peutMonterLaMine, prixNiveauMine, ameliorerSource, bilan, choisirAmelioration, perdrePepite, ramasserPepite, bilanProducteur, boiteModule, branches, brancher, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, debitTotal,
   capaciteReserve, debrancher, mineArretee, declencher, deplacerProducteur, disponible, disposition, effetsDe, entrees, estFixe, estMine, estSource, etendue, force, fusibles, genreDe, lotDeBase, meilleurePrise, moduleDe,
   modulesDe, multiplicateurPrestige, peutAmeliorer, peutAmeliorerSource, peutFabriquer, peutPayer, placeSurProducteur, pointsSi, prisesPour, producteurDe, producteurTient, progresQuete,
   objectifQuete, queteAccomplie, queteEnCours, reclamerQuete, recolter, regler, reservePleine, sortesFormees,
@@ -32,7 +32,7 @@ import { joueur } from '../../logic/clic/partie.ts'
 import { abrege, parSeconde, possede } from '../../ui/format.ts'
 import { vibrer } from '../../ui/haptique.ts'
 import {
-  EXPLICATION_TRAIT, LETTRE_PRODUCTEUR, NOM_AMELIORATION, NOM_AMELIORATION_PRODUCTEUR, NOM_COULEUR, NOM_MATIERE, NOM_MINE, NOM_OR, NOM_RECOMPENSE, NOM_RARETE, NOM_SOUTE, NOM_TRAIT, NOMS_FORMES, explicationModule, nomProducteur, nomSorte, nomSortePluriel,
+  EXPLICATION_TRAIT, LE_RESSOURCE, LETTRE_PRODUCTEUR, NOM_AMELIORATION, NOM_AMELIORATION_PRODUCTEUR, NOM_COULEUR, NOM_MATIERE, NOM_MINE, NOM_OR, NOM_RECOMPENSE, NOM_RARETE, NOM_SOUTE, NOM_TRAIT, NOMS_FORMES, explicationModule, nomProducteur, nomSorte, nomSortePluriel,
 } from '../../ui/noms-clic.ts'
 import { sonBarre, sonBatir, sonEtape, sonReserve, sonTape } from '../../ui/sons.ts'
 import { Compteur } from '../Compteur.tsx'
@@ -41,6 +41,7 @@ import { DUREE_VOL, SERIE_MS, eclater, effetDepense, effetRecolte, effetRessourc
 import { Feuille } from '../Feuille.tsx'
 import { ChoixAmelioration, MenuAmeliorations } from './Ameliorations.tsx'
 import { MenuConstruction } from './Construction.tsx'
+import { MenuMarche } from './MarcheRessources.tsx'
 import { ImageDuType } from './Pictos.tsx'
 import { BoutonCout, Boutique, COULEURS_RARETE } from './Boutique.tsx'
 import { Choix } from './Choix.tsx'
@@ -141,6 +142,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
   const [choixDe, setChoixDe] = useState<number | null>(null)
   const [menuDe, setMenuDe] = useState<number | null>(null)
   const [menuConstruction, setMenuConstruction] = useState(false)
+  const [menuMarche, setMenuMarche] = useState(false)
   /** LES PÉPITES tombées, à l'écran : où chacune est posée, d'où elle a jailli. Le moteur sait combien il y en a (`j.pepites`). */
   const [pepitesVues, setPepitesVues] = useState<PepiteVue[]>([])
   const pepitesRef = useRef<PepiteVue[]>([])
@@ -584,6 +586,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     const queteAvant = j.quete
     const carteAvant = objectifEl.current?.getBoundingClientRect()
     const prix = prixConstruction(j)
+    const marcheAvant = marcheOuvert(j)
     const fait: { p: Producteur | null } = { p: null }
     agir(() => {
       fait.p = construire(j, type)
@@ -603,6 +606,22 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
       60 + DUREE_GLISSE,
     )
     feterLaQuete(queteAvant, carteAvant)
+    // LE MARCHÉ naît avec le premier producteur.
+    if (!marcheAvant && marcheOuvert(j)) faireNaitre(() => document.querySelector<HTMLElement>('.bouton-marche'), undefined, 420)
+  }
+
+  /** ACHETER une ressource au marché : les pièces partent du compteur d'or vers le bouton, la ressource vole du bouton à son compteur. */
+  const acheterRessourceIci = (r: Ressource, q: number, bouton: HTMLElement): void => {
+    const prix = prixAchatRessource(r, q)
+    const fait = { ok: false }
+    agir(() => {
+      fait.ok = acheterRessource(j, r, q)
+    })
+    if (!fait.ok) return
+    const rect = bouton.getBoundingClientRect()
+    effetDepense(rect, prix)
+    vibrer([10, 20])
+    window.setTimeout(() => effetRessource(rect, r, q), 260)
   }
 
   /** Ce qui apparaît (le bouton des améliorations, la réserve) naît et éclate, une fois peint ; `puis` le suit, depuis sa place. */
@@ -1303,6 +1322,19 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
                 Construire
               </button>
             )}
+            {/* LE BOUTON DU MARCHÉ (Keko, 02/11), là dès le premier producteur. */}
+            {marcheOuvert(j) && (
+              <button
+                type="button"
+                className="bouton-marche"
+                onClick={() => {
+                  setBulle(null)
+                  setMenuMarche(true)
+                }}
+              >
+                Marché
+              </button>
+            )}
             <button type="button" onClick={() => carte.current?.centrer()}>
               Centrer
             </button>
@@ -1329,6 +1361,8 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
       {choixVu !== undefined && <ChoixAmelioration j={j} p={choixVu} onChoisir={(id, carte) => choisirIci(choixVu, id, carte)} onFermer={() => setChoixDe(null)} />}
       {/* LE MENU DE CONSTRUCTION, qu'ouvre son bouton. */}
       {menuConstruction && <MenuConstruction j={j} onConstruire={construireIci} onFermer={() => setMenuConstruction(false)} />}
+      {/* LE MARCHÉ DES RESSOURCES, qu'ouvre son bouton. */}
+      {menuMarche && <MenuMarche j={j} onAcheter={acheterRessourceIci} onFermer={() => setMenuMarche(false)} />}
       {/* LE MENU DES AMÉLIORATIONS, qu'ouvre le bouton en haut à droite. */}
       {menuVu !== undefined && (
         <MenuAmeliorations
@@ -1384,6 +1418,9 @@ function Objectif({ j, refCarte, onReclamer }: { j: Joueur; refCarte: React.RefO
     const fait = progresQuete(j)
     const but = Math.max(1, objectifQuete(j))
     const accomplie = queteAccomplie(j)
+    // La quête du premier producteur : lui, et la ressource qu'il faut acheter.
+    const premier = premierConstruit(j)
+    const manquante = ressourceManquante(j)
     return (
       <div key={`quete-${q.id}`} ref={refCarte} className={`objectif${accomplie ? ' objectif-accompli' : ''}`}>
         <span className="objectif-titre">Quête</span>
@@ -1392,6 +1429,10 @@ function Objectif({ j, refCarte, onReclamer }: { j: Joueur; refCarte: React.RefO
             <>Améliorer la banque au niveau {q.but}</>
           ) : q.objectif === 'construction' ? (
             <>Construisez un producteur</>
+          ) : q.objectif === 'niveauProducteur' ? (
+            <>
+              Passer la {premier === undefined ? 'production' : nomProducteur(premier).toLowerCase()} au niveau {q.but}
+            </>
           ) : (
             <>
               Gagner {q.but} <SymbolePiece />
@@ -1408,6 +1449,8 @@ function Objectif({ j, refCarte, onReclamer }: { j: Joueur; refCarte: React.RefO
           <span className="petit sourd">
             {q.objectif === 'construction' ? (
               <>une scierie ou une mine, dans « Construire »</>
+            ) : q.objectif === 'niveauProducteur' ? (
+              <>{manquante === null ? '' : `${LE_RESSOURCE[manquante]} qui manque s’achète au « Marché »`}</>
             ) : q.objectif === 'niveau' ? (
               <>
                 niveau {fait} / {but}
@@ -1515,6 +1558,11 @@ function BoutonAmeliorer({ j, p }: { j: Joueur; p: Producteur }): ReactElement {
       </svg>
     </span>
   )
+}
+
+/** La ressource qu'aucun producteur construit ne fait : celle qu'il faut acheter au marché. */
+function ressourceManquante(j: Joueur): Ressource | null {
+  return RESSOURCES.find((r) => !j.producteurs.some((p) => estConstruit(p) && ressourceDe(p) === r)) ?? null
 }
 
 /** LE NIVEAU D'UN BÂTIMENT, en pastille dans le coin haut gauche de son carré (Keko, 02/11 : « indiquer visuellement le niveau des bâtiments »). */

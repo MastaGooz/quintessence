@@ -2191,6 +2191,37 @@ span.rarete-4,
   color: var(--rouge);
 }
 
+/* LE MARCHÉ DES RESSOURCES : une carte par ressource, ses trois achats dessous. */
+.marche-ressource {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.8rem 1rem;
+  border-radius: 0.9rem;
+  background: linear-gradient(160deg, #3b2a4c, #2a1d38);
+  border: 2px solid rgba(255, 198, 31, 0.55);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+.marche-tete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.3rem 0.8rem;
+}
+
+.marche-achats {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.marche-achats button {
+  flex: 1;
+  min-height: 3rem;
+  white-space: nowrap;
+}
+
 /* LE MENU DE CONSTRUCTION : le pictogramme du producteur à gauche de sa carte. */
 .amelioration-carte.construction-carte {
   flex-direction: row;

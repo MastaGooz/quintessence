@@ -7,7 +7,7 @@
  */
 import { useEffect, useReducer, useRef, useState, type ReactElement } from 'react'
 import { RESSOURCES, SAISON_H } from '../../logic/clic/donnees.ts'
-import { debitOr, estConstruit, estMine, ressourceDe, stockRessource } from '../../logic/clic/moteur.ts'
+import { debitOr, estConstruit, estMine, marcheOuvert, ressourceDe, stockRessource } from '../../logic/clic/moteur.ts'
 import { classement, finie, joueur, nouvellePartie, rattraper, type Partie } from '../../logic/clic/partie.ts'
 import { ecrireSauvegardeClic, effacerSauvegardeClic, lireSauvegardeClic } from '../../ui/stockage-clic.ts'
 import { abrege, duree, horloge, parSeconde, possede } from '../../ui/format.ts'
@@ -135,7 +135,8 @@ function Table({ partie, reelAuDepart, onRecommencer }: { partie: Partie; reelAu
   // La banque et les producteurs construits n'ouvrent rien : seul le système des couleurs, quand il reviendra.
   const ouvert = stock >= 10 || j.modules.length > 0 || j.points > 0 || j.producteurs.some((p) => !estMine(p) && !estConstruit(p))
   // LES RESSOURCES, à côté de l'or, dès qu'un producteur en fait.
-  const ressourcesVues = RESSOURCES.filter((r) => j.producteurs.some((p) => estConstruit(p) && ressourceDe(p) === r) || stockRessource(j, r) > 0)
+  // Dès que le marché ouvre, toutes : la ressource qui manque s'y achète.
+  const ressourcesVues = RESSOURCES.filter((r) => marcheOuvert(j) || j.producteurs.some((p) => estConstruit(p) && ressourceDe(p) === r) || stockRessource(j, r) > 0)
   const pageVue = ouvert ? page : 'base'
   // La carte remplit le corps : la page ne défile pas, c'est le plan qui glisse.
   const surLaCarte = !finie(partie) && pageVue === 'base'

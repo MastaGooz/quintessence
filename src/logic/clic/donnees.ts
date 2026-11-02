@@ -271,7 +271,7 @@ export type Recompense = 'bouton' | 'aucune'
 export interface Quete {
   id: string
   /** Ce qu'elle demande : de l'or à gagner depuis son début, un niveau de la banque, ou des producteurs construits. */
-  objectif: 'or' | 'niveau' | 'construction'
+  objectif: 'or' | 'niveau' | 'construction' | 'niveauProducteur'
   but: number
   recompense: Recompense
 }
@@ -280,9 +280,20 @@ export const QUETES: readonly Quete[] = [
   { id: 'niveau-2', objectif: 'niveau', but: 2, recompense: 'aucune' },
   { id: 'niveau-3', objectif: 'niveau', but: 3, recompense: 'aucune' },
   { id: 'construire', objectif: 'construction', but: 1, recompense: 'aucune' },
+  // Keko, 02/11 : « dès qu'on a construit la scierie ou la mine, on donne la quête : passer le truc au niveau 2 » — le premier producteur construit.
+  { id: 'producteur-2', objectif: 'niveauProducteur', but: 2, recompense: 'aucune' },
 ]
 /** Le rang de la quête qui ouvre la construction. */
 export const QUETE_CONSTRUCTION = QUETES.findIndex((q) => q.objectif === 'construction')
+/**
+ * LE MARCHÉ DES RESSOURCES (Keko, 02/11 : « dès qu'on a construit la scierie
+ * ou la mine, on ouvre le marché pour que le joueur achète la ressource
+ * manquante ») : le bois et la pierre s'y achètent en or, à prix fixe, par
+ * `lots`. Chiffres de moi : une ressource vaut deux pièces (la tape en fait
+ * autant de l'une que de l'autre ; acheter coûte le double de produire).
+ */
+export const MARCHE_RESSOURCES: { prix: Record<Ressource, number>; lots: readonly number[] } = { prix: { bois: 2, pierre: 2 }, lots: [1, 5, 20] }
+
 /** Combien d'améliorations offre un niveau de la banque. */
 export const OFFRE_NIVEAU = 3
 

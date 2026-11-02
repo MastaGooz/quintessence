@@ -32,7 +32,7 @@
  */
 import {
   ACHAT, CASE, COULEURS, EFFETS, EMPLACEMENTS, FABRICATION, FAMILLES, FORMES, FUSION, MARCHE, MELANGE, MODULE, NIVEAU, NIVEAU_SOURCE, PIECE, PRESTIGE, PRIMAIRES, PRODUCTEUR,
-  CONSTRUCTION, EFFETS_PRODUCTEUR, IDS_AMELIORATIONS_PRODUCTEUR, MAX_AMELIORATION_PRODUCTEUR, NIVEAU_MINE, NIVEAU_PRODUCTEUR, OFFRE_NIVEAU, PRODUCTEURS, QUETE_CONSTRUCTION, QUETES, RARETES, RESERVE_MINE, RESSOURCES, SORTES, AMELIORATIONS, EFFETS_MINE, IDS_AMELIORATIONS, TRAITS, TYPE_MINE, VALEUR_MODULE,
+  CONSTRUCTION, EFFETS_PRODUCTEUR, MARCHE_RESSOURCES, IDS_AMELIORATIONS_PRODUCTEUR, MAX_AMELIORATION_PRODUCTEUR, NIVEAU_MINE, NIVEAU_PRODUCTEUR, OFFRE_NIVEAU, PRODUCTEURS, QUETE_CONSTRUCTION, QUETES, RARETES, RESERVE_MINE, RESSOURCES, SORTES, AMELIORATIONS, EFFETS_MINE, IDS_AMELIORATIONS, TRAITS, TYPE_MINE, VALEUR_MODULE,
   aDuBleu, couleurDe, formeDe, partsDe, sorteDe,
   type Cout, type Genre, type IdAmelioration, type IdAmeliorationProducteur, type Qualite, type Quete, type Ressource, type Trait, type TypeProducteur,
 } from './donnees.ts'
@@ -1064,7 +1064,13 @@ export function progresQuete(j: Joueur): number {
   const q = queteEnCours(j)
   if (q === null) return 0
   const fait =
-    q.objectif === 'niveau' ? (j.producteurs.find(estMine)?.niveau ?? 1) : q.objectif === 'construction' ? j.producteurs.filter(estConstruit).length : j.orProduit - j.queteDepuis
+    q.objectif === 'niveau'
+      ? (j.producteurs.find(estMine)?.niveau ?? 1)
+      : q.objectif === 'construction'
+        ? j.producteurs.filter(estConstruit).length
+        : q.objectif === 'niveauProducteur'
+          ? (premierConstruit(j)?.niveau ?? 1)
+          : j.orProduit - j.queteDepuis
   return Math.min(q.but, Math.max(0, fait))
 }
 
@@ -1239,6 +1245,33 @@ export function monterLeProducteur(m: Monde, j: Joueur, p: Producteur): boolean 
   payerPrix(j, prixNiveauProducteur(p))
   if (gainNiveauProducteur(p) === 'choix') p.offre = tirerOffreProducteur(m, j, p)
   p.niveau += 1
+  avancerLesQuetes(j)
+  return true
+}
+
+/** Le premier producteur construit : celui que la quête « passer au niveau 2 » fait monter. */
+export function premierConstruit(j: Joueur): Producteur | undefined {
+  return j.producteurs.find(estConstruit)
+}
+
+// ---------------------------------------------------------------------------
+// LE MARCHÉ DES RESSOURCES (voir `MARCHE_RESSOURCES`)
+
+/** Le marché est ouvert : un producteur est construit. */
+export function marcheOuvert(j: Joueur): boolean {
+  return j.producteurs.some(estConstruit)
+}
+
+export function prixAchatRessource(r: Ressource, q: number): number {
+  return MARCHE_RESSOURCES.prix[r] * q
+}
+
+/** ACHETER `q` d'une ressource au marché, en or. Rend vrai si c'est acheté. */
+export function acheterRessource(j: Joueur, r: Ressource, q: number): boolean {
+  const prix = prixAchatRessource(r, q)
+  if (!marcheOuvert(j) || q <= 0 || j.or + 1e-9 < prix) return false
+  j.or -= prix
+  gagnerRessource(j, r, q)
   return true
 }
 

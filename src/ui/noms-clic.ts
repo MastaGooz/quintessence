@@ -56,6 +56,7 @@ export const NOM_MINE = 'Banque'
 /** Les ressources des producteurs construits, et de quoi les annoncer. */
 export const NOM_RESSOURCE: Record<Ressource, string> = { bois: 'bois', pierre: 'pierre' }
 export const DU_RESSOURCE: Record<Ressource, string> = { bois: 'Du bois', pierre: 'De la pierre' }
+export const LE_RESSOURCE: Record<Ressource, string> = { bois: 'le bois', pierre: 'la pierre' }
 /** Ce qu'une quête débloque, tel qu'on l'annonce sur sa carte. */
 export const NOM_RECOMPENSE: Record<Recompense, string> = { bouton: 'le menu des améliorations', aucune: '' }
 /** Les améliorations de la mine (Keko, 02/11). */
