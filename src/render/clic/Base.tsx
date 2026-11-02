@@ -24,7 +24,7 @@ import {
   DIRECTIONS, acheter, ameliorer, ameliorerSource, bilan, choisirAmelioration, perdrePepite, ramasserPepite, bilanProducteur, boiteModule, branches, brancher, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, debitTotal,
   capaciteReserve, debrancher, mineArretee, vitesseAuto, declencher, deplacerProducteur, disponible, disposition, effetsDe, entrees, estFixe, estMine, estSource, etendue, force, fusibles, genreDe, lotDeBase, meilleurePrise, moduleDe,
   modulesDe, multiplicateurPrestige, peutAmeliorer, peutAmeliorerSource, peutFabriquer, peutPayer, placeSurProducteur, pointsSi, prisesPour, producteurDe, producteurTient, progresQuete,
-  queteAccomplie, queteEnCours, reclamerQuete, recolter, regler, reservePleine, sortesFormees,
+  objectifQuete, queteAccomplie, queteEnCours, reclamerQuete, recolter, regler, reservePleine, sortesFormees,
   sortie, soute, surLesCases, tailleDe, typeDe, visibleProducteur, type Coup, type Joueur, type Module, type Monde, type Place, type Prise, type Producteur,
 } from '../../logic/clic/moteur.ts'
 import { joueur } from '../../logic/clic/partie.ts'
@@ -742,6 +742,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
   const boutiqueVisible = PRODUCTEURS.some((_, i) => visibleProducteur(j, i)) || fabricable || j.modules.length > 0 || j.points > 0 || pointsSi(j) >= 1
   const aSources = j.producteurs.some(estSource)
   const mine = j.producteurs.find(estMine)
+  const quete = queteEnCours(j)
 
   // UN INDICE à la fois : le premier geste, puis ce qui bloque.
   let indice: ReactNode = null
@@ -751,8 +752,10 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
         Tapez la mine pour remplir sa barre : 1 <SymbolePiece /> par barre pleine.
       </>
     )
-  else if (rien && mine !== undefined && j.journal.recoltes === 0 && mine.reserve >= 1) indice = 'Chaque barre pleine met sa pièce dans la réserve : tapez-la pour les récolter.'
-  else if (rien && mine !== undefined && mineArretee(j, mine)) indice = 'La réserve est pleine : tapez-la, la mine s’est arrêtée.'
+  else if (rien && mine !== undefined && quete?.genre === 'reserve' && mine.reserve >= 1 && !reservePleine(j, mine)) indice = 'Chaque barre pleine met sa pièce dans la réserve.'
+  else if (rien && quete?.genre === 'reserve') indice = null
+  else if (rien && mine !== undefined && mineArretee(j, mine)) indice = 'La réserve est pleine : tapez-la pour récolter ses pièces.'
+  else if (rien && mine !== undefined && j.journal.recoltes === 0 && mine.reserve >= 1) indice = 'Tapez la réserve pour récolter ses pièces.'
   else if (rien) indice = null
   else if (aSources && raffineries.length === 0 && !peutPayer(j, coutR1)) indice = `Une raffinerie coûte ${coutR1.quantite} ronds d’une couleur : tapez vos sources.`
   else if (aSources && raffineries.length === 0) indice = 'Achetez une raffinerie dans la boutique : elle donne une forme à vos ronds.'
@@ -1121,19 +1124,26 @@ function Objectif({
   const q = queteEnCours(j)
   if (q !== null) {
     const fait = progresQuete(j)
+    const but = Math.max(1, objectifQuete(j))
     const accomplie = queteAccomplie(j)
     return (
       <div key={`quete-${q.id}`} ref={refCarte} className={`objectif${accomplie ? ' objectif-accompli' : ''}`}>
         <span className="objectif-titre">Quête</span>
         <span className="objectif-texte">
-          Gagner {q.or} <SymbolePiece />
+          {q.genre === 'reserve' ? (
+            'Remplir la réserve'
+          ) : (
+            <>
+              Gagner {q.or} <SymbolePiece />
+            </>
+          )}
         </span>
         <span className="objectif-jauge">
-          <span style={{ width: `${(100 * fait) / q.or}%` }} />
+          <span style={{ width: `${(100 * fait) / but}%` }} />
         </span>
         <span className="objectif-ligne">
           <span className="petit sourd">
-            {possede(fait)} / {q.or} · récompense : {NOM_RECOMPENSE[q.recompense]}
+            {possede(fait)} / {but} <SymbolePiece /> · récompense : {NOM_RECOMPENSE[q.recompense]}
           </span>
           {accomplie && (
             <button type="button" className="bouton-principal respire" onClick={onReclamer}>
@@ -1159,7 +1169,6 @@ function Reserve({ j, p }: { j: Joueur; p: Producteur }): ReactElement {
     <span className={`reserve${pleine ? ' reserve-pleine' : ''}`} data-cliquable data-reserve data-id={p.id} aria-label="Récolter la réserve">
       <span className="reserve-jauge" style={{ width: `${(100 * Math.min(capacite, p.reserve)) / capacite}%` }} />
       <span className="reserve-texte">
-        <span className="reserve-nom">Réserve</span>
         <Compteur valeur={p.reserve} cle="reserve" format={possede} duree={200} /> / {capacite} <SymbolePiece />
       </span>
     </span>

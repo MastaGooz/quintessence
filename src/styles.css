@@ -1215,15 +1215,6 @@ select {
   transition: width 0.3s ease-out 0.5s;
 }
 
-/* Le nom de la réserve, devant son compte : on sait où vont les pièces de la barre. */
-.producteur .reserve-nom {
-  margin-right: 12px;
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  opacity: 0.8;
-}
 
 .producteur .reserve-texte {
   position: relative;

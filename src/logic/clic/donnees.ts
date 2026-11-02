@@ -200,18 +200,20 @@ export const FABRICATION = {
 export const MINE: TypeProducteur = { id: 'mine', genre: 'mine', cout: { forme: 0, couleur: null, quantite: 0 }, lot: 1, creux: [_, _, _, _, _, _, _, _], taille: { largeur: 450, hauteur: 450 } }
 
 /**
- * LES QUÊTES (Keko, 02/11 : « commencer avec une quête : gagner X or » ;
- * « X or pour obtenir une amélioration au choix »). Une à la fois, sans fin :
- * l'or compte depuis le début de la quête ; remplie, elle se RÉCLAME d'une
+ * LES QUÊTES (Keko, 02/11 : « X or pour obtenir une amélioration au choix » ;
+ * « la première quête devrait être : remplir la réserve »). Une à la fois,
+ * sans fin : d'abord REMPLIR LA RÉSERVE de la mine, puis GAGNER de l'or (il
+ * compte depuis le début de la quête) ; remplie, une quête se RÉCLAME d'une
  * tape, et sa récompense est le CHOIX d'une amélioration parmi `offre` tirées
- * au hasard. La k-ième demande `premier × croissance^k` or. L'automatisation
- * que débloquait la première quête est partie : la mine est automatique de
- * base (Keko, 02/11). Chiffres de moi, à rejuger.
+ * au hasard. La k-ième quête d'or demande `premier × croissance^k` or.
+ * Chiffres de moi, à rejuger.
  */
 export type Recompense = 'choix'
 export interface Quete {
   id: string
-  /** L'or à gagner depuis le début de la quête. */
+  /** Remplir la réserve de la mine, ou gagner de l'or. */
+  genre: 'reserve' | 'or'
+  /** Une quête d'or : l'or à gagner depuis son début. */
   or: number
   recompense: Recompense
 }

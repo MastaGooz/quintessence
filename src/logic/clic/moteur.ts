@@ -977,20 +977,38 @@ export function ameliorerSource(j: Joueur, p: Producteur): boolean {
 // ---------------------------------------------------------------------------
 // LES QUÊTES ET CE QU'ELLES DÉBLOQUENT
 
-/** La quête en cours : les quêtes de choix, sans fin, l'objectif doublant. */
+/** La quête en cours : remplir la réserve d'abord, puis les quêtes d'or, sans fin, l'objectif doublant. */
 export function queteEnCours(j: Joueur): Quete | null {
-  return { id: `choix-${j.quete + 1}`, or: Math.round(QUETE_CHOIX.premier * Math.pow(QUETE_CHOIX.croissance, j.quete)), recompense: 'choix' }
+  if (j.quete === 0) return { id: 'remplir-reserve', genre: 'reserve', or: 0, recompense: 'choix' }
+  const k = j.quete - 1
+  return { id: `or-${k + 1}`, genre: 'or', or: Math.round(QUETE_CHOIX.premier * Math.pow(QUETE_CHOIX.croissance, k)), recompense: 'choix' }
 }
 
-/** L'or gagné pour la quête en cours, borné à son objectif. */
+/** Ce que la quête en cours demande : la capacité de la réserve, ou l'or à gagner. */
+export function objectifQuete(j: Joueur): number {
+  const q = queteEnCours(j)
+  if (q === null) return 0
+  if (q.genre === 'or') return q.or
+  const mine = j.producteurs.find(estMine)
+  return mine === undefined ? 0 : capaciteReserve(j, mine)
+}
+
+/** Où en est la quête en cours, bornée à son objectif : l'or de la réserve, ou l'or gagné depuis son début. */
 export function progresQuete(j: Joueur): number {
   const q = queteEnCours(j)
-  return q === null ? 0 : Math.min(q.or, Math.max(0, j.orProduit - j.queteDepuis))
+  if (q === null) return 0
+  const fait = q.genre === 'reserve' ? (j.producteurs.find(estMine)?.reserve ?? 0) : j.orProduit - j.queteDepuis
+  return Math.min(objectifQuete(j), Math.max(0, fait))
 }
 
 export function queteAccomplie(j: Joueur): boolean {
   const q = queteEnCours(j)
-  return q !== null && j.orProduit - j.queteDepuis + 1e-9 >= q.or
+  if (q === null) return false
+  if (q.genre === 'reserve') {
+    const mine = j.producteurs.find(estMine)
+    return mine !== undefined && reservePleine(j, mine)
+  }
+  return j.orProduit - j.queteDepuis + 1e-9 >= q.or
 }
 
 /**

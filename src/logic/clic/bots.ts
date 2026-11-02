@@ -15,7 +15,7 @@ import { FABRICATION, PRIMAIRES, PRODUCTEURS, PRESTIGE, SORTES, couleurDe, forme
 import {
   acheter, acheterProducteur, ameliorer, ameliorerSource, besoins, brancherAuMieux, completerAuMarche, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, declencher, disponible,
   entrees, esperanceEffet, estMine, estSource, fabriquerModule, fondre, force, fusibles, genreDe, manquePour, meilleureSource, modulesDe, multiplicateurPrestige, peutFabriquer, peutPayer, pointsSi,
-  prestiger, choisirAmelioration, queteAccomplie, reclamerQuete, recolter,
+  prestiger, choisirAmelioration, queteAccomplie, queteEnCours, reclamerQuete, recolter,
   prisesLibres, production, regler, sortePourPayer, sortie, sortesFormees, soute, typeDe, valeurCout, valeurDe, vendre, venteRaisonnable, visibleProducteur, visibleQualite,
   type Joueur, type Monde, type Producteur,
 } from './moteur.ts'
@@ -336,8 +336,12 @@ export function visiter(m: Monde, j: Joueur, s: Strategie): void {
     const apres = 1 + PRESTIGE.parPoint * (j.points + gain)
     if (apres / multiplicateurPrestige(j) >= s.seuilPrestige) prestiger(j)
   }
-  // LA RÉSERVE de chaque mine, récoltée en passant.
-  for (const p of j.producteurs) if (estMine(p)) recolter(j, p)
+  // LA RÉSERVE de chaque mine, récoltée en passant — sauf tant que la quête est de la remplir.
+  const recolterSiPermis = (): void => {
+    if (queteEnCours(j)?.genre === 'reserve') return
+    for (const p of j.producteurs) if (estMine(p)) recolter(j, p)
+  }
+  recolterSiPermis()
   const source = sourceATaper(m, j, s)
   // Les tapes d'une visite font une série : l'élan joue.
   for (let k = 0; k < s.tapes; k++) declencher(m, j, source, undefined, k)
@@ -346,6 +350,7 @@ export function visiter(m: Monde, j: Joueur, s: Strategie): void {
     if (reclamerQuete(m, j) === null) break
     if (j.offre !== null) choisirAmelioration(j, j.offre[0]!)
   }
+  recolterSiPermis()
   // LES TRANSFORMATEURS : réglés sur ce qui manque, puis la matière convertie à la main.
   let voulues = sortesVoulues(m, j)
   reglerLesTransformateurs(m, j, s, voulues)
