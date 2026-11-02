@@ -156,7 +156,8 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
   // Rien que la mine : le départ.
   const rien = j.modules.length === 0 && j.producteurs.length === 1
   // Le tout début : rien encore extrait (une bourse vidée par un achat n'est pas un début).
-  const debut = rien && j.points === 0 && j.journal.tapes === 0
+  // Le tout début : aucune tape, rien en réserve ni extrait (une heure passée peut remplir la réserve sans tape).
+  const debut = rien && j.points === 0 && j.journal.tapes === 0 && j.orProduit === 0 && (j.producteurs.find(estMine)?.reserve ?? 0) < 1
   const { rayon, bas } = etendue(j)
 
   /** Un point du monde, à l'écran (en coordonnées de la page, pour les effets). */

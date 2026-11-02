@@ -77,7 +77,14 @@ function Table({ partie, reelAuDepart, onRecommencer }: { partie: Partie; reelAu
   const vitesse = useRef(vitesseDemandee())
 
   /** Fait rattraper au monde le temps réel écoulé, puis sauve. */
+  /** Une fois la partie remise à zéro, plus rien ne l'écrit (la seconde qui passe la réécrirait). */
+  const arretee = useRef(false)
+  /** Le bouton « Reset » armé : une seconde tape dans les trois secondes efface la partie. */
+  const [resetArme, setResetArme] = useState(false)
+  const minuteurReset = useRef(0)
+
   const synchroniser = (): void => {
+    if (arretee.current) return
     const maintenant = Date.now()
     const h = ((maintenant - reel.current) / 3600000) * vitesse.current
     if (h > 0) rattraper(partie, partie.monde.t + h)
@@ -144,11 +151,28 @@ function Table({ partie, reelAuDepart, onRecommencer }: { partie: Partie; reelAu
           {ouvert && <span className="sourd petit"> · fin dans {duree(SAISON_H - m.t)}</span>}
         </span>
         <span className="entete-titre">{j.points > 0 && <span className="sourd">×{abrege(1 + j.points)}</span>}</span>
-        {ouvert && (
-          <button type="button" className="entete-saut" onClick={() => sauter(4)} title="Faire passer quatre heures (test)">
-            +4 h
-          </button>
-        )}
+        {/* POUR TESTER (Keko, 02/11 : « un bouton reset en haut et un +1h ») : une heure qui passe d'un coup ; la partie effacée, en deux tapes. */}
+        <button type="button" className="entete-saut" onClick={() => sauter(1)} title="Faire passer une heure (test)">
+          +1 h
+        </button>
+        <button
+          type="button"
+          className={`entete-saut${resetArme ? ' entete-reset-arme' : ''}`}
+          title="Effacer la partie et recommencer (test)"
+          onClick={() => {
+            window.clearTimeout(minuteurReset.current)
+            if (!resetArme) {
+              setResetArme(true)
+              minuteurReset.current = window.setTimeout(() => setResetArme(false), 3000)
+              return
+            }
+            arretee.current = true
+            effacerSauvegardeClic()
+            onRecommencer()
+          }}
+        >
+          {resetArme ? 'Sûr ?' : 'Reset'}
+        </button>
         <button
           type="button"
           className="entete-son"
