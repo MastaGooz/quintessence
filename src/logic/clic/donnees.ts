@@ -200,26 +200,25 @@ export const FABRICATION = {
 export const MINE: TypeProducteur = { id: 'mine', genre: 'mine', cout: { forme: 0, couleur: null, quantite: 0 }, lot: 1, creux: [_, _, _, _, _, _, _, _], taille: { largeur: 450, hauteur: 450 } }
 
 /**
- * LES QUÊTES (Keko, 02/11 : « X or pour obtenir une amélioration au choix » ;
- * « la première quête devrait être : remplir la réserve »). Une à la fois,
- * sans fin : d'abord REMPLIR LA RÉSERVE de la mine ET LA RÉCOLTER (Keko :
- * « la quête initiale devrait être remplir la réserve et la récolter, en
- * fait »), puis GAGNER de l'or (il
- * compte depuis le début de la quête) ; remplie, une quête se RÉCLAME d'une
+ * LES QUÊTES (Keko, 02/11 : « X or pour obtenir une amélioration au choix »).
+ * Une à la fois, sans fin : d'abord RÉCOLTER `recolte` or de la réserve de la
+ * mine (Keko : « on va plutôt être permissif et demander de récolter 10 or,
+ * sans forcément remplir la réserve en entier »), puis GAGNER de l'or. L'or
+ * compte depuis le début de la quête ; remplie, une quête se RÉCLAME d'une
  * tape, et sa récompense est le CHOIX d'une amélioration parmi `offre` tirées
  * au hasard. La k-ième quête d'or demande `premier × croissance^k` or.
- * Chiffres de moi, à rejuger.
+ * Chiffres de moi, à rejuger (sauf les 10 de la première).
  */
 export type Recompense = 'choix'
 export interface Quete {
   id: string
-  /** Remplir la réserve de la mine, ou gagner de l'or. */
-  genre: 'reserve' | 'or'
-  /** Une quête d'or : l'or à gagner depuis son début. */
+  /** Récolter l'or de la réserve (la première), ou en gagner : l'or compte pareil, depuis le début de la quête — au départ, il ne vient que de la réserve. */
+  genre: 'recolte' | 'or'
+  /** L'or à récolter ou à gagner depuis son début. */
   or: number
   recompense: Recompense
 }
-export const QUETE_CHOIX = { premier: 20, croissance: 2, offre: 3 }
+export const QUETE_CHOIX = { recolte: 10, premier: 20, croissance: 2, offre: 3 }
 
 /**
  * LES AMÉLIORATIONS DE LA MINE, la liste de Keko (02/11). Chacune se prend

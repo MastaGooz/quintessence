@@ -15,7 +15,7 @@ import { FABRICATION, PRIMAIRES, PRODUCTEURS, PRESTIGE, SORTES, couleurDe, forme
 import {
   acheter, acheterProducteur, ameliorer, ameliorerSource, besoins, brancherAuMieux, completerAuMarche, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, declencher, disponible,
   entrees, esperanceEffet, estMine, estSource, fabriquerModule, fondre, force, fusibles, genreDe, manquePour, meilleureSource, modulesDe, multiplicateurPrestige, peutFabriquer, peutPayer, pointsSi,
-  prestiger, choisirAmelioration, queteAccomplie, queteEnCours, reclamerQuete, recolter, reservePleine,
+  prestiger, choisirAmelioration, queteAccomplie, reclamerQuete, recolter,
   prisesLibres, production, regler, sortePourPayer, sortie, sortesFormees, soute, typeDe, valeurCout, valeurDe, vendre, venteRaisonnable, visibleProducteur, visibleQualite,
   type Joueur, type Monde, type Producteur,
 } from './moteur.ts'
@@ -336,10 +336,9 @@ export function visiter(m: Monde, j: Joueur, s: Strategie): void {
     const apres = 1 + PRESTIGE.parPoint * (j.points + gain)
     if (apres / multiplicateurPrestige(j) >= s.seuilPrestige) prestiger(j)
   }
-  // LA RÉSERVE de chaque mine, récoltée en passant — pleine seulement, tant que la quête est de la remplir et de la récolter.
+  // LA RÉSERVE de chaque mine, récoltée en passant.
   const recolterSiPermis = (): void => {
-    const remplir = queteEnCours(j)?.genre === 'reserve' && !queteAccomplie(j)
-    for (const p of j.producteurs) if (estMine(p) && (!remplir || reservePleine(j, p))) recolter(j, p)
+    for (const p of j.producteurs) if (estMine(p)) recolter(j, p)
   }
   recolterSiPermis()
   const source = sourceATaper(m, j, s)
