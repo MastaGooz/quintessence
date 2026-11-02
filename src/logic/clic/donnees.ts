@@ -286,13 +286,19 @@ export const QUETES: readonly Quete[] = [
 /** Le rang de la quête qui ouvre la construction. */
 export const QUETE_CONSTRUCTION = QUETES.findIndex((q) => q.objectif === 'construction')
 /**
- * LE MARCHÉ DES RESSOURCES (Keko, 02/11 : « dès qu'on a construit la scierie
- * ou la mine, on ouvre le marché pour que le joueur achète la ressource
- * manquante ») : le bois et la pierre s'y achètent en or, à prix fixe, par
- * `lots`. Chiffres de moi : une ressource vaut deux pièces (la tape en fait
- * autant de l'une que de l'autre ; acheter coûte le double de produire).
+ * LE MARCHÉ DES RESSOURCES (Keko, 02/11 : « on ouvre le marché pour que le
+ * joueur achète la ressource manquante », puis « un véritable marché, avec un
+ * onglet acheter, vendre, et un prix qui dépend de l'offre et de la demande »)
+ * : le bois et la pierre s'y achètent ET s'y vendent en or, au modèle du
+ * marché commun (`MARCHE`, déjà réglé avec Keko) — le prix vaut `prix` ×
+ * exp(−V / D), V le volume net vendu récemment (il fond de moitié toutes les
+ * `MARCHE.demiVie` heures), D la demande : ce que tous les producteurs en font
+ * en `MARCHE.tampon` heures, au moins `demandeMin`. Vendre fait baisser le
+ * prix, acheter le fait monter ; un gros lot d'un coup se paie plus cher (ou
+ * se vend moins cher) que le même étalé. Les montants se règlent en pièces
+ * entières. Par `lots`. Chiffres de moi.
  */
-export const MARCHE_RESSOURCES: { prix: Record<Ressource, number>; lots: readonly number[] } = { prix: { bois: 2, pierre: 2 }, lots: [1, 5, 20] }
+export const MARCHE_RESSOURCES: { prix: Record<Ressource, number>; demandeMin: number; lots: readonly number[] } = { prix: { bois: 2, pierre: 2 }, demandeMin: 200, lots: [1, 5, 20] }
 
 /** Combien d'améliorations offre un niveau de la banque. */
 export const OFFRE_NIVEAU = 3

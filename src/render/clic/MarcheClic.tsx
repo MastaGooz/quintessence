@@ -169,11 +169,11 @@ function Detail({ partie, agir, sorte: s }: PagePropsClic & { sorte: number }): 
   )
 }
 
-/** La courbe du prix : une ligne, entre zéro et le double du prix plein. */
-function Courbe({ points }: { points: number[] }): ReactElement {
+/** La courbe du prix : une ligne, entre zéro et le double du prix plein (`plein`). */
+export function Courbe({ points, plein = MARCHE.prix }: { points: number[]; plein?: number }): ReactElement {
   const L = 300
   const H = 44
-  const haut = MARCHE.prix * 2
+  const haut = plein * 2
   if (points.length < 2) return <svg className="courbe courbe-basse" viewBox={`0 0 ${L} ${H}`} aria-hidden />
   const chemin = points.map((p, i) => `${((i / (points.length - 1)) * L).toFixed(1)},${(H - (Math.min(1, p / haut) * (H - 4) + 2)).toFixed(1)}`).join(' ')
   return (

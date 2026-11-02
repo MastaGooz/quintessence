@@ -133,6 +133,15 @@ export interface Marche {
   volume: number[]
   demande: number[]
   historique: number[][]
+  /** Le bois et la pierre (voir `MARCHE_RESSOURCES`) ; absents d'une partie d'avant : au repos. */
+  ressources?: Partial<Record<Ressource, CoteRessource>>
+}
+
+/** La cote d'une ressource au marché : son volume net vendu récemment, sa demande, et son prix heure par heure. */
+export interface CoteRessource {
+  volume: number
+  demande: number
+  historique: number[]
 }
 
 export interface Monde {
@@ -1262,17 +1271,96 @@ export function marcheOuvert(j: Joueur): boolean {
   return j.producteurs.some(estConstruit)
 }
 
-export function prixAchatRessource(r: Ressource, q: number): number {
-  return MARCHE_RESSOURCES.prix[r] * q
+/** La cote d'une ressource, telle qu'elle est ; au repos si personne n'y a encore touché. */
+function cote(m: Monde, r: Ressource): CoteRessource {
+  return m.marche.ressources?.[r] ?? { volume: 0, demande: MARCHE_RESSOURCES.demandeMin, historique: [MARCHE_RESSOURCES.prix[r]] }
 }
 
-/** ACHETER `q` d'une ressource au marché, en or. Rend vrai si c'est acheté. */
-export function acheterRessource(j: Joueur, r: Ressource, q: number): boolean {
-  const prix = prixAchatRessource(r, q)
-  if (!marcheOuvert(j) || q <= 0 || j.or + 1e-9 < prix) return false
+/** La cote d'une ressource, rangée dans le marché pour qu'on l'écrive. */
+function coteEcrite(m: Monde, r: Ressource): CoteRessource {
+  const c = cote(m, r)
+  m.marche.ressources = { ...m.marche.ressources, [r]: c }
+  return c
+}
+
+/** La demande visée d'une ressource : ce que tous les producteurs construits en font en `MARCHE.tampon` heures. */
+function demandeViseeRessource(m: Monde, r: Ressource): number {
+  let d = 0
+  for (const j of m.joueurs) for (const p of j.producteurs) if (estConstruit(p) && ressourceDe(p) === r) d += vitesseAutoProducteur(p) * lotProducteur(p) * 3600 * MARCHE.tampon
+  return Math.max(MARCHE_RESSOURCES.demandeMin, d)
+}
+
+/** Le prix d'une unité maintenant, pour un échange infinitésimal. */
+export function prixRessource(m: Monde, r: Ressource): number {
+  const c = cote(m, r)
+  return MARCHE_RESSOURCES.prix[r] * Math.exp(-c.volume / c.demande)
+}
+
+/** Le prix plein d'une ressource, au repos. */
+export function prixPleinRessource(r: Ressource): number {
+  return MARCHE_RESSOURCES.prix[r]
+}
+
+/** Ce que coûte acheter `q` d'un coup — l'intégrale du prix de V − q à V —, en pièces entières (au moins une). */
+export function coutAchatRessource(m: Monde, r: Ressource, q: number): number {
+  if (q <= 0) return 0
+  const c = cote(m, r)
+  return Math.max(1, Math.round(MARCHE_RESSOURCES.prix[r] * c.demande * Math.exp(-c.volume / c.demande) * Math.expm1(q / c.demande)))
+}
+
+/** Ce que rapporte vendre `q` d'un coup — l'intégrale du prix de V à V + q —, en pièces entières. */
+export function gainVenteRessource(m: Monde, r: Ressource, q: number): number {
+  if (q <= 0) return 0
+  const c = cote(m, r)
+  return Math.round(MARCHE_RESSOURCES.prix[r] * c.demande * Math.exp(-c.volume / c.demande) * -Math.expm1(-q / c.demande))
+}
+
+/** Le prix heure par heure, le dernier en dernier. */
+export function historiqueRessource(m: Monde, r: Ressource): number[] {
+  return cote(m, r).historique
+}
+
+function bornerRessource(c: CoteRessource): void {
+  const borne = MARCHE.bornes * c.demande
+  c.volume = Math.max(-borne, Math.min(borne, c.volume))
+}
+
+/** ACHETER `q` d'une ressource au marché : le prix monte. Rend l'or dépensé, ou 0. */
+export function acheterRessource(m: Monde, j: Joueur, r: Ressource, q: number): number {
+  const prix = coutAchatRessource(m, r, q)
+  if (!marcheOuvert(j) || q <= 0 || j.or + 1e-9 < prix) return 0
   j.or -= prix
   gagnerRessource(j, r, q)
-  return true
+  const c = coteEcrite(m, r)
+  c.volume -= q
+  bornerRessource(c)
+  return prix
+}
+
+/** VENDRE `q` d'une ressource au marché (pas plus qu'on n'en a) : le prix baisse. Rend l'or gagné. */
+export function vendreRessource(m: Monde, j: Joueur, r: Ressource, q: number): number {
+  const quantite = Math.min(q, Math.floor(stockRessource(j, r) + 1e-9))
+  if (!marcheOuvert(j) || quantite <= 0) return 0
+  const gain = gainVenteRessource(m, r, quantite)
+  gagnerRessource(j, r, -quantite)
+  j.or += gain
+  const c = coteEcrite(m, r)
+  c.volume += quantite
+  bornerRessource(c)
+  return gain
+}
+
+/** Le marché des ressources respire : le volume fond, la demande suit la production, le prix s'inscrit à chaque heure pleine. */
+function respirerRessources(m: Monde, dt: number, heurePleine: boolean): void {
+  for (const r of RESSOURCES) {
+    const c = coteEcrite(m, r)
+    c.volume *= Math.pow(0.5, dt / MARCHE.demiVie)
+    c.demande += (demandeViseeRessource(m, r) - c.demande) * (1 - Math.pow(0.5, dt / MARCHE.inertie))
+    if (heurePleine) {
+      c.historique.push(prixRessource(m, r))
+      if (c.historique.length > 24 * 8) c.historique.shift()
+    }
+  }
 }
 
 /** Tire l'offre d'un niveau de producteur : `OFFRE_NIVEAU` améliorations sous leur maximum, au hasard du joueur. */
@@ -1777,4 +1865,5 @@ export function avancer(m: Monde, dt: number): void {
       m.marche.historique[s] = h
     }
   }
+  respirerRessources(m, dt, heurePleine)
 }

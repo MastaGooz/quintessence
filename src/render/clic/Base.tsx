@@ -22,7 +22,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactElement, typ
 import { CONSTRUCTION, COULEURS, EFFETS_MINE, FAMILLES, FORMES, MELANGE, MODULE, PIECE, PRIMAIRES, PRODUCTEURS, TAPES_MAX_PAR_S, aDuBleu, couleurDe, sorteDe, type IdAmelioration, type IdAmeliorationProducteur, type Quete, type Ressource, RESSOURCES } from '../../logic/clic/donnees.ts'
 import {
   DIRECTIONS, acheter, ameliorationsOuvertes, ameliorer, automatiqueProducteur, choisirAmeliorationProducteur, construire, constructionOuverte, estConstruit, gainNiveauProducteur,
-  acheterRessource, lotProducteur, marcheOuvert, monterLeProducteur, premierConstruit, prixAchatRessource, niveauAP, peutMonterLeProducteur, prixConstruction, prixNiveauProducteur, ressourceDe, gainNiveauMine, monterLaMine, peutMonterLaMine, prixNiveauMine, ameliorerSource, bilan, choisirAmelioration, perdrePepite, ramasserPepite, bilanProducteur, boiteModule, branches, brancher, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, debitTotal,
+  acheterRessource, lotProducteur, marcheOuvert, monterLeProducteur, premierConstruit, vendreRessource, niveauAP, peutMonterLeProducteur, prixConstruction, prixNiveauProducteur, ressourceDe, gainNiveauMine, monterLaMine, peutMonterLaMine, prixNiveauMine, ameliorerSource, bilan, choisirAmelioration, perdrePepite, ramasserPepite, bilanProducteur, boiteModule, branches, brancher, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, debitTotal,
   capaciteReserve, debrancher, mineArretee, declencher, deplacerProducteur, disponible, disposition, effetsDe, entrees, estFixe, estMine, estSource, etendue, force, fusibles, genreDe, lotDeBase, meilleurePrise, moduleDe,
   modulesDe, multiplicateurPrestige, peutAmeliorer, peutAmeliorerSource, peutFabriquer, peutPayer, placeSurProducteur, pointsSi, prisesPour, producteurDe, producteurTient, progresQuete,
   objectifQuete, queteAccomplie, queteEnCours, reclamerQuete, recolter, regler, reservePleine, sortesFormees,
@@ -612,16 +612,25 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
 
   /** ACHETER une ressource au marché : les pièces partent du compteur d'or vers le bouton, la ressource vole du bouton à son compteur. */
   const acheterRessourceIci = (r: Ressource, q: number, bouton: HTMLElement): void => {
-    const prix = prixAchatRessource(r, q)
-    const fait = { ok: false }
+    const fait = { prix: 0 }
     agir(() => {
-      fait.ok = acheterRessource(j, r, q)
+      fait.prix = acheterRessource(m, j, r, q)
     })
-    if (!fait.ok) return
+    if (fait.prix <= 0) return
     const rect = bouton.getBoundingClientRect()
-    effetDepense(rect, prix)
+    effetDepense(rect, fait.prix)
     vibrer([10, 20])
     window.setTimeout(() => effetRessource(rect, r, q), 260)
+  }
+
+  /** VENDRE une ressource au marché : ses pièces volent du bouton au compteur d'or, qui ne bouge qu'à leur arrivée. */
+  const vendreRessourceIci = (r: Ressource, q: number, bouton: HTMLElement): void => {
+    const fait = { gain: 0 }
+    agir(() => {
+      fait.gain = vendreRessource(m, j, r, q)
+    })
+    vibrer([10, 20, 10])
+    if (fait.gain > 0) effetVente(bouton.getBoundingClientRect(), fait.gain)
   }
 
   /** Ce qui apparaît (le bouton des améliorations, la réserve) naît et éclate, une fois peint ; `puis` le suit, depuis sa place. */
@@ -1362,7 +1371,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
       {/* LE MENU DE CONSTRUCTION, qu'ouvre son bouton. */}
       {menuConstruction && <MenuConstruction j={j} onConstruire={construireIci} onFermer={() => setMenuConstruction(false)} />}
       {/* LE MARCHÉ DES RESSOURCES, qu'ouvre son bouton. */}
-      {menuMarche && <MenuMarche j={j} onAcheter={acheterRessourceIci} onFermer={() => setMenuMarche(false)} />}
+      {menuMarche && <MenuMarche m={m} j={j} onAcheter={acheterRessourceIci} onVendre={vendreRessourceIci} onFermer={() => setMenuMarche(false)} />}
       {/* LE MENU DES AMÉLIORATIONS, qu'ouvre le bouton en haut à droite. */}
       {menuVu !== undefined && (
         <MenuAmeliorations

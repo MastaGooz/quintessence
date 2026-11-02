@@ -2191,7 +2191,32 @@ span.rarete-4,
   color: var(--rouge);
 }
 
-/* LE MARCHÉ DES RESSOURCES : une carte par ressource, ses trois achats dessous. */
+/* Les deux onglets du marché : acheter, vendre. */
+.onglets-marche {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.7rem;
+  padding: 0.25rem;
+  border-radius: 0.8rem;
+  background: rgba(20, 8, 28, 0.6);
+}
+
+.onglets-marche button {
+  flex: 1;
+  min-height: 2.8rem;
+  border: none;
+  background: transparent;
+  color: var(--creme);
+  opacity: 0.7;
+}
+
+.onglets-marche button.onglet-actif {
+  background: linear-gradient(180deg, #ffe27a, #e0a812);
+  color: #3a2408;
+  opacity: 1;
+}
+
+/* LE MARCHÉ DES RESSOURCES : une carte par ressource, son prix et sa courbe, ses trois lots dessous. */
 .marche-ressource {
   display: flex;
   flex-direction: column;
