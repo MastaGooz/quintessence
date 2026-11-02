@@ -11,13 +11,13 @@ import { graineDe, rngDe } from '../rng.ts'
 
 /** Sept rivaux : des rythmes de visite différents, des tapes plus ou moins assidues, et les trois couleurs de base investies (deux bots par couleur, et un opportuniste qui suit le marché). */
 export const BOTS: (Strategie & { visites: number })[] = [
-  { nom: 'Agrippa', tapes: 80, seuilPrestige: 2, visites: 4, couleur: 0 },
-  { nom: 'Hypatie', tapes: 120, seuilPrestige: 1.8, visites: 6, couleur: 1 },
-  { nom: 'Flamel', tapes: 60, seuilPrestige: 2.5, visites: 3, couleur: 2 },
-  { nom: 'Zosime', tapes: 40, seuilPrestige: 2, visites: 2 },
-  { nom: 'Paracelse', tapes: 100, seuilPrestige: 2, visites: 4, couleur: 0 },
-  { nom: 'Cléopâtre', tapes: 60, seuilPrestige: 1.6, visites: 5, couleur: 1 },
-  { nom: 'Cagliostro', tapes: 200, seuilPrestige: 3, visites: 4, couleur: 2 },
+  { nom: 'Agrippa', tapes: 80, seuilPrestige: 2, visites: 4, couleur: 0, ressource: 'bois' },
+  { nom: 'Hypatie', tapes: 120, seuilPrestige: 1.8, visites: 6, couleur: 1, ressource: 'pierre' },
+  { nom: 'Flamel', tapes: 60, seuilPrestige: 2.5, visites: 3, couleur: 2, ressource: 'bois' },
+  { nom: 'Zosime', tapes: 40, seuilPrestige: 2, visites: 2, ressource: 'pierre' },
+  { nom: 'Paracelse', tapes: 100, seuilPrestige: 2, visites: 4, couleur: 0, ressource: 'bois' },
+  { nom: 'Cléopâtre', tapes: 60, seuilPrestige: 1.6, visites: 5, couleur: 1, ressource: 'bois' },
+  { nom: 'Cagliostro', tapes: 200, seuilPrestige: 3, visites: 4, couleur: 2, ressource: 'pierre' },
 ]
 
 /** Le pas de la production hors ligne. */

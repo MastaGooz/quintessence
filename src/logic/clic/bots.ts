@@ -10,12 +10,24 @@
  * des achats gloutons : l'option qui rapporte le plus de valeur par or de
  * matière dépensée, la matière manquante achetée au marché si l'or le permet.
  * Ils ne font rien qu'un vrai joueur ne pourrait faire.
+ *
+ * L'ÉTAPE DEUX, COMME LE JOUEUR (Keko, 02/11 : « les bots jouent l'étape deux
+ * comme vous ») : ils récoltent et tapent leurs producteurs ; puis, tant que
+ * l'or le permet, ils prennent l'action la moins chère — un niveau de la
+ * banque, une construction (leur ressource préférée d'abord, puis l'autre
+ * sorte, puis d'autres exemplaires), un niveau de producteur —, en achetant
+ * au marché la ressource qui manque ; enfin ils vendent leur surplus (ce
+ * qu'il leur reste au-delà de leurs prochains niveaux et de leur prochaine
+ * construction) : au prix du marché s'il est assez haut, sinon par un ordre
+ * au prix plein. C'est eux qui font bouger le marché des ressources.
  */
-import { FABRICATION, PRIMAIRES, PRODUCTEURS, PRESTIGE, SORTES, couleurDe, formeDe, sorteDe, type Cout } from './donnees.ts'
+import { FABRICATION, PRIMAIRES, PRODUCTEURS, PRESTIGE, RESSOURCES, SORTES, TYPES_CONSTRUCTION, couleurDe, formeDe, sorteDe, type Cout, type Ressource } from './donnees.ts'
 import {
   acheter, acheterProducteur, ameliorer, ameliorerSource, besoins, brancherAuMieux, completerAuMarche, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, declencher, disponible,
   entrees, esperanceEffet, estMine, estSource, fabriquerModule, fondre, force, fusibles, genreDe, manquePour, meilleureSource, modulesDe, multiplicateurPrestige, peutFabriquer, peutPayer, pointsSi,
   prestiger, monterLaMine, choisirAmelioration, queteAccomplie, reclamerQuete, recolter,
+  acheterRessource, ameliorationsOuvertes, choisirAmeliorationProducteur, construire, constructionOuverte, coutAchatRessource, estConstruit, monterLeProducteur, placerOrdre, prixConstruction,
+  prixNiveauMine, prixNiveauProducteur, prixPleinRessource, prixRessource, ressourceDe, stockRessource, vendreRessource, type Prix,
   prisesLibres, production, regler, sortePourPayer, sortie, sortesFormees, soute, typeDe, valeurCout, valeurDe, vendre, venteRaisonnable, visibleProducteur, visibleQualite,
   type Joueur, type Monde, type Producteur,
 } from './moteur.ts'
@@ -28,6 +40,97 @@ export interface Strategie {
   seuilPrestige: number
   /** La couleur de base où il investit (il tape sa source, préfère ses sources) ; sinon, la plus rentable. */
   couleur?: number
+  /** L'étape deux : la ressource de son premier producteur. */
+  ressource?: Ressource
+}
+
+/** Un bot a au plus tant de producteurs construits. */
+const PRODUCTEURS_MAX = 4
+/** Un bot vend son surplus au prix du marché s'il vaut au moins cette part du prix plein ; sinon il pose un ordre au prix plein. */
+const VENTE_AU_MARCHE = 0.9
+/** Un surplus plus petit ne se vend pas. */
+const SURPLUS_MIN = 5
+
+/** Ce que coûte un prix en or, la ressource qui manque achetée au marché. */
+function coutEnOr(m: Monde, j: Joueur, c: Prix): number {
+  let or = c.or
+  for (const r of RESSOURCES) {
+    const manque = Math.ceil(c[r] - stockRessource(j, r) - 1e-9)
+    if (manque > 0) or += coutAchatRessource(m, r, manque)
+  }
+  return or
+}
+
+/** Achète au marché la ressource qui manque pour payer un prix, si l'or suffit ; rend vrai si le prix est alors payable. */
+function completerLesRessources(m: Monde, j: Joueur, c: Prix): boolean {
+  if (coutEnOr(m, j, c) > j.or + 1e-9) return false
+  for (const r of RESSOURCES) {
+    const manque = Math.ceil(c[r] - stockRessource(j, r) - 1e-9)
+    if (manque > 0 && acheterRessource(m, j, r, manque) <= 0) return false
+  }
+  return j.or + 1e-9 >= c.or
+}
+
+/** Ce que le bot construit ensuite : sa ressource préférée d'abord, puis l'autre sorte, puis celle dont il a le moins ; rien au-delà de `PRODUCTEURS_MAX`. */
+function typeAConstruire(j: Joueur, s: Strategie): number | null {
+  const construits = j.producteurs.filter(estConstruit)
+  if (construits.length >= PRODUCTEURS_MAX) return null
+  const nombre = (r: Ressource): number => construits.filter((p) => ressourceDe(p) === r).length
+  const preferee = s.ressource ?? 'bois'
+  const voulue = nombre(preferee) === 0 ? preferee : (RESSOURCES.find((r) => nombre(r) === 0) ?? [...RESSOURCES].sort((a, b) => nombre(a) - nombre(b))[0] ?? preferee)
+  return TYPES_CONSTRUCTION.find((t) => PRODUCTEURS[t]?.ressource === voulue) ?? null
+}
+
+/** Les actions d'or d'une visite, tant qu'il en reste : la moins chère d'abord — la banque, une construction, un producteur. */
+function depenserLOr(m: Monde, j: Joueur, s: Strategie): void {
+  const banque = j.producteurs.find(estMine)
+  for (let n = 0; n < 40; n++) {
+    const actions: { cout: number; faire: () => boolean }[] = []
+    if (banque !== undefined && ameliorationsOuvertes(j) && j.offre === null)
+      actions.push({
+        cout: prixNiveauMine(banque),
+        faire: () => {
+          if (!monterLaMine(m, j, banque)) return false
+          if (j.offre !== null) choisirAmelioration(j, j.offre[0]!)
+          return true
+        },
+      })
+    if (constructionOuverte(j)) {
+      const type = typeAConstruire(j, s)
+      if (type !== null) actions.push({ cout: coutEnOr(m, j, prixConstruction(j)), faire: () => completerLesRessources(m, j, prixConstruction(j)) && construire(j, type) !== null })
+      for (const p of j.producteurs) {
+        if (!estConstruit(p) || (p.offre ?? null) !== null) continue
+        actions.push({
+          cout: coutEnOr(m, j, prixNiveauProducteur(p)),
+          faire: () => {
+            if (!completerLesRessources(m, j, prixNiveauProducteur(p)) || !monterLeProducteur(m, j, p)) return false
+            if ((p.offre ?? null) !== null) choisirAmeliorationProducteur(p, p.offre![0]!)
+            return true
+          },
+        })
+      }
+    }
+    const action = actions.filter((a) => a.cout <= j.or + 1e-9).sort((a, b) => a.cout - b.cout)[0]
+    if (action === undefined || !action.faire()) return
+  }
+}
+
+/** Vend ce que le bot a de chaque ressource au-delà de ses prochains niveaux et de sa prochaine construction : au marché si le prix tient, sinon par un ordre au prix plein. */
+function vendreLesRessources(m: Monde, j: Joueur): void {
+  if (!j.producteurs.some(estConstruit)) return
+  const besoin: Prix = { ...prixConstruction(j) }
+  for (const p of j.producteurs) {
+    if (!estConstruit(p)) continue
+    const c = prixNiveauProducteur(p)
+    for (const r of RESSOURCES) besoin[r] += c[r]
+  }
+  for (const r of RESSOURCES) {
+    const surplus = Math.floor(stockRessource(j, r) - besoin[r])
+    if (surplus < SURPLUS_MIN) continue
+    const plein = prixPleinRessource(m, r)
+    if (prixRessource(m, r) >= VENTE_AU_MARCHE * plein) vendreRessource(m, j, r, surplus)
+    else if (!(j.ordres ?? []).some((o) => o.sens === 'vente' && o.ressource === r)) placerOrdre(m, j, 'vente', r, surplus, plein)
+  }
 }
 
 interface Option {
@@ -336,23 +439,26 @@ export function visiter(m: Monde, j: Joueur, s: Strategie): void {
     const apres = 1 + PRESTIGE.parPoint * (j.points + gain)
     if (apres / multiplicateurPrestige(j) >= s.seuilPrestige) prestiger(j)
   }
-  // LA RÉSERVE de chaque mine, récoltée en passant.
+  // LA RÉSERVE de la banque et de chaque producteur construit, récoltée en passant.
   const recolterSiPermis = (): void => {
-    for (const p of j.producteurs) if (estMine(p)) recolter(j, p)
+    for (const p of j.producteurs) if (estMine(p) || estConstruit(p)) recolter(j, p)
   }
   recolterSiPermis()
   const source = sourceATaper(m, j, s)
   // Les tapes d'une visite font une série : l'élan joue.
   for (let k = 0; k < s.tapes; k++) declencher(m, j, source, undefined, k)
+  // Ses producteurs construits, chacun la moitié autant.
+  for (const p of j.producteurs) if (estConstruit(p)) for (let k = 0; k < Math.round(s.tapes / 2); k++) declencher(m, j, p, undefined, k)
   recolterSiPermis()
   // LES QUÊTES : réclamées dès qu'elles sont remplies, la première amélioration de l'offre choisie.
   for (let n = 0; n < 20 && queteAccomplie(j); n++) {
     if (reclamerQuete(m, j) === null) break
     if (j.offre !== null) choisirAmelioration(j, j.offre[0]!)
   }
-  // LA MINE monte de niveau tant que l'or suffit ; la première amélioration de chaque offre est choisie.
-  const mine = j.producteurs.find(estMine)
-  for (let n = 0; n < 20 && mine !== undefined && monterLaMine(m, j, mine); n++) if (j.offre !== null) choisirAmelioration(j, j.offre[0]!)
+  // L'OR : la banque, les constructions, les producteurs, la moins chère d'abord ; puis le surplus de ressources vendu.
+  depenserLOr(m, j, s)
+  vendreLesRessources(m, j)
+  depenserLOr(m, j, s)
   recolterSiPermis()
   // LES TRANSFORMATEURS : réglés sur ce qui manque, puis la matière convertie à la main.
   let voulues = sortesVoulues(m, j)

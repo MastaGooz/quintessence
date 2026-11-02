@@ -149,6 +149,8 @@ export interface CoteRessource {
   historique: number[]
   /** Le prix en bougies (voir `MARCHE_RESSOURCES.bougie`), la dernière en dernier. */
   bougies?: Bougie[]
+  /** Le prix plein, qui suit le déséquilibre des échanges (absent : `MARCHE_RESSOURCES.prix`). */
+  plein?: number
 }
 
 /** Une bougie : le rang de sa période, et le prix à son ouverture, au plus haut, au plus bas, à sa clôture. */
@@ -1330,26 +1332,26 @@ function demandeViseeRessource(m: Monde, r: Ressource): number {
 /** Le prix d'une unité maintenant, pour un échange infinitésimal. */
 export function prixRessource(m: Monde, r: Ressource): number {
   const c = cote(m, r)
-  return MARCHE_RESSOURCES.prix[r] * Math.exp(-c.volume / c.demande)
+  return prixPleinRessource(m, r) * Math.exp(-c.volume / c.demande)
 }
 
-/** Le prix plein d'une ressource, au repos. */
-export function prixPleinRessource(r: Ressource): number {
-  return MARCHE_RESSOURCES.prix[r]
+/** Le prix plein d'une ressource : celui où revient le prix au repos ; il suit le déséquilibre des échanges (voir `MARCHE_RESSOURCES.ancrage`). */
+export function prixPleinRessource(m: Monde, r: Ressource): number {
+  return cote(m, r).plein ?? MARCHE_RESSOURCES.prix[r]
 }
 
 /** Ce que coûte acheter `q` d'un coup — l'intégrale du prix de V − q à V —, en pièces entières (au moins une). */
 export function coutAchatRessource(m: Monde, r: Ressource, q: number): number {
   if (q <= 0) return 0
   const c = cote(m, r)
-  return Math.max(1, Math.round(MARCHE_RESSOURCES.prix[r] * c.demande * Math.exp(-c.volume / c.demande) * Math.expm1(q / c.demande)))
+  return Math.max(1, Math.round(prixPleinRessource(m, r) * c.demande * Math.exp(-c.volume / c.demande) * Math.expm1(q / c.demande)))
 }
 
 /** Ce que rapporte vendre `q` d'un coup — l'intégrale du prix de V à V + q —, en pièces entières. */
 export function gainVenteRessource(m: Monde, r: Ressource, q: number): number {
   if (q <= 0) return 0
   const c = cote(m, r)
-  return Math.round(MARCHE_RESSOURCES.prix[r] * c.demande * Math.exp(-c.volume / c.demande) * -Math.expm1(-q / c.demande))
+  return Math.round(prixPleinRessource(m, r) * c.demande * Math.exp(-c.volume / c.demande) * -Math.expm1(-q / c.demande))
 }
 
 /** Le prix heure par heure, le dernier en dernier. */
@@ -1379,7 +1381,7 @@ export function acheterRessource(m: Monde, j: Joueur, r: Ressource, q: number): 
 export function quantiteAchetableRessource(m: Monde, r: Ressource, or: number): number {
   if (or <= 0) return 0
   const c = cote(m, r)
-  return Math.floor(c.demande * Math.log1p(or / (MARCHE_RESSOURCES.prix[r] * c.demande * Math.exp(-c.volume / c.demande))) + 1e-9)
+  return Math.floor(c.demande * Math.log1p(or / (prixPleinRessource(m, r) * c.demande * Math.exp(-c.volume / c.demande))) + 1e-9)
 }
 
 /** VENDRE `q` d'une ressource au marché (pas plus qu'on n'en a) : le prix baisse. Rend l'or gagné. */
@@ -1496,6 +1498,10 @@ function executerOrdres(m: Monde, j: Joueur): void {
 function respirerRessources(m: Monde, dt: number, heurePleine: boolean): void {
   for (const r of RESSOURCES) {
     const c = coteEcrite(m, r)
+    // Le prix plein suit le déséquilibre : on vend plus qu'on n'achète (V > 0), il baisse ; l'inverse, il monte.
+    const base = MARCHE_RESSOURCES.prix[r]
+    const [bas, haut] = MARCHE_RESSOURCES.bornesPlein
+    c.plein = Math.max(base * bas, Math.min(base * haut, (c.plein ?? base) * Math.exp(-MARCHE_RESSOURCES.ancrage * (c.volume / c.demande) * dt)))
     c.volume *= Math.pow(0.5, dt / MARCHE.demiVie)
     c.volume += MARCHE_RESSOURCES.agitation * c.demande * Math.sqrt(dt) * tirageMarchands(m)
     bornerRessource(c)

@@ -53,7 +53,7 @@ function cotationReelle(m: Monde, j: Joueur, r: Ressource): Cotation {
     nom: majuscule(NOM_RESSOURCE[r]),
     symbole: <SymboleRessource ressource={r} />,
     prix: prixRessource(m, r),
-    plein: prixPleinRessource(r),
+    plein: prixPleinRessource(m, r),
     bougies: bougiesRessource(m, r),
     stock: Math.floor(stockRessource(j, r) + 1e-9),
     coutAchat: (q) => coutAchatRessource(m, r, q),

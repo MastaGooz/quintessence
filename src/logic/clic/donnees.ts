@@ -308,7 +308,18 @@ export const QUETE_CONSTRUCTION = QUETES.findIndex((q) => q.objectif === 'constr
  * PERSO attendent que le prix les atteigne (« l'ordre se lance quand le prix
  * demandé trouve un acheteur ») : leur or ou leur ressource est mis de côté
  * à la pose, rendu à l'annulation. `lots` : les quantités proposées d'un
- * doigt. Chiffres de moi.
+ * doigt.
+ *
+ * LIÉ À L'ACTIVITÉ (Keko, 02/11 : « c'est juste une variance autour du prix ;
+ * c'est pas vraiment lié à l'activité des bots ? ») : les rivaux construisent,
+ * produisent, achètent ce qui leur manque et vendent leur surplus (voir
+ * `bots.ts`) ; et le PRIX PLEIN, d'abord `prix`, suit lentement le déséquilibre
+ * des échanges — il baisse tant qu'on vend plus qu'on n'achète, monte dans
+ * l'autre cas, de `ancrage` × V / D par heure (en logarithme), entre
+ * `bornesPlein` fois `prix` : une ressource que tout le monde produit et vend
+ * devient durablement bon marché, une ressource que tout le monde achète,
+ * chère. Les marchands ne font plus qu'un fond (`agitation` réduite de
+ * moitié). Chiffres de moi.
  */
 export const MARCHE_RESSOURCES: {
   prix: Record<Ressource, number>
@@ -317,7 +328,9 @@ export const MARCHE_RESSOURCES: {
   agitation: number
   bougie: number
   bougies: number
-} = { prix: { bois: 2, pierre: 2 }, demandeMin: 200, lots: [1, 5, 20], agitation: 0.08, bougie: 1 / 12, bougies: 96 }
+  ancrage: number
+  bornesPlein: readonly [number, number]
+} = { prix: { bois: 2, pierre: 2 }, demandeMin: 200, lots: [1, 5, 20], agitation: 0.04, bougie: 1 / 12, bougies: 96, ancrage: 0.15, bornesPlein: [0.25, 4] }
 
 /** Combien d'améliorations offre un niveau de la banque. */
 export const OFFRE_NIVEAU = 3
