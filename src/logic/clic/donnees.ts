@@ -223,7 +223,7 @@ export const QUETE_CHOIX = { premier: 20, croissance: 2, offre: 3 }
  * condition est remplie (`requiert` : une autre amélioration) — une
  * amélioration qui ne ferait rien n'est pas proposée.
  */
-export const IDS_AMELIORATIONS = ['pioche', 'puissance', 'critique', 'forceCritique', 'elan', 'pepite', 'cadence', 'reserve', 'prime', 'tropPlein'] as const
+export const IDS_AMELIORATIONS = ['pioche', 'puissance', 'critique', 'forceCritique', 'elan', 'pepite', 'auto', 'reserve', 'prime', 'tropPlein'] as const
 export type IdAmelioration = (typeof IDS_AMELIORATIONS)[number]
 export const AMELIORATIONS: readonly { id: IdAmelioration; max: number; requiert: IdAmelioration | null }[] = [
   { id: 'pioche', max: 99, requiert: null },
@@ -232,39 +232,39 @@ export const AMELIORATIONS: readonly { id: IdAmelioration; max: number; requiert
   { id: 'forceCritique', max: 99, requiert: 'critique' },
   { id: 'elan', max: 10, requiert: null },
   { id: 'pepite', max: 10, requiert: null },
-  { id: 'cadence', max: 99, requiert: null },
+  { id: 'auto', max: 20, requiert: null },
   { id: 'reserve', max: 99, requiert: null },
   { id: 'prime', max: 99, requiert: null },
-  { id: 'tropPlein', max: 10, requiert: null },
+  // Sans remplissage automatique, une réserve pleine ne déborde jamais : le trop-plein ne ferait rien.
+  { id: 'tropPlein', max: 10, requiert: 'auto' },
 ]
 
 /**
  * LA MINE, UN MOYEN GARANTI MAIS FAIBLE (Keko, 02/11 : « les vrais gains
- * viendront plus tard du commerce et des productions ») : elle remplit une
- * BARRE en `barre` secondes, toute seule ; chaque barre pleine met
- * `orParBarre` or dans la réserve. Une TAPE n'apporte pas d'or : elle avance
- * la barre de `tape` secondes (« le tap devient un moyen d'accélérer le
- * remplissage de la barre »).
+ * viendront plus tard du commerce et des productions ») : une BARRE que la
+ * TAPE remplit, de `tape` (une fraction de barre) à chaque coup ; chaque barre
+ * pleine met `orParBarre` or dans la réserve. DE BASE, LA BARRE NE SE REMPLIT
+ * PAS SEULE (Keko : « on doit cliquer, finalement ; l'auto devient un
+ * remplissage en % de la barre toutes les secondes, une amélioration »).
  *
  * CE QUE FAIT CHAQUE NIVEAU D'AMÉLIORATION (chiffres de moi, à rejuger) :
- * - pioche : +1 seconde de barre par tape (toujours en nombre — Keko) ;
- * - puissance : +25 % à l'avance d'une tape ;
+ * - pioche : une tape remplit `pioche` de barre de plus (en nombre — Keko) ;
+ * - puissance : +25 % à ce qu'une tape remplit ;
  * - critique : +5 % de chance qu'une tape avance ×`critiqueBase` ;
  * - forceCritique : le critique multiplie de 1 de plus ;
  * - elan : chaque tape d'une série avance de `elanPas` de plus que la
  *   précédente, jusqu'à `elanPlafond` (les deux par niveau) ;
  * - pepite : `pepiteChance` par tape qu'une pépite tombe ; tapée avant
  *   `pepiteDuree` secondes, elle met `pepiteValeur` or dans la bourse ;
- * - cadence : la barre se remplit 50 % plus vite ;
+ * - auto : la barre se remplit seule de `auto` par seconde ;
  * - reserve : la réserve contient 50 % de plus ;
  * - prime : une réserve PLEINE récoltée rapporte 25 % de plus ;
  * - tropPlein : la réserve pleine laisse couler 10 % de l'or dans la bourse.
  */
 export const EFFETS_MINE = {
-  barre: 10,
   orParBarre: 1,
-  tape: 1,
-  pioche: 1,
+  tape: 0.1,
+  pioche: 0.1,
   puissance: 0.25,
   critique: 0.05,
   critiqueBase: 5,
@@ -275,7 +275,7 @@ export const EFFETS_MINE = {
   pepiteValeur: 5,
   pepiteDuree: 5,
   pepitesMax: 3,
-  cadence: 0.5,
+  auto: 0.05,
   reserve: 0.5,
   prime: 0.25,
   tropPlein: 0.1,
@@ -286,7 +286,7 @@ export const EFFETS_MINE = {
  * obtenue en auto, qu'elle ne soit pas ajoutée à l'or mais dans la réserve de
  * la mine, et que le joueur doive cliquer pour l'ajouter ») : l'or des barres
  * s'y accumule jusqu'à `capacite` ; pleine, la barre s'arrête. Une tape sur la
- * réserve la récolte. Chiffre de moi, à rejuger : dix minutes de barre seule.
+ * réserve la récolte. Chiffre de moi, à rejuger.
  */
 export const RESERVE_MINE = { capacite: 60 }
 

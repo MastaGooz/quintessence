@@ -6,7 +6,7 @@
  */
 import type { ReactElement, ReactNode } from 'react'
 import { EFFETS_MINE, type IdAmelioration } from '../../logic/clic/donnees.ts'
-import { avanceTape, bilanMine, capaciteReserve, chancePepite, dureeBarre, estMine, partTropPlein, valeurPepite, type Joueur } from '../../logic/clic/moteur.ts'
+import { avanceTape, bilanMine, capaciteReserve, chancePepite, estMine, partTropPlein, valeurPepite, vitesseAuto, type Joueur } from '../../logic/clic/moteur.ts'
 import { NOM_AMELIORATION } from '../../ui/noms-clic.ts'
 import { Feuille } from '../Feuille.tsx'
 import { SymbolePiece } from './Glyphe.tsx'
@@ -39,7 +39,7 @@ export function effetAmelioration(j: Joueur, id: IdAmelioration): ReactNode {
     case 'puissance':
       return (
         <>
-          Une tape avance la barre de <Fleche avant={`${abregeFin(avanceTape(j))} s`} apres={`${abregeFin(avanceTape(j2))} s`} />
+          Une tape remplit <Fleche avant={pourcent(avanceTape(j))} apres={pourcent(avanceTape(j2))} /> de la barre
         </>
       )
     case 'critique':
@@ -66,10 +66,10 @@ export function effetAmelioration(j: Joueur, id: IdAmelioration): ReactNode {
           Une pépite à <Fleche avant={pourcent(chancePepite(j))} apres={pourcent(chancePepite(j2))} /> par tape ; tapez-la vite : {abregeFin(valeurPepite(j))} <SymbolePiece />
         </>
       )
-    case 'cadence':
+    case 'auto':
       return (
         <>
-          La barre se remplit en <Fleche avant={`${abregeFin(dureeBarre(j))} s`} apres={`${abregeFin(dureeBarre(j2))} s`} />
+          La barre se remplit seule : <Fleche avant={pourcent(vitesseAuto(j))} apres={pourcent(vitesseAuto(j2))} /> par seconde
         </>
       )
     case 'reserve':

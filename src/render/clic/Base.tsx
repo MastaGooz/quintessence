@@ -22,7 +22,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactElement, typ
 import { COULEURS, EFFETS_MINE, FAMILLES, FORMES, MELANGE, MODULE, PIECE, PRIMAIRES, PRODUCTEURS, TAPES_MAX_PAR_S, aDuBleu, couleurDe, sorteDe, type IdAmelioration, type Quete } from '../../logic/clic/donnees.ts'
 import {
   DIRECTIONS, acheter, ameliorer, ameliorerSource, bilan, choisirAmelioration, perdrePepite, ramasserPepite, bilanProducteur, boiteModule, branches, brancher, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, debitTotal,
-  capaciteReserve, debrancher, dureeBarre, mineArretee, orParBarre, declencher, deplacerProducteur, disponible, disposition, effetsDe, entrees, estFixe, estMine, estSource, etendue, force, fusibles, genreDe, lotDeBase, meilleurePrise, moduleDe,
+  capaciteReserve, debrancher, mineArretee, vitesseAuto, declencher, deplacerProducteur, disponible, disposition, effetsDe, entrees, estFixe, estMine, estSource, etendue, force, fusibles, genreDe, lotDeBase, meilleurePrise, moduleDe,
   modulesDe, multiplicateurPrestige, peutAmeliorer, peutAmeliorerSource, peutFabriquer, peutPayer, placeSurProducteur, pointsSi, prisesPour, producteurDe, producteurTient, progresQuete,
   queteAccomplie, queteEnCours, reclamerQuete, recolter, regler, reservePleine, sortesFormees,
   sortie, soute, surLesCases, tailleDe, typeDe, visibleProducteur, type Coup, type Joueur, type Module, type Monde, type Place, type Prise, type Producteur,
@@ -33,10 +33,10 @@ import { vibrer } from '../../ui/haptique.ts'
 import {
   EXPLICATION_TRAIT, LETTRE_PRODUCTEUR, NOM_AMELIORATION, NOM_COULEUR, NOM_MATIERE, NOM_MINE, NOM_OR, NOM_RECOMPENSE, NOM_RARETE, NOM_SOUTE, NOM_TRAIT, NOMS_FORMES, explicationModule, nomProducteur, nomSorte, nomSortePluriel,
 } from '../../ui/noms-clic.ts'
-import { sonBatir, sonEtape, sonTape } from '../../ui/sons.ts'
+import { sonBatir, sonEtape, sonPiece, sonTape } from '../../ui/sons.ts'
 import { Compteur } from '../Compteur.tsx'
 import { DUREE_GLISSE, monterCarte, type Carte, type Point } from '../carte/carte.ts'
-import { SERIE_MS, eclater, effetDepense, effetVente, flotter, flotterOr, mouvementReduit } from '../effets.ts'
+import { SERIE_MS, eclater, effetDepense, effetVente, flotter, mouvementReduit, retarderLeCompteur, volerDesPieces } from '../effets.ts'
 import { Feuille } from '../Feuille.tsx'
 import { ChoixAmelioration } from './Ameliorations.tsx'
 import { BoutonCout, Boutique, COULEURS_RARETE } from './Boutique.tsx'
@@ -55,6 +55,8 @@ const ZOOM_MIN = 60 / PIECE.taille
 const DESSOUS_HUD = 320
 /** La pièce s'écrase puis rebondit, à chaque tape. */
 const ECRASER: Keyframe[] = [{ transform: 'scale(0.96)' }, { transform: 'scale(1.015)', offset: 0.6 }, { transform: 'scale(1)' }]
+/** Le vol d'une pièce de la barre à la réserve (`volerDesPieces`) : le compte de la réserve attend ce temps. */
+const VOL_MS = 560
 /** Ce qui refuse : un petit non de la tête. */
 const SECOUER: Keyframe[] = [{ transform: 'translateX(0)' }, { transform: 'translateX(-10px)', offset: 0.2 }, { transform: 'translateX(9px)', offset: 0.45 }, { transform: 'translateX(-5px)', offset: 0.7 }, { transform: 'translateX(0)' }]
 /** Une horloge plus rapide que ça ne fait plus flotter ses lots : la pulsation suffit. */
@@ -648,29 +650,18 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rayon, bas])
 
-  // LA BARRE DE LA MINE se remplit en continu entre deux passages du moteur (une fois par seconde, et à chaque tape) ; une barre pleine envoie sa pièce dans la réserve, qui sursaute.
+  // LA BARRE DE LA MINE : posée image par image ; avec l'auto, elle avance en continu entre deux passages du moteur (une fois par seconde, et à chaque tape).
   useEffect(() => {
     let image = 0
     let vu = { progres: Number.NaN, t: 0 }
-    let barres = j.journal.barres
     const pas = (maintenant: number): void => {
       const mine = j.producteurs.find(estMine)
       const el = mine === undefined ? undefined : producteursEl.current.get(mine.id)
       if (mine !== undefined && el !== undefined) {
         if (mine.progres !== vu.progres) vu = { progres: mine.progres, t: maintenant }
-        const montre = mineArretee(j, mine) ? 0 : Math.min(1, vu.progres + (maintenant - vu.t) / 1000 / dureeBarre(j))
+        const montre = mineArretee(j, mine) ? 0 : Math.min(1, vu.progres + ((maintenant - vu.t) / 1000) * vitesseAuto(j))
         const remplie = el.querySelector<HTMLElement>('.mine-barre-remplie')
         if (remplie !== null) remplie.style.transform = `scaleX(${montre})`
-        if (j.journal.barres !== barres) {
-          const k = j.journal.barres - barres
-          barres = j.journal.barres
-          const reserve = el.querySelector<HTMLElement>('.reserve')
-          const r = reserve?.getBoundingClientRect()
-          if (k > 0 && r !== undefined && !mouvementReduit()) {
-            flotterOr(r.left + r.width / 2, r.top + 4, k * orParBarre(j, mine), 0.9)
-            reserve?.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.06)', offset: 0.3 }, { transform: 'scale(1)' }], { duration: 260, easing: 'ease-out' })
-          }
-        }
       }
       image = requestAnimationFrame(pas)
     }
@@ -678,6 +669,36 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     return () => cancelAnimationFrame(image)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // LA PIÈCE D'UNE BARRE PLEINE VOLE DE LA BARRE À LA RÉSERVE (Keko, 02/11 : « le lien entre la barre et la réserve n'est pas hyper clair ») : le compte de
+  // la réserve n'avance qu'à son arrivée. Le retard se pose PENDANT le rendu, avant que le compteur de la réserve (un enfant) ne voie sa nouvelle valeur.
+  const mineVue = j.producteurs.find(estMine)
+  const barresVues = useRef(j.journal.barres)
+  const reserveVue = useRef(mineVue?.reserve ?? 0)
+  const piecesAVoler = useRef(0)
+  if (j.journal.barres !== barresVues.current) {
+    const k = j.journal.barres - barresVues.current
+    barresVues.current = j.journal.barres
+    if (k > 0 && mineVue !== undefined && mineVue.reserve > reserveVue.current && !mouvementReduit()) {
+      piecesAVoler.current += k
+      retarderLeCompteur('reserve', VOL_MS)
+    }
+  }
+  reserveVue.current = mineVue?.reserve ?? 0
+  useEffect(() => {
+    const k = piecesAVoler.current
+    if (k <= 0) return
+    piecesAVoler.current = 0
+    const el = mineVue === undefined ? undefined : producteursEl.current.get(mineVue.id)
+    const depuis = el?.querySelector('.mine-barre-gain .symbole-piece')?.getBoundingClientRect()
+    const reserve = el?.querySelector<HTMLElement>('.reserve')
+    const vers = reserve?.querySelector('.reserve-texte .symbole-piece')?.getBoundingClientRect()
+    if (depuis === undefined || vers === undefined) return
+    volerDesPieces(depuis, vers, Math.min(5, k), (rang) => {
+      sonPiece(rang)
+      reserve?.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.06)', offset: 0.3 }, { transform: 'scale(1)' }], { duration: 240, easing: 'ease-out' })
+    })
+  })
 
   // LES LOTS DES HORLOGES flottent au-dessus de leur source, à son rythme — quand il est assez lent pour qu'on les lise.
   useEffect(() => {
@@ -727,10 +748,10 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
   if (debut)
     indice = (
       <>
-        La mine remplit sa barre seule : 1 <SymbolePiece /> par barre. Tapez-la pour aller plus vite.
+        Tapez la mine pour remplir sa barre : 1 <SymbolePiece /> par barre pleine.
       </>
     )
-  else if (rien && mine !== undefined && j.journal.recoltes === 0 && mine.reserve >= 1) indice = 'Les pièces s’accumulent dans la réserve : tapez-la pour les récolter.'
+  else if (rien && mine !== undefined && j.journal.recoltes === 0 && mine.reserve >= 1) indice = 'Chaque barre pleine met sa pièce dans la réserve : tapez-la pour les récolter.'
   else if (rien && mine !== undefined && mineArretee(j, mine)) indice = 'La réserve est pleine : tapez-la, la mine s’est arrêtée.'
   else if (rien) indice = null
   else if (aSources && raffineries.length === 0 && !peutPayer(j, coutR1)) indice = `Une raffinerie coûte ${coutR1.quantite} ronds d’une couleur : tapez vos sources.`
@@ -1138,7 +1159,8 @@ function Reserve({ j, p }: { j: Joueur; p: Producteur }): ReactElement {
     <span className={`reserve${pleine ? ' reserve-pleine' : ''}`} data-cliquable data-reserve data-id={p.id} aria-label="Récolter la réserve">
       <span className="reserve-jauge" style={{ width: `${(100 * Math.min(capacite, p.reserve)) / capacite}%` }} />
       <span className="reserve-texte">
-        {possede(p.reserve)} / {capacite} <SymbolePiece />
+        <span className="reserve-nom">Réserve</span>
+        <Compteur valeur={p.reserve} cle="reserve" format={possede} duree={200} /> / {capacite} <SymbolePiece />
       </span>
     </span>
   )
@@ -1179,7 +1201,6 @@ function TexteProducteur({ j, p, b, actif }: { j: Joueur; p: Producteur; b: Retu
         <span className="mine-production">
           <span className="mine-barre">
             <span className="mine-barre-remplie" />
-            <span className="mine-barre-texte">{abregeFin(dureeBarre(j))} s</span>
           </span>
           <span className="mine-barre-gain">
             +{abregeFin(b.lot)} <SymbolePiece />

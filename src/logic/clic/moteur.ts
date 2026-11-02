@@ -25,8 +25,8 @@
  * n'y sert qu'à échanger.
  *
  * LE DÉPART (Keko, 02/11) : la partie s'ouvre sur LA MINE D'OR seule, un carré
- * fixe au centre du plan : sa barre se remplit seule, chaque barre pleine met
- * de l'or dans sa réserve, une tape avance la barre (`avancerBarre`). Les
+ * fixe au centre du plan : la tape remplit sa barre (seule, avec l'amélioration
+ * « auto »), chaque barre pleine met de l'or dans sa réserve (`avancerBarre`). Les
  * sources de couleur ne sont plus offertes ; le reste du moteur est là, et se
  * dévoilera quand Keko posera les briques suivantes (donjons, héros, ateliers).
  */
@@ -542,12 +542,12 @@ export function bilanProducteur(j: Joueur, p: Producteur): Bilan {
   return bilan(lotDeBase(p), modulesDe(j, p), multiplicateurPrestige(j))
 }
 
-/** Le temps qu'une barre de la mine met à se remplir seule, en secondes : la cadence la raccourcit. */
-export function dureeBarre(j: Joueur): number {
-  return EFFETS_MINE.barre / (1 + EFFETS_MINE.cadence * j.ameliorations.cadence)
+/** Ce que la barre de la mine se remplit seule par seconde (en barres) : rien de base, l'amélioration « auto ». */
+export function vitesseAuto(j: Joueur): number {
+  return EFFETS_MINE.auto * j.ameliorations.auto
 }
 
-/** Ce qu'une tape avance la barre, en secondes, avant le critique et l'élan : la pioche l'allonge (en nombre), la puissance la multiplie. */
+/** Ce qu'une tape remplit de la barre (en barres), avant le critique et l'élan : la pioche l'allonge (en nombre), la puissance la multiplie. */
 export function avanceTape(j: Joueur): number {
   const n = j.ameliorations
   return (EFFETS_MINE.tape + EFFETS_MINE.pioche * n.pioche) * (1 + EFFETS_MINE.puissance * n.puissance)
@@ -559,19 +559,18 @@ export function orParBarre(j: Joueur, p: Producteur): number {
 }
 
 /**
- * LE BILAN DE LA MINE, par ses améliorations : la barre se remplit seule à sa
- * cadence (la fréquence : des barres par seconde), et chaque barre vaut son
- * or ; une tape vaut la part de barre qu'elle avance (en or), un critique la
- * multiplie.
+ * LE BILAN DE LA MINE, par ses améliorations : la barre se remplit seule à la
+ * vitesse de l'auto (la fréquence : des barres par seconde), et chaque barre
+ * vaut son or ; une tape vaut la part de barre qu'elle remplit (en or), un
+ * critique la multiplie.
  */
 export function bilanMine(j: Joueur, p: Producteur): Bilan {
   const n = j.ameliorations
   const lot = orParBarre(j, p)
-  const duree = dureeBarre(j)
-  const tape = (lot * avanceTape(j)) / duree
+  const tape = lot * avanceTape(j)
   const chanceCritique = Math.min(1, EFFETS_MINE.critique * n.critique)
   const multCritique = EFFETS_MINE.critiqueBase + EFFETS_MINE.forceCritique * n.forceCritique
-  const frequence = 1 / duree
+  const frequence = vitesseAuto(j)
   return { lot, lotMoyen: lot, tape, tapeMoyenne: tape * (1 + (multCritique - 1) * chanceCritique), chanceCritique, chanceGrosLot: 0, frequence, debit: lot * frequence, multCritique }
 }
 
@@ -580,10 +579,10 @@ export function mineArretee(j: Joueur, p: Producteur): boolean {
   return reservePleine(j, p) && partTropPlein(j) <= 0
 }
 
-/** Avance la barre de la mine de tant de secondes ; chaque barre pleine met son or dans la réserve. Rend le nombre de barres remplies. */
-function avancerBarre(j: Joueur, p: Producteur, secondes: number): number {
-  if (secondes <= 0 || mineArretee(j, p)) return 0
-  p.progres = (p.progres ?? 0) + secondes / dureeBarre(j)
+/** Remplit la barre de la mine de tant de barres ; chaque barre pleine met son or dans la réserve. Rend le nombre de barres remplies. */
+function avancerBarre(j: Joueur, p: Producteur, part: number): number {
+  if (part <= 0 || mineArretee(j, p)) return 0
+  p.progres = (p.progres ?? 0) + part
   const barres = Math.floor(p.progres + 1e-9)
   if (barres <= 0) return 0
   p.progres = Math.max(0, p.progres - barres)
@@ -752,7 +751,7 @@ export interface Coup {
   or: boolean
   /** Une pépite est tombée. */
   pepite?: boolean
-  /** La mine : ce que la tape a avancé sa barre, en secondes (0 : la barre est arrêtée). */
+  /** La mine : ce que la tape a rempli de sa barre (0 : la barre est arrêtée). */
   avance?: number
 }
 
@@ -1437,9 +1436,9 @@ export function avancer(m: Monde, dt: number): void {
   for (const j of m.joueurs) {
     const ordonnes = [...j.producteurs].sort((a, b) => ORDRE[genreDe(a)] - ORDRE[genreDe(b)])
     for (const p of ordonnes) {
-      // LA MINE remplit sa barre toute seule ; ses barres pleines vont dans la réserve, qu'il faut récolter.
+      // LA MINE remplit sa barre toute seule si l'amélioration « auto » le permet ; ses barres pleines vont dans la réserve, qu'il faut récolter.
       if (estMine(p)) {
-        avancerBarre(j, p, dt * 3600)
+        avancerBarre(j, p, vitesseAuto(j) * dt * 3600)
         continue
       }
       const b = bilanProducteur(j, p)

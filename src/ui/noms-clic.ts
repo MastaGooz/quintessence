@@ -63,7 +63,7 @@ export const NOM_AMELIORATION: Record<IdAmelioration, string> = {
   forceCritique: 'Force du critique',
   elan: 'Élan',
   pepite: 'Pépites',
-  cadence: 'Cadence',
+  auto: 'Automatique',
   reserve: 'Grande réserve',
   prime: 'Prime de réserve pleine',
   tropPlein: 'Trop-plein',
