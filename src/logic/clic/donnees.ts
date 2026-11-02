@@ -205,10 +205,12 @@ export const MINE: TypeProducteur = { id: 'mine', genre: 'mine', cout: { forme: 
  * première demande `bouton` or (l'or compte depuis son début), se RÉCLAME
  * d'une tape et fait apparaître LE BOUTON DES AMÉLIORATIONS de la mine, dont
  * le menu fait monter son niveau (voir `NIVEAU_MINE`). Les suivantes
- * demandent un niveau de la mine : sans récompense à elles (le niveau donne
- * déjà la sienne), elles s'accomplissent d'elles-mêmes quand il est atteint.
- * Chaque niveau gagné, à partir du deuxième, offre `offre` améliorations au
- * choix.
+ * demandent un niveau de la mine : sans récompense, elles s'accomplissent
+ * d'elles-mêmes quand il est atteint. L'amélioration d'un niveau n'est PAS
+ * leur récompense, c'est l'EFFET DU NIVEAU (Keko, 02/11 : « les améliorations
+ * de niveau ne sont pas les récompenses de quêtes, c'est littéralement
+ * l'effet du level up ») : chaque niveau gagné, à partir du troisième, offre
+ * `offre` améliorations au choix.
  */
 export type Recompense = 'bouton' | 'aucune'
 export interface Quete {

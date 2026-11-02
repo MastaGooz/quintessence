@@ -144,11 +144,12 @@ export function MenuAmeliorations({ j, onMonter, onChoisir, onFermer }: { j: Jou
   )
 }
 
-/** LE CHOIX d'une quête : les cartes de l'offre, qui arrivent l'une après l'autre ; une tape en prend une. */
+/** LE CHOIX d'un niveau de la mine — son effet : les cartes de l'offre, qui arrivent l'une après l'autre ; une tape en prend une. */
 export function ChoixAmelioration({ j, onChoisir, onFermer }: { j: Joueur; onChoisir: (id: IdAmelioration, carte: HTMLElement) => void; onFermer: () => void }): ReactElement | null {
   if (j.offre === null) return null
+  const niveau = j.producteurs.find(estMine)?.niveau ?? 1
   return (
-    <Feuille titre="Une amélioration au choix" onFermer={onFermer}>
+    <Feuille titre={`Niveau ${niveau} : une amélioration au choix`} onFermer={onFermer}>
       <div className="choix-ameliorations">
         {j.offre.map((id, k) => (
           <button key={id} type="button" className="amelioration-carte" style={{ animationDelay: `${120 + k * 110}ms` }} onClick={(e) => onChoisir(id, e.currentTarget)}>

@@ -1194,7 +1194,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
           </div>
         )}
         <div className={`carte-actions${avecBarre ? ' carte-actions-barre' : ''}`}>
-          <Objectif j={j} refCarte={objectifEl} onReclamer={reclamerIci} onChoisir={() => setChoixOuvert(true)} />
+          <Objectif j={j} refCarte={objectifEl} onReclamer={reclamerIci} />
           {indice !== null && <p className="carte-indice">{indice}</p>}
           <div className="carte-actions-ligne">
             {boutiqueVisible && (
@@ -1289,36 +1289,12 @@ function manquesDe(j: Joueur, p: Producteur): { sorte: number; quantite: number 
 }
 
 /**
- * L'OBJECTIF du moment, au-dessus des commandes : la QUÊTE en cours (Keko,
- * 02/11 : « commencer avec une quête : gagner X or, qui en récompense débloque
- * l'amélioration qui automatise »), sa jauge et sa récompense, « Réclamer »
- * quand elle est remplie ; puis l'amélioration qu'elle a débloquée, à acheter.
+ * L'OBJECTIF du moment, au-dessus des commandes : la QUÊTE en cours, sa jauge,
+ * sa récompense s'il y en a une, « Réclamer » quand elle est remplie. Le choix
+ * d'un niveau de la mine n'y passe pas : c'est l'effet du niveau, pas une
+ * récompense de quête (Keko, 02/11) ; il attend dans le menu de la mine.
  */
-function Objectif({
-  j,
-  refCarte,
-  onReclamer,
-  onChoisir,
-}: {
-  j: Joueur
-  refCarte: React.RefObject<HTMLDivElement | null>
-  onReclamer: () => void
-  onChoisir: () => void
-}): ReactElement | null {
-  // UN CHOIX EN ATTENTE passe avant tout : la quête suivante compte déjà.
-  if (j.offre !== null) {
-    return (
-      <div key="offre" ref={refCarte} className="objectif objectif-accompli">
-        <span className="objectif-titre">Récompense</span>
-        <span className="objectif-ligne">
-          <span className="objectif-texte">Une amélioration au choix</span>
-          <button type="button" className="bouton-principal respire" onClick={onChoisir}>
-            Choisir
-          </button>
-        </span>
-      </div>
-    )
-  }
+function Objectif({ j, refCarte, onReclamer }: { j: Joueur; refCarte: React.RefObject<HTMLDivElement | null>; onReclamer: () => void }): ReactElement | null {
   const q = queteEnCours(j)
   if (q !== null) {
     const fait = progresQuete(j)
@@ -1438,7 +1414,8 @@ function Reserve({ j, p }: { j: Joueur; p: Producteur }): ReactElement {
  * mine (`data-ameliorer`) et ouvre son menu.
  */
 function BoutonAmeliorer({ j, p }: { j: Joueur; p: Producteur }): ReactElement {
-  const pret = peutMonterLaMine(j, p)
+  // Elle bat quand la mine peut monter, et quand le choix d'un niveau attend.
+  const pret = peutMonterLaMine(j, p) || j.offre !== null
   return (
     <span className={`mine-ameliorer${pret ? ' mine-ameliorer-pret' : ''}`} data-cliquable data-ameliorer data-id={p.id} role="button" aria-label="Améliorations">
       <svg viewBox="0 0 24 24" aria-hidden>
