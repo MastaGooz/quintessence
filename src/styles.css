@@ -2191,6 +2191,24 @@ span.rarete-4,
   color: var(--rouge);
 }
 
+/* LA LISTE DU MARCHÉ : une carte par ressource, sa tendance en petit. */
+.marche-choix .marche-tendance {
+  display: block;
+  width: 100%;
+  height: 2.2rem;
+}
+
+/* Le retour à la liste, en haut de l'écran de trade. */
+.trade-retour {
+  align-self: flex-start;
+  min-height: 2.6rem;
+  border: none;
+  background: transparent;
+  color: var(--creme);
+  padding: 0 0.2rem;
+  opacity: 0.85;
+}
+
 /* LE MARCHÉ EN SALLE DE TRADING (Keko, 02/11) : la ressource, son prix qui bouge, ses bougies, le formulaire d'ordre, les ordres. */
 .trade {
   display: flex;

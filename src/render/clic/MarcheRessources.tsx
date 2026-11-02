@@ -4,9 +4,13 @@
  * le marché était vraiment vivant ; quand on vend ou achète, on renseigne le
  * nombre nous-même et le prix — le prix du marché actuel, et un bouton prix du
  * marché ou prix perso, auquel cas l'ordre se lance quand le prix demandé
- * trouve un acheteur ») : la ressource choisie, son prix qui bouge, ses
- * bougies ; acheter ou vendre ; la quantité ; au prix du marché ou à son prix ;
- * les ordres en attente (annulables) et les derniers exécutés.
+ * trouve un acheteur ») : d'abord LA LISTE des ressources — leur prix, leur
+ * tendance —, puis L'ÉCRAN DE TRADE de celle qu'on a touchée (Keko : « un
+ * écran de sélection de la ressource à trader avant l'écran de trade ; on
+ * garde la sélection en haut de l'écran de trade pour acheter/vendre ») :
+ * acheter ou vendre ; son prix qui bouge, ses bougies ; la quantité ; au prix
+ * du marché ou à son prix ; les ordres en attente (annulables) et les derniers
+ * exécutés.
  */
 import { useState, type ReactElement } from 'react'
 import { MARCHE_RESSOURCES, RESSOURCES, type Ressource } from '../../logic/clic/donnees.ts'
@@ -28,33 +32,103 @@ const lu = (texte: string): number => Number(texte.replace(',', '.').replace(/\s
 const VUES = 40
 const UNE_HEURE = Math.round(1 / MARCHE_RESSOURCES.bougie)
 
-export function MenuMarche({
-  m,
-  j,
-  onAcheter,
-  onVendre,
-  onPlacer,
-  onAnnuler,
-  onFermer,
-}: {
-  m: Monde
-  j: Joueur
+interface Echanges {
   onAcheter: (r: Ressource, q: number, bouton: HTMLElement) => void
   onVendre: (r: Ressource, q: number, bouton: HTMLElement) => void
   onPlacer: (sens: Sens, r: Ressource, q: number, prix: number, bouton: HTMLElement) => void
   onAnnuler: (id: number) => void
-  onFermer: () => void
-}): ReactElement {
-  const [r, setR] = useState<Ressource>(RESSOURCES[0] ?? 'bois')
+}
+
+export function MenuMarche({ m, j, onFermer, ...echanges }: { m: Monde; j: Joueur; onFermer: () => void } & Echanges): ReactElement {
+  const [choisie, setChoisie] = useState<Ressource | null>(null)
+  return (
+    <Feuille titre={choisie === null ? 'Marché' : `Marché · ${majuscule(NOM_RESSOURCE[choisie])}`} onFermer={onFermer}>
+      {choisie === null ? (
+        <ListeDuMarche m={m} j={j} onChoisir={setChoisie} />
+      ) : (
+        <EcranDeTrade key={choisie} m={m} j={j} r={choisie} onRetour={() => setChoisie(null)} {...echanges} />
+      )}
+    </Feuille>
+  )
+}
+
+/** La variation du prix d'une ressource sur l'heure écoulée (de −1 à …). */
+function variationSurUneHeure(m: Monde, r: Ressource): number {
+  const bougies = bougiesRessource(m, r)
+  const ilYAUneHeure = bougies[bougies.length - 1 - UNE_HEURE]?.c ?? bougies[0]?.o ?? prixPleinRessource(r)
+  return prixRessource(m, r) / ilYAUneHeure - 1
+}
+
+/** « ▲ 3,1 % », en vert ou en rouge. */
+function Variation({ v }: { v: number }): ReactElement {
+  return (
+    <span className={v >= 0 ? 'trade-hausse' : 'trade-baisse'}>
+      {v >= 0 ? '▲' : '▼'} {Math.abs(v * 100).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} %
+    </span>
+  )
+}
+
+/** LA LISTE DES RESSOURCES À TRADER : une carte chacune — son prix, sa variation sur l'heure, sa tendance, ce qu'on en a, ses ordres en attente ; une tape ouvre son écran de trade. */
+function ListeDuMarche({ m, j, onChoisir }: { m: Monde; j: Joueur; onChoisir: (r: Ressource) => void }): ReactElement {
+  return (
+    <div className="choix-ameliorations">
+      {RESSOURCES.map((r, k) => {
+        const v = variationSurUneHeure(m, r)
+        const enAttente = (j.ordres ?? []).filter((o) => o.ressource === r).length
+        return (
+          <button key={r} type="button" className="amelioration-carte marche-choix" style={{ animationDelay: `${120 + k * 110}ms` }} onClick={() => onChoisir(r)}>
+            <span className="amelioration-tete">
+              <b className="amelioration-nom">
+                <SymboleRessource ressource={r} /> {majuscule(NOM_RESSOURCE[r])}
+              </b>
+              <span>
+                <b className="prix-grand">{deuxDecimales(prixRessource(m, r))}</b> <SymbolePiece />
+              </span>
+            </span>
+            <Tendance bougies={bougiesRessource(m, r)} hausse={v >= 0} />
+            <span className="amelioration-tete">
+              <span className="sourd petit">
+                vous en avez {possede(stockRessource(j, r))}
+                {enAttente > 0 ? ` · ${enAttente} ordre${enAttente > 1 ? 's' : ''} en attente` : ''}
+              </span>
+              <span className="petit">
+                <Variation v={v} /> <span className="sourd">sur 1 h</span>
+              </span>
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/** La tendance en petit : les clôtures des dernières bougies, en vert si le prix a monté sur l'heure, en rouge sinon. */
+function Tendance({ bougies, hausse }: { bougies: Bougie[]; hausse: boolean }): ReactElement {
+  const L = 300
+  const H = 36
+  const points = bougies.slice(-VUES).map((b) => b.c)
+  if (points.length < 2) return <svg className="marche-tendance" viewBox={`0 0 ${L} ${H}`} aria-hidden />
+  const bas = Math.min(...points)
+  const haut = Math.max(...points)
+  const ecart = Math.max(1e-6, haut - bas)
+  const chemin = points.map((p, i) => `${((i / (points.length - 1)) * L).toFixed(1)},${(H - 3 - ((p - bas) / ecart) * (H - 6)).toFixed(1)}`).join(' ')
+  return (
+    <svg className="marche-tendance" viewBox={`0 0 ${L} ${H}`} preserveAspectRatio="none" aria-hidden>
+      <polyline points={chemin} fill="none" stroke={hausse ? '#5fd38d' : '#ff6b7a'} strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** L'ÉCRAN DE TRADE d'une ressource : acheter ou vendre en haut, puis son prix, ses bougies, l'ordre, les ordres. */
+function EcranDeTrade({ m, j, r, onRetour, onAcheter, onVendre, onPlacer, onAnnuler }: { m: Monde; j: Joueur; r: Ressource; onRetour: () => void } & Echanges): ReactElement {
   const [sens, setSens] = useState<Sens>('achat')
   const [quantiteTexte, setQuantiteTexte] = useState('5')
   const [perso, setPerso] = useState(false)
-  const [prixTexte, setPrixTexte] = useState('')
+  const [prixTexte, setPrixTexte] = useState(() => deuxDecimales(prixRessource(m, r)))
 
   const prix = prixRessource(m, r)
   const bougies = bougiesRessource(m, r)
-  const ilYAUneHeure = bougies[bougies.length - 1 - UNE_HEURE]?.c ?? bougies[0]?.o ?? prixPleinRessource(r)
-  const variation = prix / ilYAUneHeure - 1
+  const variation = variationSurUneHeure(m, r)
   const stock = Math.floor(stockRessource(j, r) + 1e-9)
   const q = Math.max(0, Math.floor(lu(quantiteTexte) || 0))
   const limite = Math.max(0.01, Math.round((lu(prixTexte) || 0) * 100) / 100)
@@ -65,10 +139,6 @@ export function MenuMarche({
   const executes = [...(j.executes ?? [])].reverse().slice(0, 5)
   const symbole = <SymboleRessource ressource={r} />
 
-  const choisirRessource = (x: Ressource): void => {
-    setR(x)
-    setPrixTexte(deuxDecimales(prixRessource(m, x)))
-  }
   const passerEnPerso = (oui: boolean): void => {
     setPerso(oui)
     if (oui) setPrixTexte(deuxDecimales(prix))
@@ -77,144 +147,137 @@ export function MenuMarche({
   const prixDe = (n: number): void => setPrixTexte(deuxDecimales(Math.max(0.01, Math.round(n * 100) / 100)))
 
   return (
-    <Feuille titre="Marché" onFermer={onFermer}>
-      <div className="trade">
-        {/* La ressource. */}
-        <div className="trade-onglets">
-          {RESSOURCES.map((x) => (
-            <button key={x} type="button" className={x === r ? 'onglet-actif' : ''} onClick={() => choisirRessource(x)}>
-              <SymboleRessource ressource={x} /> {majuscule(NOM_RESSOURCE[x])}
-            </button>
-          ))}
-        </div>
+    <div className="trade">
+      <button type="button" className="trade-retour" onClick={onRetour}>
+        ‹ Toutes les ressources
+      </button>
 
-        {/* Son prix, qui bouge, et sa variation sur l'heure. */}
-        <div className="trade-prix">
-          <span>
-            <b className="trade-prix-valeur">{deuxDecimales(prix)}</b> <SymbolePiece /> <span className="sourd petit">l’unité</span>
-          </span>
-          <span className={variation >= 0 ? 'trade-hausse' : 'trade-baisse'}>
-            {variation >= 0 ? '▲' : '▼'} {Math.abs(variation * 100).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} % <span className="sourd petit">sur 1 h</span>
-          </span>
-        </div>
-        <Graphique bougies={bougies} prix={prix} ordres={ordres} />
+      {/* Acheter ou vendre, en haut. */}
+      <div className="trade-onglets trade-sens">
+        <button type="button" className={sens === 'achat' ? 'onglet-actif sens-achat' : ''} onClick={() => setSens('achat')}>
+          Acheter
+        </button>
+        <button type="button" className={sens === 'vente' ? 'onglet-actif sens-vente' : ''} onClick={() => setSens('vente')}>
+          Vendre
+        </button>
+      </div>
 
-        {/* Acheter ou vendre. */}
-        <div className="trade-onglets trade-sens">
-          <button type="button" className={sens === 'achat' ? 'onglet-actif sens-achat' : ''} onClick={() => setSens('achat')}>
-            Acheter
+      {/* Son prix, qui bouge, et sa variation sur l'heure. */}
+      <div className="trade-prix">
+        <span>
+          <SymboleRessource ressource={r} /> <b className="trade-prix-valeur">{deuxDecimales(prix)}</b> <SymbolePiece /> <span className="sourd petit">l’unité</span>
+        </span>
+        <span>
+          <Variation v={variation} /> <span className="sourd petit">sur 1 h</span>
+        </span>
+      </div>
+      <Graphique bougies={bougies} prix={prix} ordres={ordres} />
+
+      {/* La quantité. */}
+      <div className="trade-ligne">
+        <span className="trade-etiquette">Quantité</span>
+        <span className="trade-champ">
+          <button type="button" className="trade-pas" onClick={() => quantite(q - 1)} aria-label="Un de moins">
+            −
           </button>
-          <button type="button" className={sens === 'vente' ? 'onglet-actif sens-vente' : ''} onClick={() => setSens('vente')}>
-            Vendre
+          <input inputMode="numeric" value={quantiteTexte} onChange={(e) => setQuantiteTexte(e.target.value)} aria-label="Quantité" />
+          <button type="button" className="trade-pas" onClick={() => quantite(q + 1)} aria-label="Un de plus">
+            +
           </button>
-        </div>
+        </span>
+      </div>
+      <div className="trade-puces">
+        {MARCHE_RESSOURCES.lots.map((n) => (
+          <button key={n} type="button" onClick={() => quantite(n)}>
+            {n}
+          </button>
+        ))}
+        <button type="button" onClick={() => quantite(max)}>
+          Max · {possede(max)}
+        </button>
+      </div>
 
-        {/* La quantité. */}
+      {/* Le prix : celui du marché, ou le sien. */}
+      <div className="trade-ligne">
+        <span className="trade-etiquette">Prix</span>
+        <span className="trade-onglets trade-mode">
+          <button type="button" className={perso ? '' : 'onglet-actif'} onClick={() => passerEnPerso(false)}>
+            Prix du marché
+          </button>
+          <button type="button" className={perso ? 'onglet-actif' : ''} onClick={() => passerEnPerso(true)}>
+            Prix perso
+          </button>
+        </span>
+      </div>
+      {perso && (
         <div className="trade-ligne">
-          <span className="trade-etiquette">Quantité</span>
+          <span className="trade-etiquette sourd petit">{sens === 'achat' ? 'au plus' : 'au moins'}</span>
           <span className="trade-champ">
-            <button type="button" className="trade-pas" onClick={() => quantite(q - 1)} aria-label="Un de moins">
+            <button type="button" className="trade-pas" onClick={() => prixDe(limite - 0.05)} aria-label="Moins cher">
               −
             </button>
-            <input inputMode="numeric" value={quantiteTexte} onChange={(e) => setQuantiteTexte(e.target.value)} aria-label="Quantité" />
-            <button type="button" className="trade-pas" onClick={() => quantite(q + 1)} aria-label="Un de plus">
+            <input inputMode="decimal" value={prixTexte} onChange={(e) => setPrixTexte(e.target.value)} aria-label="Prix perso" />
+            <button type="button" className="trade-pas" onClick={() => prixDe(limite + 0.05)} aria-label="Plus cher">
               +
             </button>
           </span>
         </div>
-        <div className="trade-puces">
-          {MARCHE_RESSOURCES.lots.map((n) => (
-            <button key={n} type="button" onClick={() => quantite(n)}>
-              {n}
-            </button>
-          ))}
-          <button type="button" onClick={() => quantite(max)}>
-            Max · {possede(max)}
-          </button>
-        </div>
+      )}
 
-        {/* Le prix : celui du marché, ou le sien. */}
-        <div className="trade-ligne">
-          <span className="trade-etiquette">Prix</span>
-          <span className="trade-onglets trade-mode">
-            <button type="button" className={perso ? '' : 'onglet-actif'} onClick={() => passerEnPerso(false)}>
-              Prix du marché
-            </button>
-            <button type="button" className={perso ? 'onglet-actif' : ''} onClick={() => passerEnPerso(true)}>
-              Prix perso
-            </button>
-          </span>
-        </div>
-        {perso && (
-          <div className="trade-ligne">
-            <span className="trade-etiquette sourd petit">{sens === 'achat' ? 'au plus' : 'au moins'}</span>
-            <span className="trade-champ">
-              <button type="button" className="trade-pas" onClick={() => prixDe(limite - 0.05)} aria-label="Moins cher">
-                −
-              </button>
-              <input inputMode="decimal" value={prixTexte} onChange={(e) => setPrixTexte(e.target.value)} aria-label="Prix perso" />
-              <button type="button" className="trade-pas" onClick={() => prixDe(limite + 0.05)} aria-label="Plus cher">
-                +
+      {/* Le total, ce qu'on a, et l'ordre. */}
+      <div className="trade-total">
+        <span>
+          Total : <b className={possible || q === 0 ? '' : 'prix-manque'}>{possede(total)}</b> <SymbolePiece />
+        </span>
+        <span className="sourd petit">
+          vous avez {possede(j.or)} <SymbolePiece /> · {possede(stock)} {symbole}
+        </span>
+      </div>
+      {perso && (
+        <p className="sourd petit trade-explication">
+          L’ordre attend que le prix {sens === 'achat' ? 'descende' : 'monte'} à {deuxDecimales(limite)} <SymbolePiece /> ; {sens === 'achat' ? 'l’or' : LE_RESSOURCE[r]} est mis de côté en attendant.
+        </p>
+      )}
+      <button
+        type="button"
+        className={`trade-valider ${sens === 'achat' ? 'sens-achat' : 'sens-vente'}`}
+        disabled={!possible}
+        onClick={(e) => {
+          if (perso) onPlacer(sens, r, q, limite, e.currentTarget)
+          else if (sens === 'achat') onAcheter(r, q, e.currentTarget)
+          else onVendre(r, q, e.currentTarget)
+        }}
+      >
+        {perso ? 'Poser l’ordre : ' : ''}
+        {sens === 'achat' ? (perso ? 'acheter' : 'Acheter') : perso ? 'vendre' : 'Vendre'} {q} {symbole}
+        {perso ? ` à ${deuxDecimales(limite)}` : ' au prix du marché'}
+      </button>
+
+      {/* Les ordres en attente, les derniers exécutés. */}
+      {ordres.length > 0 && (
+        <div className="trade-liste">
+          <span className="trade-etiquette">Vos ordres en attente</span>
+          {ordres.map((o) => (
+            <span key={o.id} className="trade-ordre">
+              <span className={o.sens === 'achat' ? 'trade-hausse' : 'trade-baisse'}>{o.sens === 'achat' ? 'Achat' : 'Vente'}</span> {o.quantite} {symbole} à {deuxDecimales(o.prix)} <SymbolePiece />
+              <button type="button" onClick={() => onAnnuler(o.id)}>
+                Annuler
               </button>
             </span>
-          </div>
-        )}
-
-        {/* Le total, ce qu'on a, et l'ordre. */}
-        <div className="trade-total">
-          <span>
-            Total : <b className={possible || q === 0 ? '' : 'prix-manque'}>{possede(total)}</b> <SymbolePiece />
-          </span>
-          <span className="sourd petit">
-            vous avez {possede(j.or)} <SymbolePiece /> · {possede(stock)} {symbole}
-          </span>
+          ))}
         </div>
-        {perso && (
-          <p className="sourd petit trade-explication">
-            L’ordre attend que le prix {sens === 'achat' ? 'descende' : 'monte'} à {deuxDecimales(limite)} <SymbolePiece /> ; {sens === 'achat' ? 'l’or' : LE_RESSOURCE[r]} est mis de côté en attendant.
-          </p>
-        )}
-        <button
-          type="button"
-          className={`trade-valider ${sens === 'achat' ? 'sens-achat' : 'sens-vente'}`}
-          disabled={!possible}
-          onClick={(e) => {
-            if (perso) onPlacer(sens, r, q, limite, e.currentTarget)
-            else if (sens === 'achat') onAcheter(r, q, e.currentTarget)
-            else onVendre(r, q, e.currentTarget)
-          }}
-        >
-          {perso ? 'Poser l’ordre : ' : ''}
-          {sens === 'achat' ? 'acheter' : 'vendre'} {q} {symbole}
-          {perso ? ` à ${deuxDecimales(limite)}` : ' au prix du marché'}
-        </button>
-
-        {/* Les ordres en attente, les derniers exécutés. */}
-        {ordres.length > 0 && (
-          <div className="trade-liste">
-            <span className="trade-etiquette">Vos ordres en attente</span>
-            {ordres.map((o) => (
-              <span key={o.id} className="trade-ordre">
-                <span className={o.sens === 'achat' ? 'trade-hausse' : 'trade-baisse'}>{o.sens === 'achat' ? 'Achat' : 'Vente'}</span> {o.quantite} {symbole} à {deuxDecimales(o.prix)} <SymbolePiece />
-                <button type="button" onClick={() => onAnnuler(o.id)}>
-                  Annuler
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-        {executes.length > 0 && (
-          <div className="trade-liste">
-            <span className="trade-etiquette">Derniers ordres exécutés</span>
-            {executes.map((e) => (
-              <span key={e.id} className="trade-ordre sourd">
-                ✓ {e.sens === 'achat' ? 'Achat' : 'Vente'} {e.quantite} <SymboleRessource ressource={e.ressource} /> à {deuxDecimales(e.prix)} → {possede(e.montant)} <SymbolePiece />
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-    </Feuille>
+      )}
+      {executes.length > 0 && (
+        <div className="trade-liste">
+          <span className="trade-etiquette">Derniers ordres exécutés</span>
+          {executes.map((e) => (
+            <span key={e.id} className="trade-ordre sourd">
+              ✓ {e.sens === 'achat' ? 'Achat' : 'Vente'} {e.quantite} <SymboleRessource ressource={e.ressource} /> à {deuxDecimales(e.prix)} → {possede(e.montant)} <SymbolePiece />
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
