@@ -200,8 +200,10 @@ export const FABRICATION = {
 export const MINE: TypeProducteur = { id: 'mine', genre: 'mine', cout: { forme: 0, couleur: null, quantite: 0 }, lot: 1, creux: [_, _, _, _, _, _, _, _], taille: { largeur: 450, hauteur: 450 } }
 
 /**
- * LES QUÊTES, une à la fois, sans fin (Keko, 02/11 : « quête 1 : gagner 10,
- * quête 2 : améliorer la mine au niveau 2, quête 3 : au niveau 3, etc. »). La
+ * LES QUÊTES, une à la fois, trois en tout (Keko, 02/11 : « quête 1 : gagner
+ * 10, quête 2 : améliorer la mine au niveau 2, quête 3 : au niveau 3 », puis
+ * « on arrête au niveau 3, ensuite on arrête les quêtes ») : la dernière
+ * demande la mine au niveau `dernierNiveau`. La
  * première demande `bouton` or (l'or compte depuis son début), se RÉCLAME
  * d'une tape et fait apparaître LE BOUTON DES AMÉLIORATIONS de la mine, dont
  * le menu fait monter son niveau (voir `NIVEAU_MINE`). Les suivantes
@@ -220,7 +222,7 @@ export interface Quete {
   but: number
   recompense: Recompense
 }
-export const QUETE_CHOIX = { bouton: 10, offre: 3 }
+export const QUETE_CHOIX = { bouton: 10, dernierNiveau: 3, offre: 3 }
 
 /**
  * LE NIVEAU DE LA MINE (Keko, 02/11 : « le bouton amélioration ouvre le menu

@@ -578,19 +578,20 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     const prix = prixNiveauMine(mine)
     const gain = gainNiveauMine(j)
     const queteAvant = j.quete
+    const carteAvant = objectifEl.current?.getBoundingClientRect()
     const fait = { ok: false }
     agir(() => {
       fait.ok = monterLaMine(m, j, mine)
     })
     if (!fait.ok) return
-    // LA QUÊTE DU NIVEAU est accomplie : sa carte éclate, la suivante naît à sa place.
+    // LA QUÊTE DU NIVEAU est accomplie : sa carte éclate, la suivante naît à sa place — ou, après la dernière, il n'y en a plus.
     if (j.quete > queteAvant) {
       window.setTimeout(() => {
         const carte = objectifEl.current
-        if (carte === null) return
-        const r = carte.getBoundingClientRect()
+        const r = carte?.getBoundingClientRect() ?? carteAvant
+        if (r === undefined) return
         sonEtape()
-        carte.classList.add('piece-nait')
+        carte?.classList.add('piece-nait')
         eclater(r.left + r.width / 2, r.top + r.height / 2, 26)
         flotter(r.left + r.width / 2, r.top - 6, 'Quête accomplie !', 'flottant-or', 1.2)
       }, 380)
@@ -1312,9 +1313,12 @@ function Objectif({ j, refCarte, onReclamer }: { j: Joueur; refCarte: React.RefO
             </>
           )}
         </span>
-        <span className="objectif-jauge">
-          <span style={{ width: `${(100 * fait) / but}%` }} />
-        </span>
+        {/* Une jauge pour l'or à gagner ; pas pour un niveau de la mine (Keko, 02/11). */}
+        {q.objectif === 'or' && (
+          <span className="objectif-jauge">
+            <span style={{ width: `${(100 * fait) / but}%` }} />
+          </span>
+        )}
         <span className="objectif-ligne">
           <span className="petit sourd">
             {q.objectif === 'niveau' ? (

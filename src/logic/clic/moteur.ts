@@ -997,10 +997,12 @@ export function ameliorerSource(j: Joueur, p: Producteur): boolean {
 // ---------------------------------------------------------------------------
 // LES QUÊTES ET CE QU'ELLES DÉBLOQUENT
 
-/** La quête en cours : la première, gagner de l'or, ouvre le menu des améliorations ; les suivantes demandent la mine au niveau 2, 3… */
+/** La quête en cours : la première, gagner de l'or, ouvre le menu des améliorations ; les suivantes demandent la mine au niveau 2, puis 3 ; ensuite, plus de quête (null). */
 export function queteEnCours(j: Joueur): Quete | null {
   if (j.quete === 0) return { id: 'bouton', objectif: 'or', but: QUETE_CHOIX.bouton, recompense: 'bouton' }
-  return { id: `niveau-${j.quete + 1}`, objectif: 'niveau', but: j.quete + 1, recompense: 'aucune' }
+  const niveau = j.quete + 1
+  if (niveau > QUETE_CHOIX.dernierNiveau) return null
+  return { id: `niveau-${niveau}`, objectif: 'niveau', but: niveau, recompense: 'aucune' }
 }
 
 /** Ce que la quête en cours demande : l'or à gagner, ou le niveau de la mine. */
