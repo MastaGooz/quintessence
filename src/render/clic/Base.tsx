@@ -1008,9 +1008,11 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     reservesVues.current.set(p.id, entiere)
   }
   useEffect(() => {
+    // Une feuille ouverte (le marché, un menu) cache la carte : ses gains automatiques s'y font sans bruit, leurs pièces ne volent pas par-dessus (Keko, 02/11).
+    const carteCachee = document.querySelector('.voile') !== null
     for (const [id, gain] of aVerser.current) {
       const p = producteurDe(j, id)
-      if (p !== undefined && gain > 0) lacherLaPiece(producteursEl.current.get(id), p, gain, true)
+      if (p !== undefined && gain > 0 && !carteCachee) lacherLaPiece(producteursEl.current.get(id), p, gain, true)
     }
     aVerser.current.clear()
   })
