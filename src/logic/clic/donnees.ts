@@ -238,17 +238,19 @@ export const AMELIORATIONS: readonly { id: IdAmelioration; max: number; requiert
   { id: 'auto', max: 20, requiert: null },
   { id: 'reserve', max: 99, requiert: null },
   { id: 'prime', max: 99, requiert: null },
-  // Sans remplissage automatique, une réserve pleine ne déborde jamais : le trop-plein ne ferait rien.
-  { id: 'tropPlein', max: 10, requiert: 'auto' },
+  // La barre se remplit un peu seule dès le départ : une réserve pleine déborde déjà, le trop-plein a un effet.
+  { id: 'tropPlein', max: 10, requiert: null },
 ]
 
 /**
  * LA MINE, UN MOYEN GARANTI MAIS FAIBLE (Keko, 02/11 : « les vrais gains
  * viendront plus tard du commerce et des productions ») : une BARRE que la
  * TAPE remplit, de `tape` (une fraction de barre) à chaque coup ; chaque barre
- * pleine met `orParBarre` or dans la réserve. DE BASE, LA BARRE NE SE REMPLIT
- * PAS SEULE (Keko : « on doit cliquer, finalement ; l'auto devient un
- * remplissage en % de la barre toutes les secondes, une amélioration »).
+ * pleine met `orParBarre` or dans la réserve. La barre se remplit aussi SEULE,
+ * un peu, dès le départ : `autoBase` par seconde ; l'amélioration « auto »
+ * l'accélère (Keko : « l'auto devient un remplissage en % de la barre toutes
+ * les secondes » ; puis « l'automatisation dès le départ à 0,5 %, et le clic
+ * à 5 % »).
  *
  * CE QUE FAIT CHAQUE NIVEAU D'AMÉLIORATION (chiffres de moi, à rejuger) :
  * - pioche : une tape remplit `pioche` de barre de plus (en nombre — Keko) ;
@@ -259,14 +261,15 @@ export const AMELIORATIONS: readonly { id: IdAmelioration; max: number; requiert
  *   précédente, jusqu'à `elanPlafond` (les deux par niveau) ;
  * - pepite : `pepiteChance` par tape qu'une pépite tombe ; tapée avant
  *   `pepiteDuree` secondes, elle met `pepiteValeur` or dans la bourse ;
- * - auto : la barre se remplit seule de `auto` par seconde ;
+ * - auto : la barre se remplit seule de `auto` de plus par seconde ;
  * - reserve : la réserve contient 50 % de plus ;
  * - prime : une réserve PLEINE récoltée rapporte 25 % de plus ;
  * - tropPlein : la réserve pleine laisse couler 10 % de l'or dans la bourse.
  */
 export const EFFETS_MINE = {
   orParBarre: 1,
-  tape: 0.1,
+  tape: 0.05,
+  autoBase: 0.005,
   pioche: 0.1,
   puissance: 0.25,
   critique: 0.05,

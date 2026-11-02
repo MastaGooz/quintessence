@@ -25,8 +25,8 @@
  * n'y sert qu'à échanger.
  *
  * LE DÉPART (Keko, 02/11) : la partie s'ouvre sur LA MINE D'OR seule, un carré
- * fixe au centre du plan : la tape remplit sa barre (seule, avec l'amélioration
- * « auto »), chaque barre pleine met de l'or dans sa réserve (`avancerBarre`). Les
+ * fixe au centre du plan : la tape remplit sa barre (elle se remplit aussi
+ * seule, un peu, plus avec l'amélioration « auto »), chaque barre pleine met de l'or dans sa réserve (`avancerBarre`). Les
  * sources de couleur ne sont plus offertes ; le reste du moteur est là, et se
  * dévoilera quand Keko posera les briques suivantes (donjons, héros, ateliers).
  */
@@ -542,9 +542,9 @@ export function bilanProducteur(j: Joueur, p: Producteur): Bilan {
   return bilan(lotDeBase(p), modulesDe(j, p), multiplicateurPrestige(j))
 }
 
-/** Ce que la barre de la mine se remplit seule par seconde (en barres) : rien de base, l'amélioration « auto ». */
+/** Ce que la barre de la mine se remplit seule par seconde (en barres) : un peu dès le départ, plus avec l'amélioration « auto ». */
 export function vitesseAuto(j: Joueur): number {
-  return EFFETS_MINE.auto * j.ameliorations.auto
+  return EFFETS_MINE.autoBase + EFFETS_MINE.auto * j.ameliorations.auto
 }
 
 /** Ce qu'une tape remplit de la barre (en barres), avant le critique et l'élan : la pioche l'allonge (en nombre), la puissance la multiplie. */
@@ -1442,7 +1442,7 @@ export function avancer(m: Monde, dt: number): void {
   for (const j of m.joueurs) {
     const ordonnes = [...j.producteurs].sort((a, b) => ORDRE[genreDe(a)] - ORDRE[genreDe(b)])
     for (const p of ordonnes) {
-      // LA MINE remplit sa barre toute seule si l'amélioration « auto » le permet ; ses barres pleines vont dans la réserve, qu'il faut récolter.
+      // LA MINE remplit sa barre toute seule, un peu de base, plus avec l'amélioration « auto » ; ses barres pleines vont dans la réserve, qu'il faut récolter.
       if (estMine(p)) {
         avancerBarre(j, p, vitesseAuto(j) * dt * 3600)
         continue
