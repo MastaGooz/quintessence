@@ -148,6 +148,9 @@ function centre(r: DOMRect): [number, number] {
   return [r.left + r.width / 2, r.top + r.height / 2]
 }
 
+/** Le temps de vol d'une pièce (ms) : un compteur qui l'attend se retarde d'autant. */
+export const DUREE_VOL = 560
+
 /**
  * Des pièces qui volent en arc de `depuis` à `vers`, décalées l'une après
  * l'autre. `onArrivee` est appelé à chaque atterrissage. Rend l'instant (ms)
@@ -160,7 +163,7 @@ export function volerDesPieces(depuis: DOMRect, vers: DOMRect, n: number, onArri
   }
   const [x0, y0] = centre(depuis)
   const [x1, y1] = centre(vers)
-  const DUREE = 560
+  const DUREE = DUREE_VOL
   const ECART = 55
   for (let i = 0; i < n; i++) {
     const px = x0 + (Math.random() - 0.5) * Math.min(depuis.width, 120) * 0.6

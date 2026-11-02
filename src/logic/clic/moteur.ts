@@ -52,10 +52,8 @@ export interface Producteur {
   niveau: number
   /** Mine : les pièces ENTIÈRES qui attendent d'être récoltées (voir `RESERVE_MINE`). */
   reserve: number
-  /** Mine : où en est sa barre, de 0 à 1. */
+  /** Mine : où en est sa barre, de 0 à 1 ; la tape et l'automatique la remplissent ensemble. */
   progres: number
-  /** Mine : la pièce que l'automatique est en train de remplir, de 0 à 1 (absente des parties d'avant : 0). */
-  entamee: number
 }
 
 /** UN MODULE : une pièce d'une couleur et d'une forme, d'une rareté, emboîtée sur un générateur ou dans la soute. */
@@ -148,7 +146,7 @@ const PAS_Y = 3 * CASE
 
 /** Ce qu'un joueur a au départ (et après un prestige) : la mine d'or seule, au centre du plan. */
 function depart(): Producteur[] {
-  return [{ id: 1, type: TYPE_MINE, x: 0, y: 0, couleur: 0, forme: 0, niveau: 1, reserve: 0, progres: 0, entamee: 0 }]
+  return [{ id: 1, type: TYPE_MINE, x: 0, y: 0, couleur: 0, forme: 0, niveau: 1, reserve: 0, progres: 0 }]
 }
 
 export function nouveauJoueur(id: number, nom: string): Joueur {
@@ -584,7 +582,7 @@ export function mineArretee(j: Joueur, p: Producteur): boolean {
   return reservePleine(j, p) && partTropPlein(j) <= 0
 }
 
-/** Remplit la barre de la mine de tant de barres (à la tape) ; chaque barre pleine paie son or dans la bourse. Rend le nombre de barres remplies. */
+/** Remplit la barre de la mine de tant de barres (à la tape, ou le trop-plein) ; chaque barre pleine paie son or dans la bourse. Rend le nombre de barres remplies. */
 function avancerBarre(j: Joueur, p: Producteur, part: number): number {
   if (part <= 0) return 0
   p.progres = (p.progres ?? 0) + part
@@ -707,32 +705,31 @@ export function reservePleine(j: Joueur, p: Producteur): boolean {
 }
 
 /**
- * L'or automatique remplit la PIÈCE ENTAMÉE de la mine, et chaque pièce
- * entière entre dans la réserve, jusqu'à sa capacité (Keko, 02/11 :
- * « n'augmente pas l'or en chiffres décimaux, seulement un par un »). Ce qui
- * déborde d'une réserve pleine remplit la pièce entamée à la part du
- * trop-plein, et ses pièces entières coulent dans la bourse ; le reste est
- * perdu.
+ * L'AUTOMATIQUE REMPLIT LA MÊME BARRE QUE LA TAPE (Keko, 02/11 : « plutôt que
+ * rajouter un autre timer, pourquoi on garde pas la même barre ») : une barre
+ * que finit l'automatique (en jeu ou hors ligne) verse sa pièce dans la
+ * réserve ; celle que finit une tape, dans la bourse (`avancerBarre`). La
+ * réserve se remplit donc pièce par pièce. Pleine, l'automatique s'arrête —
+ * sauf le trop-plein : il remplit encore la barre, à sa part de la vitesse,
+ * et ces barres-là paient la bourse.
  */
-function remplirReserve(j: Joueur, p: Producteur, q: number): void {
-  if (q <= 0) return
-  // Une réserve d'avant les pièces entières rend sa fraction à la pièce entamée.
-  const entiere = Math.floor(p.reserve + 1e-9)
-  let entamee = (p.entamee ?? 0) + Math.max(0, p.reserve - entiere)
-  p.reserve = entiere
-  const entre = Math.min(q, Math.max(0, capaciteReserve(j, p) - p.reserve - entamee))
-  entamee += entre
-  const pieces = Math.floor(entamee + 1e-9)
-  p.reserve += pieces
-  entamee = Math.max(0, entamee - pieces)
-  const part = partTropPlein(j)
-  if (q > entre && part > 0) {
-    entamee += (q - entre) * part
-    const coulent = Math.floor(entamee + 1e-9)
-    entamee = Math.max(0, entamee - coulent)
-    produireOr(j, coulent)
+function avancerBarreAuto(j: Joueur, p: Producteur, part: number): void {
+  const capacite = capaciteReserve(j, p)
+  let reste = part
+  while (reste > 1e-12) {
+    if (p.reserve + 1e-9 >= capacite) {
+      avancerBarre(j, p, reste * partTropPlein(j))
+      return
+    }
+    const manque = 1 - p.progres
+    if (reste < manque) {
+      p.progres += reste
+      return
+    }
+    reste -= manque
+    p.progres = 0
+    p.reserve = Math.min(capacite, p.reserve + orParBarre(j, p))
   }
-  p.entamee = entamee
 }
 
 /** RÉCOLTER la réserve d'une mine : ses pièces entières passent dans la bourse du joueur (et à son score) ; pas avant la première (Keko, 02/11). Rend l'or récolté. */
@@ -956,7 +953,7 @@ export function acheterProducteur(j: Joueur, i: number, couleur = 0): Producteur
   const place = placeDApparition(j)
   j.achetes[i] = (j.achetes[i] ?? 0) + 1
   const c = t.genre === 'source' ? couleur : t.genre === 'raffinerie' ? couleurDominante(j) : PRIMAIRES
-  const p: Producteur = { id: j.prochainId++, type: i, x: place.x, y: place.y, couleur: c, forme: t.genre === 'raffinerie' ? 1 : 0, niveau: 1, reserve: 0, progres: 0, entamee: 0 }
+  const p: Producteur = { id: j.prochainId++, type: i, x: place.x, y: place.y, couleur: c, forme: t.genre === 'raffinerie' ? 1 : 0, niveau: 1, reserve: 0, progres: 0 }
   j.producteurs.push(p)
   // LE DÉVOILEMENT : le modèle suivant de la famille.
   const fam = FAMILLE_INDEX[t.genre]
@@ -1467,9 +1464,9 @@ export function avancer(m: Monde, dt: number): void {
   for (const j of m.joueurs) {
     const ordonnes = [...j.producteurs].sort((a, b) => ORDRE[genreDe(a)] - ORDRE[genreDe(b)])
     for (const p of ordonnes) {
-      // LA MINE : l'automatique remplit la réserve, qu'il faut récolter ; la barre, elle, n'avance qu'à la tape.
+      // LA MINE : l'automatique remplit sa barre, et ses barres pleines tombent dans la réserve, qu'il faut récolter.
       if (estMine(p)) {
-        remplirReserve(j, p, vitesseAuto(j) * orParBarre(j, p) * dt * 3600)
+        avancerBarreAuto(j, p, vitesseAuto(j) * dt * 3600)
         continue
       }
       const b = bilanProducteur(j, p)

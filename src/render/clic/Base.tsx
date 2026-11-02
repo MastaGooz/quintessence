@@ -25,7 +25,7 @@ import {
   capaciteReserve, debrancher, mineArretee, declencher, deplacerProducteur, disponible, disposition, effetsDe, entrees, estFixe, estMine, estSource, etendue, force, fusibles, genreDe, lotDeBase, meilleurePrise, moduleDe,
   modulesDe, multiplicateurPrestige, peutAmeliorer, peutAmeliorerSource, peutFabriquer, peutPayer, placeSurProducteur, pointsSi, prisesPour, producteurDe, producteurTient, progresQuete,
   objectifQuete, queteAccomplie, queteEnCours, reclamerQuete, recolter, regler, reservePleine, sortesFormees,
-  sortie, soute, surLesCases, tailleDe, typeDe, visibleProducteur, vitesseAuto, type Coup, type Joueur, type Module, type Monde, type Place, type Prise, type Producteur,
+  sortie, soute, surLesCases, tailleDe, typeDe, visibleProducteur, type Coup, type Joueur, type Module, type Monde, type Place, type Prise, type Producteur,
 } from '../../logic/clic/moteur.ts'
 import { joueur } from '../../logic/clic/partie.ts'
 import { abrege, parSeconde, possede } from '../../ui/format.ts'
@@ -36,7 +36,7 @@ import {
 import { sonBarre, sonBatir, sonEtape, sonReserve, sonTape } from '../../ui/sons.ts'
 import { Compteur } from '../Compteur.tsx'
 import { DUREE_GLISSE, monterCarte, type Carte, type Point } from '../carte/carte.ts'
-import { SERIE_MS, eclater, effetDepense, effetVente, flotter, impact, mouvementReduit, onde } from '../effets.ts'
+import { DUREE_VOL, SERIE_MS, eclater, effetDepense, effetVente, flotter, impact, mouvementReduit, onde, retarderLeCompteur, volerDesPieces } from '../effets.ts'
 import { Feuille } from '../Feuille.tsx'
 import { ChoixAmelioration } from './Ameliorations.tsx'
 import { BoutonCout, Boutique, COULEURS_RARETE } from './Boutique.tsx'
@@ -584,9 +584,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
         const mine = j.producteurs.find(estMine)
         const reserve = mine === undefined ? undefined : producteursEl.current.get(mine.id)?.querySelector<HTMLElement>('.reserve')
         if (reserve === null || reserve === undefined) return
-        // Elle naît avec son anneau.
-        const naissante = reserve.closest<HTMLElement>('.reserve-ligne') ?? reserve
-        naissante.classList.add('piece-nait')
+        reserve.classList.add('piece-nait')
         const rr = reserve.getBoundingClientRect()
         eclater(rr.left + rr.width / 2, rr.top + rr.height / 2, 22)
         onde(rr.left + rr.width / 2, rr.top + rr.height / 2, rr.width * 0.7)
@@ -692,11 +690,27 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
   /** Jusqu'à cet instant, la barre de la mine se montre PLEINE : elle vient d'envoyer sa pièce, on la voit pleine avant qu'elle ne se vide. */
   const barrePleineJusqua = useRef(0)
 
-  /** UNE BARRE PLEINE À LA TAPE : elle reste pleine un instant, gonfle et s'allume ; le « +1 » pompe ; sa pièce vole au compteur, qui ne bouge qu'à son arrivée. */
-  const lacherLaPiece = (el: HTMLElement | undefined, gain: number): void => {
+  /**
+   * UNE BARRE PLEINE : elle reste pleine un instant, gonfle et s'allume ; le « +1 » pompe ; sa pièce vole. Finie par une tape, au compteur
+   * de la bourse ; finie par l'automatique (`versLaReserve`), à la réserve, qui pompe et tinte à chaque arrivée. Le compteur visé ne bouge
+   * qu'à l'arrivée.
+   */
+  const lacherLaPiece = (el: HTMLElement | undefined, gain: number, versLaReserve = false): void => {
     barrePleineJusqua.current = performance.now() + 170
     const depuis = el?.querySelector('.mine-barre-gain .symbole-piece')?.getBoundingClientRect()
-    if (depuis !== undefined) effetVente(depuis, gain)
+    if (depuis !== undefined && !versLaReserve) effetVente(depuis, gain)
+    const reserve = el?.querySelector<HTMLElement>('.reserve')
+    const vers = reserve?.querySelector('.reserve-texte .symbole-piece')?.getBoundingClientRect()
+    const mine = j.producteurs.find(estMine)
+    if (versLaReserve && depuis !== undefined && reserve !== null && reserve !== undefined && vers !== undefined && mine !== undefined) {
+      const n = Math.max(1, Math.min(5, Math.round(gain)))
+      const capacite = capaciteReserve(j, mine)
+      volerDesPieces(depuis, vers, n, (rang) => {
+        const pleine = rang === n - 1 && reservePleine(j, mine)
+        sonReserve((mine.reserve - (n - 1 - rang)) / capacite, pleine)
+        pomperLaReserve(reserve, vers, pleine)
+      })
+    }
     if (mouvementReduit()) return
     el?.querySelector('.mine-barre')?.animate(
       [
@@ -727,7 +741,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     }
   }
 
-  // LA BARRE DE LA MINE : posée image par image (elle n'avance qu'à la tape) ; pleine un instant quand elle vient de payer.
+  // LA BARRE DE LA MINE : posée image par image (la tape la fait bondir, l'automatique la pousse chaque seconde) ; pleine un instant quand elle vient de payer.
   useEffect(() => {
     let image = 0
     const pas = (maintenant: number): void => {
@@ -757,24 +771,25 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // LA RÉSERVE SE REMPLIT EN IDLE : chaque pièce entière que l'automatique y fait entrer la fait pomper et tinter (le juice de Keko, 02/11), plus fort quand elle devient pleine.
+  // L'AUTOMATIQUE A FINI LA BARRE : sa pièce vole de la barre à la réserve (seul l'automatique remplit la réserve : la tape paie la bourse), qui
+  // pompe et tinte à l'arrivée, plus fort quand elle devient pleine. Le retard du compteur de la réserve se pose PENDANT le rendu, avant
+  // que ce compteur (un enfant) ne voie sa nouvelle valeur.
   const mineVue = j.producteurs.find(estMine)
   const reserveEntiere = Math.floor((mineVue?.reserve ?? 0) + 1e-9)
   const reserveVue = useRef(reserveEntiere)
-  const aPomper = useRef(false)
+  const aVerser = useRef(0)
   if (reserveEntiere !== reserveVue.current) {
-    if (reserveEntiere > reserveVue.current) aPomper.current = true
+    if (reserveEntiere > reserveVue.current) {
+      aVerser.current += reserveEntiere - reserveVue.current
+      if (!mouvementReduit()) retarderLeCompteur('reserve', DUREE_VOL)
+    }
     reserveVue.current = reserveEntiere
   }
   useEffect(() => {
-    if (!aPomper.current || mineVue === undefined) return
-    aPomper.current = false
-    const reserve = producteursEl.current.get(mineVue.id)?.querySelector<HTMLElement>('.reserve')
-    const piece = reserve?.querySelector('.reserve-texte .symbole-piece')?.getBoundingClientRect()
-    if (reserve === null || reserve === undefined || piece === undefined) return
-    const pleine = reservePleine(j, mineVue)
-    sonReserve(mineVue.reserve / capaciteReserve(j, mineVue), pleine)
-    pomperLaReserve(reserve, piece, pleine)
+    const gain = aVerser.current
+    if (gain <= 0 || mineVue === undefined) return
+    aVerser.current = 0
+    lacherLaPiece(producteursEl.current.get(mineVue.id), gain, true)
   })
 
   // LES LOTS DES HORLOGES flottent au-dessus de leur source, à son rythme — quand il est assez lent pour qu'on les lise.
@@ -1282,7 +1297,7 @@ function pomperLaReserve(reserve: HTMLElement, impact: DOMRect, pleine: boolean)
 function Reserve({ j, p }: { j: Joueur; p: Producteur }): ReactElement {
   const capacite = capaciteReserve(j, p)
   const pleine = reservePleine(j, p)
-  const pilule = (
+  return (
     <span className={`reserve${pleine ? ' reserve-pleine' : ''}`} data-cliquable data-reserve data-id={p.id} aria-label="Récolter la réserve">
       <span className="reserve-jauge" style={{ width: `${(100 * Math.min(capacite, p.reserve)) / capacite}%` }} />
       <span className="reserve-eclat" />
@@ -1290,38 +1305,6 @@ function Reserve({ j, p }: { j: Joueur; p: Producteur }): ReactElement {
         <Compteur valeur={p.reserve} cle="reserve" format={possede} duree={200} sursautEnBaisse={false} /> / {capacite} <SymbolePiece />
       </span>
     </span>
-  )
-  if (vitesseAuto(j) <= 0) return pilule
-  // L'anneau à gauche de la réserve (Keko, 02/11 : « essaie de le mettre à gauche de la barre ») ; la ligne a la largeur de celle de la barre de la mine.
-  return (
-    <span className="reserve-ligne">
-      <AnneauAutomatique p={p} pleine={pleine} />
-      {pilule}
-    </span>
-  )
-}
-
-const RAYON_ANNEAU = 14.5
-const TOUR_ANNEAU = 2 * Math.PI * RAYON_ANNEAU
-
-/**
- * L'ANNEAU DE L'AUTOMATIQUE (Keko, 02/11 : « un simple indicateur visuel
- * suffit », « épaissis un peu l'anneau », puis « à gauche de la barre » de
- * réserve) : il fait le tour à mesure que la pièce entamée se remplit,
- * habillé comme la réserve (fond sombre, liseré d'or). La table repeint
- * chaque seconde, il glisse d'une seconde à l'autre ; à chaque pièce tombée,
- * il en naît un neuf (la clé), qui repart de zéro sans revenir en arrière.
- * Réserve pleine : il reste plein, éteint (la réserve ne bouge pas).
- */
-function AnneauAutomatique({ p, pleine }: { p: Producteur; pleine: boolean }): ReactElement {
-  const avance = pleine ? 1 : Math.min(1, Math.max(0, p.entamee ?? 0))
-  return (
-    <svg className={`reserve-anneau${pleine ? ' reserve-anneau-arrete' : ''}`} viewBox="0 0 40 40" aria-hidden>
-      <circle className="reserve-anneau-fond" cx="20" cy="20" r={RAYON_ANNEAU} />
-      <circle className="reserve-anneau-lisere" cx="20" cy="20" r={RAYON_ANNEAU + 4.4} />
-      <circle className="reserve-anneau-lisere" cx="20" cy="20" r={RAYON_ANNEAU - 4.4} />
-      <circle key={pleine ? 'pleine' : p.reserve} className="reserve-anneau-plein" cx="20" cy="20" r={RAYON_ANNEAU} strokeDasharray={TOUR_ANNEAU} strokeDashoffset={TOUR_ANNEAU * (1 - avance)} />
-    </svg>
   )
 }
 
