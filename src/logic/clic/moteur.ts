@@ -116,7 +116,7 @@ export interface Joueur {
   /** Les fabrications depuis le dernier rare, le dernier épique : la garantie. */
   sansRare: number
   sansEpique: number
-  journal: { tapes: number; fabrications: number; ventes: number; achats: number; orVentes: number; orAchats: number; fusions: number; recoltes: number; barres: number }
+  journal: { tapes: number; fabrications: number; ventes: number; achats: number; orVentes: number; orAchats: number; fusions: number; recoltes: number; barres: number; recoltesPleines: number }
 }
 
 /** LE MARCHÉ : par sorte, le volume net vendu récemment, la demande suivie, et le prix de chaque heure passée. */
@@ -175,7 +175,7 @@ export function nouveauJoueur(id: number, nom: string): Joueur {
     tirages: 0,
     sansRare: 0,
     sansEpique: 0,
-    journal: { tapes: 0, fabrications: 0, ventes: 0, achats: 0, orVentes: 0, orAchats: 0, fusions: 0, recoltes: 0, barres: 0 },
+    journal: { tapes: 0, fabrications: 0, ventes: 0, achats: 0, orVentes: 0, orAchats: 0, fusions: 0, recoltes: 0, barres: 0, recoltesPleines: 0 },
   }
 }
 
@@ -716,12 +716,15 @@ function remplirReserve(j: Joueur, p: Producteur, q: number): void {
 /** RÉCOLTER la réserve d'une mine : son or passe dans la bourse du joueur (et à son score). Rend l'or récolté. */
 export function recolter(j: Joueur, p: Producteur): number {
   // Une réserve PLEINE récoltée rapporte la prime.
-  const prime = reservePleine(j, p) ? 1 + EFFETS_MINE.prime * j.ameliorations.prime : 1
+  const pleine = reservePleine(j, p)
+  const prime = pleine ? 1 + EFFETS_MINE.prime * j.ameliorations.prime : 1
   const q = estMine(p) ? (p.reserve ?? 0) * prime : 0
   if (q <= 0) return 0
   p.reserve = 0
   produireOr(j, q)
   j.journal.recoltes += 1
+  // Une réserve PLEINE récoltée : ce que demande la première quête (une partie d'avant ce compte le reçoit ici).
+  if (pleine) j.journal.recoltesPleines = (j.journal.recoltesPleines ?? 0) + 1
   return q
 }
 
@@ -997,6 +1000,7 @@ export function objectifQuete(j: Joueur): number {
 export function progresQuete(j: Joueur): number {
   const q = queteEnCours(j)
   if (q === null) return 0
+  if (queteAccomplie(j)) return objectifQuete(j)
   const fait = q.genre === 'reserve' ? (j.producteurs.find(estMine)?.reserve ?? 0) : j.orProduit - j.queteDepuis
   return Math.min(objectifQuete(j), Math.max(0, fait))
 }
@@ -1004,10 +1008,8 @@ export function progresQuete(j: Joueur): number {
 export function queteAccomplie(j: Joueur): boolean {
   const q = queteEnCours(j)
   if (q === null) return false
-  if (q.genre === 'reserve') {
-    const mine = j.producteurs.find(estMine)
-    return mine !== undefined && reservePleine(j, mine)
-  }
+  // Remplir la réserve ET la récolter : une réserve pleine récoltée (la quête est la première, toute récolte pleine compte).
+  if (q.genre === 'reserve') return (j.journal.recoltesPleines ?? 0) > 0
   return j.orProduit - j.queteDepuis + 1e-9 >= q.or
 }
 

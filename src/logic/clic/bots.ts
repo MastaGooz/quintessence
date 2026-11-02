@@ -15,7 +15,7 @@ import { FABRICATION, PRIMAIRES, PRODUCTEURS, PRESTIGE, SORTES, couleurDe, forme
 import {
   acheter, acheterProducteur, ameliorer, ameliorerSource, besoins, brancherAuMieux, completerAuMarche, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, declencher, disponible,
   entrees, esperanceEffet, estMine, estSource, fabriquerModule, fondre, force, fusibles, genreDe, manquePour, meilleureSource, modulesDe, multiplicateurPrestige, peutFabriquer, peutPayer, pointsSi,
-  prestiger, choisirAmelioration, queteAccomplie, queteEnCours, reclamerQuete, recolter,
+  prestiger, choisirAmelioration, queteAccomplie, queteEnCours, reclamerQuete, recolter, reservePleine,
   prisesLibres, production, regler, sortePourPayer, sortie, sortesFormees, soute, typeDe, valeurCout, valeurDe, vendre, venteRaisonnable, visibleProducteur, visibleQualite,
   type Joueur, type Monde, type Producteur,
 } from './moteur.ts'
@@ -336,15 +336,16 @@ export function visiter(m: Monde, j: Joueur, s: Strategie): void {
     const apres = 1 + PRESTIGE.parPoint * (j.points + gain)
     if (apres / multiplicateurPrestige(j) >= s.seuilPrestige) prestiger(j)
   }
-  // LA RÉSERVE de chaque mine, récoltée en passant — sauf tant que la quête est de la remplir.
+  // LA RÉSERVE de chaque mine, récoltée en passant — pleine seulement, tant que la quête est de la remplir et de la récolter.
   const recolterSiPermis = (): void => {
-    if (queteEnCours(j)?.genre === 'reserve') return
-    for (const p of j.producteurs) if (estMine(p)) recolter(j, p)
+    const remplir = queteEnCours(j)?.genre === 'reserve' && !queteAccomplie(j)
+    for (const p of j.producteurs) if (estMine(p) && (!remplir || reservePleine(j, p))) recolter(j, p)
   }
   recolterSiPermis()
   const source = sourceATaper(m, j, s)
   // Les tapes d'une visite font une série : l'élan joue.
   for (let k = 0; k < s.tapes; k++) declencher(m, j, source, undefined, k)
+  recolterSiPermis()
   // LES QUÊTES : réclamées dès qu'elles sont remplies, la première amélioration de l'offre choisie.
   for (let n = 0; n < 20 && queteAccomplie(j); n++) {
     if (reclamerQuete(m, j) === null) break

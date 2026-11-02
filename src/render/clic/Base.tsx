@@ -753,9 +753,9 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
         Tapez la mine pour remplir sa barre : 1 <SymbolePiece /> par barre pleine.
       </>
     )
-  else if (rien && mine !== undefined && quete?.genre === 'reserve' && mine.reserve >= 1 && !reservePleine(j, mine)) indice = 'Chaque barre pleine met sa pièce dans la réserve.'
-  else if (rien && quete?.genre === 'reserve') indice = null
   else if (rien && mine !== undefined && mineArretee(j, mine)) indice = 'La réserve est pleine : tapez-la pour récolter ses pièces.'
+  else if (rien && mine !== undefined && quete?.genre === 'reserve' && !queteAccomplie(j) && mine.reserve >= 1) indice = 'Chaque barre pleine met sa pièce dans la réserve.'
+  else if (rien && quete?.genre === 'reserve') indice = null
   else if (rien && mine !== undefined && j.journal.recoltes === 0 && mine.reserve >= 1) indice = 'Tapez la réserve pour récolter ses pièces.'
   else if (rien) indice = null
   else if (aSources && raffineries.length === 0 && !peutPayer(j, coutR1)) indice = `Une raffinerie coûte ${coutR1.quantite} ronds d’une couleur : tapez vos sources.`
@@ -1127,12 +1127,15 @@ function Objectif({
     const fait = progresQuete(j)
     const but = Math.max(1, objectifQuete(j))
     const accomplie = queteAccomplie(j)
+    // Entre les deux étapes de la première quête : la réserve est pleine, reste à la récolter.
+    const mineQ = j.producteurs.find(estMine)
+    const aRecolter = q.genre === 'reserve' && !accomplie && mineQ !== undefined && reservePleine(j, mineQ)
     return (
       <div key={`quete-${q.id}`} ref={refCarte} className={`objectif${accomplie ? ' objectif-accompli' : ''}`}>
         <span className="objectif-titre">Quête</span>
         <span className="objectif-texte">
           {q.genre === 'reserve' ? (
-            'Remplir la réserve'
+            'Remplir la réserve et la récolter'
           ) : (
             <>
               Gagner {q.or} <SymbolePiece />
@@ -1144,7 +1147,14 @@ function Objectif({
         </span>
         <span className="objectif-ligne">
           <span className="petit sourd">
-            {possede(fait)} / {but} <SymbolePiece /> · récompense : {NOM_RECOMPENSE[q.recompense]}
+            {aRecolter ? (
+              'Pleine : tapez-la pour la récolter'
+            ) : (
+              <>
+                {possede(fait)} / {but} <SymbolePiece />
+              </>
+            )}{' '}
+            · récompense : {NOM_RECOMPENSE[q.recompense]}
           </span>
           {accomplie && (
             <button type="button" className="bouton-principal respire" onClick={onReclamer}>

@@ -202,7 +202,9 @@ export const MINE: TypeProducteur = { id: 'mine', genre: 'mine', cout: { forme: 
 /**
  * LES QUÊTES (Keko, 02/11 : « X or pour obtenir une amélioration au choix » ;
  * « la première quête devrait être : remplir la réserve »). Une à la fois,
- * sans fin : d'abord REMPLIR LA RÉSERVE de la mine, puis GAGNER de l'or (il
+ * sans fin : d'abord REMPLIR LA RÉSERVE de la mine ET LA RÉCOLTER (Keko :
+ * « la quête initiale devrait être remplir la réserve et la récolter, en
+ * fait »), puis GAGNER de l'or (il
  * compte depuis le début de la quête) ; remplie, une quête se RÉCLAME d'une
  * tape, et sa récompense est le CHOIX d'une amélioration parmi `offre` tirées
  * au hasard. La k-ième quête d'or demande `premier × croissance^k` or.
