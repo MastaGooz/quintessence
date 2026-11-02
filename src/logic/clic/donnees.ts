@@ -194,73 +194,76 @@ export const FABRICATION = {
 /**
  * LA MINE D'OR, le départ (Keko, 02/11 : « on commence avec une mine d'or :
  * +1 or au clic. Forme carré avec une image de mine dedans ») : offerte, un
- * carré de trois cases de côté, une tape rend `lot` or. Pas de creux pour
+ * carré de trois cases de côté ; sa barre et sa réserve, voir `EFFETS_MINE`. Pas de creux pour
  * l'instant : les héros viendront avec la brique suivante.
  */
 export const MINE: TypeProducteur = { id: 'mine', genre: 'mine', cout: { forme: 0, couleur: null, quantite: 0 }, lot: 1, creux: [_, _, _, _, _, _, _, _], taille: { largeur: 450, hauteur: 450 } }
 
 /**
- * LES QUÊTES (Keko, 02/11 : « il faut commencer avec une quête : gagner X or,
- * et qui en récompense débloque l'amélioration qui automatise »). Une à la
- * fois, dans l'ordre : l'or compte depuis le début de la quête, et une quête
- * remplie se RÉCLAME d'une tape, qui donne sa récompense. Les chiffres sont
- * de moi, à rejuger.
+ * LES QUÊTES (Keko, 02/11 : « commencer avec une quête : gagner X or » ;
+ * « X or pour obtenir une amélioration au choix »). Une à la fois, sans fin :
+ * l'or compte depuis le début de la quête ; remplie, elle se RÉCLAME d'une
+ * tape, et sa récompense est le CHOIX d'une amélioration parmi `offre` tirées
+ * au hasard. La k-ième demande `premier × croissance^k` or. L'automatisation
+ * que débloquait la première quête est partie : la mine est automatique de
+ * base (Keko, 02/11). Chiffres de moi, à rejuger.
  */
-export type Recompense = 'automatisation' | 'choix'
+export type Recompense = 'choix'
 export interface Quete {
   id: string
   /** L'or à gagner depuis le début de la quête. */
   or: number
   recompense: Recompense
 }
-export const QUETES: readonly Quete[] = [{ id: 'premier-or', or: 50, recompense: 'automatisation' }]
-
-/**
- * LES QUÊTES DE CHOIX, après celles de `QUETES` (Keko, 02/11 : « autre quête :
- * X or pour obtenir une amélioration au choix ») : la k-ième demande
- * `premier × croissance^k` or, et sa récompense est le CHOIX d'une
- * amélioration parmi `offre` tirées au hasard. Chiffres de moi, à rejuger.
- */
-export const QUETE_CHOIX = { premier: 150, croissance: 2, offre: 3 }
+export const QUETE_CHOIX = { premier: 20, croissance: 2, offre: 3 }
 
 /**
  * LES AMÉLIORATIONS DE LA MINE, la liste de Keko (02/11). Chacune se prend
  * niveau par niveau, jusqu'à `max` ; elle n'entre dans le tirage que si sa
- * condition est remplie (`requiert` : une autre amélioration, ou
- * l'automatisation) — une amélioration qui ne ferait rien n'est pas proposée.
+ * condition est remplie (`requiert` : une autre amélioration) — une
+ * amélioration qui ne ferait rien n'est pas proposée.
  */
 export const IDS_AMELIORATIONS = ['pioche', 'puissance', 'critique', 'forceCritique', 'elan', 'pepite', 'cadence', 'reserve', 'prime', 'tropPlein'] as const
 export type IdAmelioration = (typeof IDS_AMELIORATIONS)[number]
-export const AMELIORATIONS: readonly { id: IdAmelioration; max: number; requiert: IdAmelioration | 'automatisation' | null }[] = [
+export const AMELIORATIONS: readonly { id: IdAmelioration; max: number; requiert: IdAmelioration | null }[] = [
   { id: 'pioche', max: 99, requiert: null },
   { id: 'puissance', max: 99, requiert: 'pioche' },
   { id: 'critique', max: 10, requiert: null },
   { id: 'forceCritique', max: 99, requiert: 'critique' },
   { id: 'elan', max: 10, requiert: null },
   { id: 'pepite', max: 10, requiert: null },
-  { id: 'cadence', max: 99, requiert: 'automatisation' },
-  { id: 'reserve', max: 99, requiert: 'automatisation' },
-  { id: 'prime', max: 99, requiert: 'automatisation' },
-  { id: 'tropPlein', max: 10, requiert: 'automatisation' },
+  { id: 'cadence', max: 99, requiert: null },
+  { id: 'reserve', max: 99, requiert: null },
+  { id: 'prime', max: 99, requiert: null },
+  { id: 'tropPlein', max: 10, requiert: null },
 ]
 
 /**
- * CE QUE FAIT CHAQUE NIVEAU (chiffres de moi, à rejuger) :
- * - pioche : le niveau n ajoute n or à chaque tape (+1, puis +2, puis +3 :
- *   toujours en nombre, jamais en pourcentage — Keko) ;
- * - puissance : +25 % à chaque tape ;
- * - critique : +5 % de chance qu'une tape soit critique, ×`critiqueBase` ;
+ * LA MINE, UN MOYEN GARANTI MAIS FAIBLE (Keko, 02/11 : « les vrais gains
+ * viendront plus tard du commerce et des productions ») : elle remplit une
+ * BARRE en `barre` secondes, toute seule ; chaque barre pleine met
+ * `orParBarre` or dans la réserve. Une TAPE n'apporte pas d'or : elle avance
+ * la barre de `tape` secondes (« le tap devient un moyen d'accélérer le
+ * remplissage de la barre »).
+ *
+ * CE QUE FAIT CHAQUE NIVEAU D'AMÉLIORATION (chiffres de moi, à rejuger) :
+ * - pioche : +1 seconde de barre par tape (toujours en nombre — Keko) ;
+ * - puissance : +25 % à l'avance d'une tape ;
+ * - critique : +5 % de chance qu'une tape avance ×`critiqueBase` ;
  * - forceCritique : le critique multiplie de 1 de plus ;
- * - elan : chaque tape d'une série ajoute `elanPas` à la suivante, jusqu'à
- *   `elanPlafond` (les deux par niveau) ;
+ * - elan : chaque tape d'une série avance de `elanPas` de plus que la
+ *   précédente, jusqu'à `elanPlafond` (les deux par niveau) ;
  * - pepite : `pepiteChance` par tape qu'une pépite tombe ; tapée avant
- *   `pepiteDuree` secondes, elle vaut `pepiteValeur` tapes ;
- * - cadence : la mine automatique va 50 % plus vite ;
+ *   `pepiteDuree` secondes, elle met `pepiteValeur` or dans la bourse ;
+ * - cadence : la barre se remplit 50 % plus vite ;
  * - reserve : la réserve contient 50 % de plus ;
  * - prime : une réserve PLEINE récoltée rapporte 25 % de plus ;
  * - tropPlein : la réserve pleine laisse couler 10 % de l'or dans la bourse.
  */
 export const EFFETS_MINE = {
+  barre: 10,
+  orParBarre: 1,
+  tape: 1,
   pioche: 1,
   puissance: 0.25,
   critique: 0.05,
@@ -269,7 +272,7 @@ export const EFFETS_MINE = {
   elanPas: 0.05,
   elanPlafond: 0.5,
   pepiteChance: 0.02,
-  pepiteValeur: 20,
+  pepiteValeur: 5,
   pepiteDuree: 5,
   pepitesMax: 3,
   cadence: 0.5,
@@ -279,19 +282,11 @@ export const EFFETS_MINE = {
 }
 
 /**
- * L'AUTOMATISATION de la mine : débloquée par la première quête, achetée
- * `cout` or ; la mine se tape alors toute seule `tics` fois par seconde (une
- * horloge, comme le carré bleu d'un module). Chiffres de moi, à rejuger.
- */
-export const AUTOMATISATION = { cout: 50, tics: 1 }
-
-/**
  * LA RÉSERVE DE LA MINE (Keko, 02/11 : « une limite à la quantité d'or
  * obtenue en auto, qu'elle ne soit pas ajoutée à l'or mais dans la réserve de
- * la mine, et que le joueur doive cliquer pour l'ajouter ») : l'or de
- * l'automatisation s'y accumule jusqu'à `capacite` ; pleine, la mine s'arrête
- * et ce qu'elle aurait produit est perdu. Une tape sur la réserve la récolte.
- * Chiffre de moi, à rejuger : une minute d'automatisation.
+ * la mine, et que le joueur doive cliquer pour l'ajouter ») : l'or des barres
+ * s'y accumule jusqu'à `capacite` ; pleine, la barre s'arrête. Une tape sur la
+ * réserve la récolte. Chiffre de moi, à rejuger : dix minutes de barre seule.
  */
 export const RESERVE_MINE = { capacite: 60 }
 

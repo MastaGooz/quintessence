@@ -6,7 +6,7 @@
  */
 import type { ReactElement, ReactNode } from 'react'
 import { EFFETS_MINE, type IdAmelioration } from '../../logic/clic/donnees.ts'
-import { bilanMine, capaciteReserve, chancePepite, estMine, partTropPlein, type Joueur } from '../../logic/clic/moteur.ts'
+import { avanceTape, bilanMine, capaciteReserve, chancePepite, dureeBarre, estMine, partTropPlein, valeurPepite, type Joueur } from '../../logic/clic/moteur.ts'
 import { NOM_AMELIORATION } from '../../ui/noms-clic.ts'
 import { Feuille } from '../Feuille.tsx'
 import { SymbolePiece } from './Glyphe.tsx'
@@ -39,13 +39,13 @@ export function effetAmelioration(j: Joueur, id: IdAmelioration): ReactNode {
     case 'puissance':
       return (
         <>
-          Tape : <Fleche avant={`+${abregeFin(b1.tape)}`} apres={`+${abregeFin(b2.tape)}`} /> <SymbolePiece />
+          Une tape avance la barre de <Fleche avant={`${abregeFin(avanceTape(j))} s`} apres={`${abregeFin(avanceTape(j2))} s`} />
         </>
       )
     case 'critique':
       return (
         <>
-          Critique : <Fleche avant={pourcent(b1.chanceCritique)} apres={pourcent(b2.chanceCritique)} /> de chance, ×{b2.multCritique}
+          Critique : <Fleche avant={pourcent(b1.chanceCritique)} apres={pourcent(b2.chanceCritique)} /> de chance, la tape ×{b2.multCritique}
         </>
       )
     case 'forceCritique':
@@ -63,13 +63,13 @@ export function effetAmelioration(j: Joueur, id: IdAmelioration): ReactNode {
     case 'pepite':
       return (
         <>
-          Une pépite à <Fleche avant={pourcent(chancePepite(j))} apres={pourcent(chancePepite(j2))} /> par tape ; tapez-la vite : {EFFETS_MINE.pepiteValeur} tapes d’un coup
+          Une pépite à <Fleche avant={pourcent(chancePepite(j))} apres={pourcent(chancePepite(j2))} /> par tape ; tapez-la vite : {abregeFin(valeurPepite(j))} <SymbolePiece />
         </>
       )
     case 'cadence':
       return (
         <>
-          Automatique : <Fleche avant={abregeFin(b1.frequence)} apres={abregeFin(b2.frequence)} /> coup /s
+          La barre se remplit en <Fleche avant={`${abregeFin(dureeBarre(j))} s`} apres={`${abregeFin(dureeBarre(j2))} s`} />
         </>
       )
     case 'reserve':

@@ -53,10 +53,8 @@ export function explicationModule(couleur: number, forme: number): string {
 
 /** La mine d'or du départ (Keko, 02/11). */
 export const NOM_MINE = 'Mine d’or'
-/** L'amélioration qui fait taper la mine toute seule. */
-export const NOM_AUTOMATISATION = 'Automatisation'
 /** Ce qu'une quête débloque, tel qu'on l'annonce sur sa carte. */
-export const NOM_RECOMPENSE: Record<Recompense, string> = { automatisation: 'l’automatisation', choix: 'une amélioration au choix' }
+export const NOM_RECOMPENSE: Record<Recompense, string> = { choix: 'une amélioration au choix' }
 /** Les améliorations de la mine (Keko, 02/11). */
 export const NOM_AMELIORATION: Record<IdAmelioration, string> = {
   pioche: 'Pioche',
