@@ -19,7 +19,6 @@ import { IconeSon } from '../Jeu.tsx'
 import { Base } from './Base.tsx'
 import { SymbolePiece, SymboleRessource } from './Glyphe.tsx'
 import { MarcheClic } from './MarcheClic.tsx'
-import { cotationsDeTest, ressourcesDeTest } from './MarcheTest.tsx'
 import { RivauxClic } from './RivauxClic.tsx'
 
 type Page = 'base' | 'marche' | 'rivaux'
@@ -159,13 +158,6 @@ function Table({ partie, reelAuDepart, onRecommencer }: { partie: Partie; reelAu
               <SymboleRessource ressource={r} />
             </span>
           ))}
-          {/* Le mode test du marché (`&ressources=10`) : les ressources fictives aussi. */}
-          {marcheOuvert(j) &&
-            cotationsDeTest(m.t, ressourcesDeTest()).map((c) => (
-              <span key={c.cle} className="entete-ressource">
-                <b>{c.stock}</b> {c.symbole}
-              </span>
-            ))}
         </span>
         <span className="entete-heure">
           {ouvert && horloge(m.t)}

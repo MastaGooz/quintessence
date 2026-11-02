@@ -21,7 +21,6 @@ import { possede } from '../../ui/format.ts'
 import { LE_RESSOURCE, NOM_RESSOURCE } from '../../ui/noms-clic.ts'
 import { Feuille } from '../Feuille.tsx'
 import { SymbolePiece, SymboleRessource } from './Glyphe.tsx'
-import { cotationsDeTest, ressourcesDeTest } from './MarcheTest.tsx'
 
 type Sens = 'achat' | 'vente'
 
@@ -33,7 +32,7 @@ const lu = (texte: string): number => Number(texte.replace(',', '.').replace(/\s
 const VUES = 40
 const UNE_HEURE = Math.round(1 / MARCHE_RESSOURCES.bougie)
 
-/** Ce que l'écran du marché sait d'une ressource : la vraie, lue au moteur ; une fictive (le mode test, `MarcheTest.tsx`), simulée. */
+/** Ce que l'écran du marché sait d'une ressource, lu au moteur. */
 export interface Cotation {
   cle: string
   nom: string
@@ -45,8 +44,7 @@ export interface Cotation {
   coutAchat: (q: number) => number
   gainVente: (q: number) => number
   achetable: (or: number) => number
-  /** La vraie ressource, qu'on échange ; null pour une fictive : rien ne s'y échange. */
-  ressource: Ressource | null
+  ressource: Ressource
 }
 
 function cotationReelle(m: Monde, j: Joueur, r: Ressource): Cotation {
@@ -74,7 +72,7 @@ interface Echanges {
 
 export function MenuMarche({ m, j, onFermer, ...echanges }: { m: Monde; j: Joueur; onFermer: () => void } & Echanges): ReactElement {
   const [choisie, setChoisie] = useState<string | null>(null)
-  const cotations = [...RESSOURCES.map((r) => cotationReelle(m, j, r)), ...cotationsDeTest(m.t, ressourcesDeTest())]
+  const cotations = RESSOURCES.map((r) => cotationReelle(m, j, r))
   const c = cotations.find((x) => x.cle === choisie)
   return (
     <Feuille titre={c === undefined ? 'Marché' : `Marché · ${c.nom}`} onFermer={onFermer}>
@@ -168,11 +166,10 @@ function EcranDeTrade({ j, c, onRetour, onAcheter, onVendre, onPlacer, onAnnuler
   const q = Math.max(0, Math.floor(lu(quantiteTexte) || 0))
   const limite = Math.max(0.01, Math.round((lu(prixTexte) || 0) * 100) / 100)
   const total = perso ? (sens === 'achat' ? Math.ceil(limite * q - 1e-9) : Math.round(limite * q)) : sens === 'achat' ? c.coutAchat(q) : c.gainVente(q)
-  // Une ressource fictive (le mode test) ne s'échange pas.
-  const possible = r !== null && q > 0 && (sens === 'achat' ? j.or + 1e-9 >= total : stock >= q)
+  const possible = q > 0 && (sens === 'achat' ? j.or + 1e-9 >= total : stock >= q)
   const max = sens === 'achat' ? (perso ? Math.floor(j.or / limite + 1e-9) : c.achetable(j.or)) : stock
-  const ordres = r === null ? [] : (j.ordres ?? []).filter((o) => o.ressource === r)
-  const executes = r === null ? [] : [...(j.executes ?? [])].reverse().slice(0, 5)
+  const ordres = (j.ordres ?? []).filter((o) => o.ressource === r)
+  const executes = [...(j.executes ?? [])].reverse().slice(0, 5)
   const symbole = c.symbole
 
   const passerEnPerso = (oui: boolean): void => {
@@ -271,7 +268,7 @@ function EcranDeTrade({ j, c, onRetour, onAcheter, onVendre, onPlacer, onAnnuler
       </div>
       {perso && (
         <p className="sourd petit trade-explication">
-          L’ordre attend que le prix {sens === 'achat' ? 'descende' : 'monte'} à {deuxDecimales(limite)} <SymbolePiece /> ; {sens === 'achat' ? 'l’or' : r === null ? 'la ressource' : LE_RESSOURCE[r]} est mis de côté en attendant.
+          L’ordre attend que le prix {sens === 'achat' ? 'descende' : 'monte'} à {deuxDecimales(limite)} <SymbolePiece /> ; {sens === 'achat' ? 'l’or' : LE_RESSOURCE[r]} est mis de côté en attendant.
         </p>
       )}
       <button
@@ -279,7 +276,6 @@ function EcranDeTrade({ j, c, onRetour, onAcheter, onVendre, onPlacer, onAnnuler
         className={`trade-valider ${sens === 'achat' ? 'sens-achat' : 'sens-vente'}`}
         disabled={!possible}
         onClick={(e) => {
-          if (r === null) return
           if (perso) onPlacer(sens, r, q, limite, e.currentTarget)
           else if (sens === 'achat') onAcheter(r, q, e.currentTarget)
           else onVendre(r, q, e.currentTarget)
@@ -289,7 +285,6 @@ function EcranDeTrade({ j, c, onRetour, onAcheter, onVendre, onPlacer, onAnnuler
         {sens === 'achat' ? (perso ? 'acheter' : 'Acheter') : perso ? 'vendre' : 'Vendre'} {q} {symbole}
         {perso ? ` à ${deuxDecimales(limite)}` : ' au prix du marché'}
       </button>
-      {r === null && <p className="sourd petit trade-explication">Ressource de test : elle ne s’échange pas.</p>}
 
       {/* Les ordres en attente, les derniers exécutés. */}
       {ordres.length > 0 && (
