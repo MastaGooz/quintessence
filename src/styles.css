@@ -1062,6 +1062,48 @@ select {
   filter: drop-shadow(0 0 28px hsl(var(--teinte) 70% 60% / 0.3));
 }
 
+/* LA MINE D'OR, le carré du départ (Keko, 02/11 : « forme carré avec une image de mine dedans ») : l'image de Keko (`public/mine.webp`) ou le pictogramme d'attente, son nom dessous, le trait d'or de la base. */
+.producteur-mine .producteur-texte {
+  width: 100%;
+  height: 100%;
+}
+
+.mine {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  width: 100%;
+  height: 100%;
+  padding: 30px 30px 34px;
+  box-sizing: border-box;
+}
+
+.mine-image,
+.mine-picto {
+  width: 280px;
+  height: 280px;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.45));
+}
+
+.mine-legende {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+
+.producteur .mine-nom {
+  font-size: 40px;
+  color: var(--creme);
+}
+
 .producteur-texte {
   position: relative;
   display: flex;

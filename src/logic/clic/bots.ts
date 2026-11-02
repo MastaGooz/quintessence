@@ -14,7 +14,8 @@
 import { FABRICATION, PRIMAIRES, PRODUCTEURS, PRESTIGE, SORTES, couleurDe, formeDe, sorteDe, type Cout } from './donnees.ts'
 import {
   acheter, acheterProducteur, ameliorer, ameliorerSource, besoins, brancherAuMieux, completerAuMarche, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, declencher, disponible,
-  entrees, esperanceEffet, estSource, fabriquerModule, fondre, force, fusibles, genreDe, manquePour, meilleureSource, modulesDe, multiplicateurPrestige, peutFabriquer, peutPayer, pointsSi, prestiger,
+  entrees, esperanceEffet, estMine, estSource, fabriquerModule, fondre, force, fusibles, genreDe, manquePour, meilleureSource, modulesDe, multiplicateurPrestige, peutFabriquer, peutPayer, pointsSi,
+  prestiger,
   prisesLibres, production, regler, sortePourPayer, sortie, sortesFormees, soute, typeDe, valeurCout, valeurDe, vendre, venteRaisonnable, visibleProducteur, visibleQualite,
   type Joueur, type Monde, type Producteur,
 } from './moteur.ts'
@@ -109,7 +110,7 @@ function reglerLesTransformateurs(m: Monde, j: Joueur, s: Strategie, voulues: re
 function convertirLeNecessaire(m: Monde, j: Joueur, voulues: readonly number[]): void {
   const ordre = [...j.producteurs].sort((a, b) => (genreDe(a) === 'melangeur' ? 0 : 1) - (genreDe(b) === 'melangeur' ? 0 : 1))
   for (const p of ordre) {
-    if (estSource(p)) continue
+    if (estSource(p) || estMine(p)) continue
     const sorte = sortie(p)
     const besoin = besoinStock(j, sorte, voulues)
     for (let n = 0; n < CONVERSIONS_MAX; n++) {
@@ -311,7 +312,7 @@ function acheterAuMieux(m: Monde, j: Joueur, s: Strategie): void {
   }
 }
 
-/** La source que ce bot tape : celle de sa couleur qui rapporte le plus, ou la meilleure au marché. */
+/** Le générateur que ce bot tape : la source de sa couleur qui rapporte le plus, ou le meilleur au marché (la mine, tant qu'il n'a qu'elle). */
 function sourceATaper(m: Monde, j: Joueur, s: Strategie): Producteur {
   if (s.couleur === undefined) return meilleureSource(m, j)
   let meilleure: Producteur | null = null

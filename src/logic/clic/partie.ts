@@ -24,8 +24,8 @@ export const BOTS: (Strategie & { visites: number })[] = [
 export const PAS = 0.25
 
 export interface Partie {
-  /** 8 : les modules se fabriquent dans la boutique (plus d'ateliers), les ressources ont leurs symboles ; une sauvegarde plus ancienne est abandonnée. */
-  version: 8
+  /** 9 : la partie commence avec la mine d'or seule (Keko, 02/11) ; une sauvegarde plus ancienne est abandonnée. */
+  version: 9
   graine: number
   monde: Monde
   /** Par bot, l'instant de sa dernière visite jouée. */
@@ -33,7 +33,7 @@ export interface Partie {
 }
 
 export function nouvellePartie(graine: number, nomDuJoueur: string): Partie {
-  return { version: 8, graine, monde: nouveauMonde([nomDuJoueur, ...BOTS.map((b) => b.nom)], graine), dernieresVisites: BOTS.map(() => -1) }
+  return { version: 9, graine, monde: nouveauMonde([nomDuJoueur, ...BOTS.map((b) => b.nom)], graine), dernieresVisites: BOTS.map(() => -1) }
 }
 
 export function joueur(p: Partie): Joueur {
@@ -76,9 +76,9 @@ export function rattraper(p: Partie, jusqua: number): void {
   }
 }
 
-/** Le classement : la matière produite depuis le début. */
+/** Le classement : l'or extrait depuis le début, puis la matière produite. */
 export function classement(p: Partie): Joueur[] {
-  return [...p.monde.joueurs].sort((a, b) => b.total - a.total)
+  return [...p.monde.joueurs].sort((a, b) => b.orProduit - a.orProduit || b.total - a.total)
 }
 
 export function serialiser(p: Partie): string {
@@ -89,7 +89,7 @@ export function serialiser(p: Partie): string {
 export function deserialiser(texte: string): Partie | null {
   try {
     const p = JSON.parse(texte) as Partie
-    if (p === null || typeof p !== 'object' || p.version !== 8) return null
+    if (p === null || typeof p !== 'object' || p.version !== 9) return null
     if (!Array.isArray(p.monde?.joueurs) || p.monde.joueurs.length !== BOTS.length + 1) return null
     if (!Array.isArray(p.dernieresVisites)) return null
     return p

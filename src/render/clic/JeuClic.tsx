@@ -2,16 +2,16 @@
  * LE JEU du système abstrait : une partie contre sept bots, au rythme de
  * l'horloge réelle (`?vitesse=60` : une minute réelle vaut une heure de jeu).
  * Sauvée à chaque action et à chaque seconde ; au retour, le monde rattrape le
- * temps écoulé. Le jeu commence par les trois sources seules : les pages
- * n'apparaissent qu'avec la première matière.
+ * temps écoulé. Le jeu commence par la mine d'or seule (Keko, 02/11) : les
+ * pages n'apparaissent qu'avec autre chose qu'elle.
  */
 import { useEffect, useReducer, useRef, useState, type ReactElement } from 'react'
-import { PRIMAIRES, SAISON_H } from '../../logic/clic/donnees.ts'
+import { SAISON_H } from '../../logic/clic/donnees.ts'
 import { debitTotal } from '../../logic/clic/moteur.ts'
 import { classement, finie, joueur, nouvellePartie, rattraper, type Partie } from '../../logic/clic/partie.ts'
 import { ecrireSauvegardeClic, effacerSauvegardeClic, lireSauvegardeClic } from '../../ui/stockage-clic.ts'
 import { abrege, duree, horloge, parSeconde } from '../../ui/format.ts'
-import { NOM_MATIERE, NOM_OR } from '../../ui/noms-clic.ts'
+import { NOM_OR } from '../../ui/noms-clic.ts'
 import { basculerSon, sonActif, sonClic } from '../../ui/sons.ts'
 import { Compteur } from '../Compteur.tsx'
 import { declarerCibleOr, monterCouche } from '../effets.ts'
@@ -44,12 +44,8 @@ function Accueil({ onCommencer }: { onCommencer: (nom: string) => void }): React
   return (
     <div className="accueil">
       <h1>Quintessence</h1>
-      <p className="sourd petit">Prototype, habillé par les mots seulement.</p>
-      <p>
-        Trois sources produisent trois couleurs de {NOM_MATIERE} brute : rouge, vert, bleu. Des raffineries leur donnent une forme, des mélangeurs les mélangent. Avec la {NOM_MATIERE} formée, vous
-        fabriquez des modules de rareté tirée, qui s’emboîtent sur vos générateurs : la couleur dit ce qu’un module touche, la forme ce qu’il fait. Tout se construit en {NOM_MATIERE} ; le marché,
-        commun à tous, échange toutes les sortes.
-      </p>
+      <p className="sourd petit">Prototype : le jeu se pose brique par brique.</p>
+      <p>Vous commencez avec une mine d’{NOM_OR}. Tapez-la : chaque tape rapporte 1 {NOM_OR}.</p>
       <label>
         Votre nom
         <input type="text" value={nom} maxLength={16} placeholder="Nicolas" onChange={(e) => setNom(e.target.value)} />
@@ -124,9 +120,9 @@ function Table({ partie, reelAuDepart, onRecommencer }: { partie: Partie; reelAu
   const m = partie.monde
   const j = joueur(partie)
   const props = { partie, agir }
-  // Le jeu s'ouvre une chose à la fois : la barre et l'heure arrivent avec la première matière.
+  // Le jeu s'ouvre une chose à la fois : la barre et l'heure arrivent avec autre chose que la mine (l'or seul n'ouvre rien).
   const stock = j.matiere.reduce((s, q) => s + q, 0)
-  const ouvert = stock >= 10 || j.or > 0 || j.modules.length > 0 || j.points > 0 || j.producteurs.length > PRIMAIRES
+  const ouvert = stock >= 10 || j.modules.length > 0 || j.points > 0 || j.producteurs.length > 1
   const pageVue = ouvert ? page : 'base'
   // La carte remplit le corps : la page ne défile pas, c'est le plan qui glisse.
   const surLaCarte = !finie(partie) && pageVue === 'base'
@@ -192,14 +188,16 @@ function Fin({ partie, onRecommencer }: { partie: Partie; onRecommencer: () => v
   return (
     <div className="page">
       <h1>La saison est finie</h1>
-      <p>{rangs[0] === moi ? 'Vous avez produit plus que tous les autres.' : `${rangs[0]?.nom} a produit le plus : ${abrege(rangs[0]?.total ?? 0)} ronds.`}</p>
+      <p>{rangs[0] === moi ? `Vous avez extrait plus d’${NOM_OR} que tous les autres.` : `${rangs[0]?.nom} a extrait le plus d’${NOM_OR} : ${abrege(rangs[0]?.orProduit ?? 0)}.`}</p>
       <section>
         {rangs.map((r, i) => (
           <div key={r.id} className={`ligne${r === moi ? ' ligne-moi' : ''}`}>
             <span>
               {i + 1}. <b>{r.nom}</b> <span className="sourd petit">· {parSeconde(debitTotal(r))}</span>
             </span>
-            <span>{abrege(r.total)} ronds</span>
+            <span>
+              {abrege(r.orProduit)} {NOM_OR}
+            </span>
           </div>
         ))}
       </section>

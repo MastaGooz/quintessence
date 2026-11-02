@@ -269,8 +269,8 @@ export function Boutique({ partie, agir, onFermer, onProducteur, onModule }: Pag
       {confirmer && (
         <Feuille titre={NOM_PRESTIGE} onFermer={() => setConfirmer(false)}>
           <p>
-            Vous laissez vos {j.producteurs.length - PRIMAIRES} générateur{j.producteurs.length - PRIMAIRES > 1 ? 's' : ''} et vos {j.modules.length} module{j.modules.length > 1 ? 's' : ''} avec leurs niveaux,
-            votre {NOM_MATIERE} et {abrege(j.or)} {NOM_OR}. Il ne reste que vos trois sources, nues.
+            Vous laissez vos {j.producteurs.length - 1} générateur{j.producteurs.length - 1 > 1 ? 's' : ''} et vos {j.modules.length} module{j.modules.length > 1 ? 's' : ''} avec leurs niveaux, votre{' '}
+            {NOM_MATIERE} et {abrege(j.or)} {NOM_OR}. Il ne reste que votre mine.
           </p>
           <p>
             Vous gagnez <b className="gain">+{gain} {NOM_POINT}{gain > 1 ? 's' : ''}</b> : tous vos lots passent de ×{abrege(prestige)} à ×{abrege(prestige + gain)}, pour toujours. Ce que vous

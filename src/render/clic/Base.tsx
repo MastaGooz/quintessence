@@ -4,8 +4,9 @@
  * MODULES, des pièces à une bosse qui s'y emboîtent (Keko, 31/10 : « les
  * producteurs génèrent des ressources, avec des prises femelles, et les
  * modules, de différentes formes de prises mâles ; les modules agissent sur le
- * producteur »). Les trois sources de départ sont au centre, une par couleur :
- * une tape dessus produit. Une raffinerie ou un mélangeur tapé convertit un
+ * producteur »). LA MINE D'OR de départ est au centre, un carré avec son image
+ * (Keko, 02/11) : une tape dessus rend de l'or, qui vole au compteur. Une
+ * source tapée produit. Une raffinerie ou un mélangeur tapé convertit un
  * lot. Les modules se fabriquent dans la boutique et arrivent dans la soute.
  * On glisse un module d'un creux à l'autre (sur un creux occupé, il prend la
  * place, l'autre va dans la soute) ; on le lâche dans le vide pour le ranger
@@ -18,21 +19,23 @@
  * (la seconde qui passe) : il lit `traine` pour laisser la pièce sous le doigt.
  */
 import { useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react'
-import { COULEURS, FAMILLES, FORMES, MELANGE, MODULE, PIECE, PRIMAIRES, PRODUCTEUR, PRODUCTEURS, TAPES_MAX_PAR_S, aDuBleu, couleurDe, sorteDe } from '../../logic/clic/donnees.ts'
+import { COULEURS, FAMILLES, FORMES, MELANGE, MODULE, PIECE, PRIMAIRES, PRODUCTEURS, TAPES_MAX_PAR_S, aDuBleu, couleurDe, sorteDe } from '../../logic/clic/donnees.ts'
 import {
   DIRECTIONS, acheter, ameliorer, ameliorerSource, bilan, bilanProducteur, boiteModule, branches, brancher, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, debitTotal,
-  debrancher, declencher, deplacerProducteur, disponible, disposition, effetsDe, entrees, estSource, etendue, force, fusibles, genreDe, lotDeBase, meilleurePrise, moduleDe, modulesDe,
-  multiplicateurPrestige, peutAmeliorer, peutAmeliorerSource, peutFabriquer, peutPayer, placeSurProducteur, prisesPour, producteurDe, producteurTient, regler, sortesFormees, sortie, soute,
-  surLesCases, typeDe, type Coup, type Joueur, type Module, type Monde, type Place, type Prise, type Producteur,
+  debrancher, declencher, deplacerProducteur, disponible, disposition, effetsDe, entrees, estFixe, estMine, estSource, etendue, force, fusibles, genreDe, lotDeBase, meilleurePrise, moduleDe,
+  modulesDe, multiplicateurPrestige, peutAmeliorer, peutAmeliorerSource, peutFabriquer, peutPayer, placeSurProducteur, pointsSi, prisesPour, producteurDe, producteurTient, regler, sortesFormees,
+  sortie, soute, surLesCases, tailleDe, typeDe, visibleProducteur, type Coup, type Joueur, type Module, type Monde, type Place, type Prise, type Producteur,
 } from '../../logic/clic/moteur.ts'
 import { joueur } from '../../logic/clic/partie.ts'
 import { abrege, parSeconde } from '../../ui/format.ts'
 import { vibrer } from '../../ui/haptique.ts'
-import { EXPLICATION_TRAIT, LETTRE_PRODUCTEUR, NOM_COULEUR, NOM_MATIERE, NOM_OR, NOM_RARETE, NOM_SOUTE, NOM_TRAIT, NOMS_FORMES, explicationModule, nomProducteur, nomSorte, nomSortePluriel } from '../../ui/noms-clic.ts'
+import {
+  EXPLICATION_TRAIT, LETTRE_PRODUCTEUR, NOM_COULEUR, NOM_MATIERE, NOM_MINE, NOM_OR, NOM_RARETE, NOM_SOUTE, NOM_TRAIT, NOMS_FORMES, explicationModule, nomProducteur, nomSorte, nomSortePluriel,
+} from '../../ui/noms-clic.ts'
 import { sonBatir, sonTape } from '../../ui/sons.ts'
 import { Compteur } from '../Compteur.tsx'
 import { DUREE_GLISSE, monterCarte, type Carte, type Point } from '../carte/carte.ts'
-import { eclater, effetDepense, flotter, mouvementReduit } from '../effets.ts'
+import { eclater, effetDepense, effetGainOr, flotter, mouvementReduit } from '../effets.ts'
 import { Feuille } from '../Feuille.tsx'
 import { BoutonCout, Boutique, COULEURS_RARETE } from './Boutique.tsx'
 import { Choix } from './Choix.tsx'
@@ -62,9 +65,15 @@ const STOCKS_MAX = 9
 const DEMI_L = MODULE.largeur / 2
 const DEMI_P = MODULE.profondeur / 2
 const BOITE_MODULE = boite(MODULE.largeur, MODULE.profondeur)
-const BOITE_PRODUCTEUR = boite(PRODUCTEUR.largeur, PRODUCTEUR.hauteur)
-/** Le chemin de chaque type de générateur, creusé de ses prises. */
-const CHEMINS_PRODUCTEURS: readonly string[] = PRODUCTEURS.map((t) => cheminDecoupe(PRODUCTEUR.largeur, PRODUCTEUR.hauteur, cotesDuProducteur(t.creux)))
+/** La boîte du SVG de chaque type de générateur (sa taille et ses creux), et son chemin, creusé de ses prises. */
+const BOITES_PRODUCTEURS: readonly ReturnType<typeof boite>[] = PRODUCTEURS.map((_, i) => {
+  const ta = tailleDe({ type: i })
+  return boite(ta.largeur, ta.hauteur)
+})
+const CHEMINS_PRODUCTEURS: readonly string[] = PRODUCTEURS.map((t, i) => {
+  const ta = tailleDe({ type: i })
+  return cheminDecoupe(ta.largeur, ta.hauteur, cotesDuProducteur(t.creux))
+})
 /** Le chemin de chaque module, sa bosse en bas (la rotation est en CSS, par `--sens`). */
 const CHEMINS_MODULES: readonly string[] = [0, 1, 2, 3].map((k) => cheminDecoupe(MODULE.largeur, MODULE.profondeur, cotesDuModule(k)))
 
@@ -130,8 +139,9 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
   const enSoute = soute(j)
   const raffineries = j.producteurs.filter((p) => genreDe(p) === 'raffinerie')
   const rondes = Array.from({ length: PRIMAIRES }, (_, c) => j.matiere[sorteDe(c, 0)] ?? 0).reduce((s, q) => s + q, 0)
-  const rien = j.modules.length === 0 && j.producteurs.length === PRIMAIRES
-  const debut = rien && j.points === 0 && rondes < 10
+  // Rien que la mine : le départ.
+  const rien = j.modules.length === 0 && j.producteurs.length === 1
+  const debut = rien && j.points === 0 && j.or === 0
   const { rayon, bas } = etendue(j)
 
   /** Un point du monde, à l'écran (en coordonnées de la page, pour les effets). */
@@ -162,14 +172,14 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     recentes.current.push(maintenant)
     serie.current = { n: maintenant - serie.current.t < SERIE_MS ? serie.current.n + 1 : 0, t: maintenant }
     const n = serie.current.n
-    const source = estSource(p)
-    let coup: Coup = { gain: 0, critique: false, grosLot: false, sorte: 0 }
+    const brut = estSource(p) || estMine(p)
+    let coup: Coup = { gain: 0, critique: false, grosLot: false, sorte: 0, or: false }
     agirRef.current(() => {
       coup = declencher(m, j, p, Math.random())
     })
     if (coup.gain <= 0) {
       // Rien à convertir : la feuille du générateur dit ce qui manque.
-      if (!source) {
+      if (!brut) {
         setBulle({ genre: 'producteur', id: p.id })
         vibrer([20, 40, 20])
       }
@@ -178,8 +188,17 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     if (!mouvementReduit()) producteursEl.current.get(p.id)?.animate(ECRASER, { duration: 170, easing: 'ease-out' })
     sonTape(coup.critique ? n + 6 : n)
     vibrer(coup.critique ? [10, 30, 25] : coup.grosLot ? [10, 20, 15] : 8)
+    if (coup.or) {
+      // L'OR DE LA MINE : une pièce vole au compteur, le « +1 or » flotte, des étincelles d'or de temps en temps.
+      effetGainOr(x, y, coup.gain, coup.critique ? 2 : coup.grosLot ? 1.6 : Math.min(1.7, 1 + n * 0.05))
+      if (coup.critique) eclater(x, y, 22)
+      else if (coup.grosLot) eclater(x, y, 16)
+      else if (n > 0 && n % 10 === 9) eclater(x, y, 14)
+      else if (Math.random() < 0.3) eclater(x, y, 3)
+      return
+    }
     const c = couleurDe(coup.sorte)
-    const texte = `+${abregeFin(coup.gain)}${source ? '' : ` ${nomSortePluriel(coup.sorte)}`}${coup.critique ? ' !' : ''}${coup.grosLot ? ' ×3' : ''}`
+    const texte = `+${abregeFin(coup.gain)}${brut ? '' : ` ${nomSortePluriel(coup.sorte)}`}${coup.critique ? ' !' : ''}${coup.grosLot ? ' ×3' : ''}`
     flotter(x, y, texte, `flottant-couleur flottant-couleur-${c}`, coup.critique ? 2 : coup.grosLot ? 1.6 : Math.min(1.7, 1 + n * 0.05))
     if (coup.critique) eclater(x, y, 22, couleurEclat(c))
     else if (coup.grosLot) eclater(x, y, 16, couleurEclat(c))
@@ -197,11 +216,12 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
   }
   const placerProducteur = (p: Producteur, x: number, y: number): void => {
     const el = producteursEl.current.get(p.id)
+    const ta = tailleDe(p)
     if (el !== undefined) {
-      el.style.left = `${x - PRODUCTEUR.largeur / 2}px`
-      el.style.top = `${y - PRODUCTEUR.hauteur / 2}px`
+      el.style.left = `${x - ta.largeur / 2}px`
+      el.style.top = `${y - ta.hauteur / 2}px`
     }
-    for (const mo of modulesDe(j, p)) placerModule(mo.id, placeSurProducteur({ x, y }, mo.emplacement))
+    for (const mo of modulesDe(j, p)) placerModule(mo.id, placeSurProducteur({ x, y, type: p.type }, mo.emplacement))
   }
   const saisir = (cible: HTMLElement, p: Point): boolean => {
     // La carte garde cette fonction telle qu'elle était au montage : on relit le moteur, pas le rendu.
@@ -225,7 +245,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
       cible.classList.add('module-saisi')
     } else {
       const pr = producteurDe(j, id)
-      if (pr === undefined || pr.type === 0) return false
+      if (pr === undefined || estFixe(pr)) return false
       traine.current = { genre: 'producteur', id, dx: p.x - pr.x, dy: p.y - pr.y, x: pr.x, y: pr.y, tient: true }
       cible.classList.add('producteur-saisi')
       for (const mo of modulesDe(j, pr)) modulesEl.current.get(mo.id)?.classList.add('module-saisi')
@@ -452,7 +472,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     const [r, b, z] = cadrage()
     const k = monterCarte(el, c, mo, zoomVu.current, { rayon: r, bas: b, zoomMin: z }, {
       onClic: (cible, sx, sy) => {
-        // Les sources de départ sont cliquables, pas saisissables : le doigt qui glisse dessus emporte la carte, pas la source.
+        // La mine de départ est cliquable, pas saisissable : le doigt qui glisse dessus emporte la carte, pas la mine.
         const id = cible === null ? NaN : Number(cible.dataset['id'])
         const pr = Number.isNaN(id) ? undefined : producteurDe(j, id)
         if (pr !== undefined) declencherIci(pr, sx, sy)
@@ -478,7 +498,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rayon, bas])
 
-  // LES LOTS DES HORLOGES flottent au-dessus de leur source, à son rythme — quand il est assez lent pour qu'on les lise.
+  // LES LOTS DES HORLOGES flottent au-dessus de leur source (ou de la mine), à son rythme — quand il est assez lent pour qu'on les lise.
   useEffect(() => {
     const prochains = new Map<number, number>()
     const id = window.setInterval(() => {
@@ -486,7 +506,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
       const r = cadre.current?.getBoundingClientRect()
       if (r === undefined) return
       for (const p of j.producteurs) {
-        if (!estSource(p)) continue
+        if (!estSource(p) && !estMine(p)) continue
         const b = bilanProducteur(j, p)
         const periode = b.frequence > 0 ? 1000 / b.frequence : Infinity
         if (periode < FLOTTE_MIN_MS || !Number.isFinite(periode)) {
@@ -500,8 +520,11 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
         }
         if (maintenant < prochain) continue
         prochains.set(p.id, Math.max(prochain + periode, maintenant + periode / 2))
-        const s = surLaPage({ x: p.x, y: p.y - PRODUCTEUR.hauteur / 2 })
-        if (s !== null && s.x > r.left && s.x < r.right && s.y > r.top && s.y < r.bottom) flotter(s.x, s.y, `+${abregeFin(b.lotMoyen)}`, `flottant-couleur flottant-couleur-${p.couleur}`, 0.9)
+        const s = surLaPage({ x: p.x, y: p.y - tailleDe(p).hauteur / 2 })
+        if (s !== null && s.x > r.left && s.x < r.right && s.y > r.top && s.y < r.bottom) {
+          if (estMine(p)) flotter(s.x, s.y, `+${abregeFin(b.lotMoyen)} ${NOM_OR}`, 'flottant-or', 0.9)
+          else flotter(s.x, s.y, `+${abregeFin(b.lotMoyen)}`, `flottant-couleur flottant-couleur-${p.couleur}`, 0.9)
+        }
       }
     }, 100)
     return () => window.clearInterval(id)
@@ -510,24 +533,27 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
 
   const t = traine.current
   const souteVisible = j.modules.length > 0
-  const boutiqueVisible = rondes >= 10 || !rien || j.points > 0
   const coutR1 = coutProducteur(j, FAMILLES.raffinerie.premier)
   const aHorloge = j.modules.some((mo) => mo.forme === 1 && aDuBleu(mo.couleur))
   const branchable = enSoute.some((mo) => meilleurePrise(m, j, mo) !== null)
   const raffineriePrete = raffineries.find((p) => disponible(j, p) >= 1)
   const fabricable = sortesFormees().some((s) => peutFabriquer(j, s, 0))
   const coutCarre = coutFabrication(j, sorteDe(0, 1), 0).quantite
+  // La boutique n'apparaît que quand elle a quelque chose à montrer : rien tant que la mine est seule.
+  const boutiqueVisible = PRODUCTEURS.some((_, i) => visibleProducteur(j, i)) || fabricable || j.modules.length > 0 || j.points > 0 || pointsSi(j) >= 1
+  const aSources = j.producteurs.some(estSource)
 
   // UN INDICE à la fois : le premier geste, puis ce qui bloque.
   let indice: string | null = null
-  if (debut) indice = 'Tapez une source pour produire des ronds.'
-  else if (raffineries.length === 0 && !peutPayer(j, coutR1)) indice = `Une raffinerie coûte ${coutR1.quantite} ronds d’une couleur : tapez vos sources.`
-  else if (raffineries.length === 0) indice = 'Achetez une raffinerie dans la boutique : elle donne une forme à vos ronds.'
-  else if (j.modules.length === 0 && !fabricable && raffineriePrete !== undefined) indice = `Tapez la raffinerie : un module carré coûte ${coutCarre} carrés de sa couleur.`
-  else if (j.modules.length === 0 && !fabricable) indice = 'La raffinerie n’a plus de ronds à former : tapez la source de sa couleur.'
-  else if (j.modules.length === 0) indice = `Fabriquez un module dans la boutique, avec votre ${NOM_MATIERE} formée.`
+  if (debut) indice = `Tapez la mine : chaque tape rapporte 1 ${NOM_OR}.`
+  else if (rien) indice = null
+  else if (aSources && raffineries.length === 0 && !peutPayer(j, coutR1)) indice = `Une raffinerie coûte ${coutR1.quantite} ronds d’une couleur : tapez vos sources.`
+  else if (aSources && raffineries.length === 0) indice = 'Achetez une raffinerie dans la boutique : elle donne une forme à vos ronds.'
+  else if (raffineries.length > 0 && j.modules.length === 0 && !fabricable && raffineriePrete !== undefined) indice = `Tapez la raffinerie : un module carré coûte ${coutCarre} carrés de sa couleur.`
+  else if (raffineries.length > 0 && j.modules.length === 0 && !fabricable) indice = 'La raffinerie n’a plus de ronds à former : tapez la source de sa couleur.'
+  else if (raffineries.length > 0 && j.modules.length === 0) indice = `Fabriquez un module dans la boutique, avec votre ${NOM_MATIERE} formée.`
   else if (branchable && t === null) indice = `Un module attend dans la ${NOM_SOUTE.toLowerCase()} : branchez-le.`
-  else if (!aHorloge) indice = `Pas d’horloge : réglez une raffinerie sur le ${nomSorte(sorteDe(2, 1))} (sa roue), et fabriquez-en un.`
+  else if (j.modules.length > 0 && !aHorloge) indice = `Pas d’horloge : réglez une raffinerie sur le ${nomSorte(sorteDe(2, 1))} (sa roue), et fabriquez-en un.`
   else if (fusibles(j).length > 0) indice = `Trois modules pareils dans la ${NOM_SOUTE.toLowerCase()} : fondez-les en un plus rare.`
   else if (branchees.size > 0 && j.modules.every((mo) => mo.niveau === 1) && bulle === null && j.modules.some((mo) => peutAmeliorer(j, mo))) indice = 'Tapez un module pour l’améliorer.'
 
@@ -576,32 +602,35 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
             )
           })}
 
-        {/* LES GÉNÉRATEURS : les sources de départ au centre, cliquables ; les autres saisissables. Pendant une saisie, celui qu'on tient se rend sous le doigt. */}
+        {/* LES GÉNÉRATEURS : la mine de départ au centre, cliquable ; les autres saisissables. Pendant une saisie, celui qu'on tient se rend sous le doigt. */}
         {j.producteurs.map((p) => {
           const enMain = t !== null && t.genre === 'producteur' && t.id === p.id
           const x = enMain ? t.x : p.x
           const y = enMain ? t.y : p.y
           const b = bilanProducteur(j, p)
           const genre = genreDe(p)
-          const source = genre === 'source'
-          const nourri = source || disponible(j, p) >= 1
+          const brut = genre === 'source' || genre === 'mine'
+          const nourri = brut || disponible(j, p) >= 1
           const actif = b.frequence > 0 && nourri
           const cadence = actif ? Math.min(60, Math.max(0.25, 1 / b.frequence)) : 0
+          const ta = tailleDe(p)
+          const bo = BOITES_PRODUCTEURS[p.type] ?? BOITES_PRODUCTEURS[0]!
           const style: CSSProperties & Record<string, string | number> = {
-            left: x - PRODUCTEUR.largeur / 2,
-            top: y - PRODUCTEUR.hauteur / 2,
-            width: PRODUCTEUR.largeur,
-            height: PRODUCTEUR.hauteur,
+            left: x - ta.largeur / 2,
+            top: y - ta.hauteur / 2,
+            width: ta.largeur,
+            height: ta.hauteur,
             '--cadence': `${cadence.toFixed(2)}s`,
-            '--teinte': TEINTES[p.couleur] ?? 0,
+            // La mine a la teinte de l'or.
+            '--teinte': genre === 'mine' ? 45 : (TEINTES[p.couleur] ?? 0),
           }
-          const classes = ['producteur', `producteur-${genre}`, p.type === 0 ? 'producteur-base' : 'producteur-achete']
-          if (!source) classes.push('producteur-transfo')
+          const classes = ['producteur', `producteur-${genre}`, estFixe(p) ? 'producteur-base' : 'producteur-achete']
+          if (!brut) classes.push('producteur-transfo')
           if (actif) classes.push('producteur-actif')
-          if (!source && nourri) classes.push('atelier-pret')
+          if (!brut && nourri) classes.push('atelier-pret')
           if (enMain) classes.push('producteur-saisi')
           if (producteurChoisi?.id === p.id) classes.push('producteur-choisi')
-          const saisissable = p.type === 0 ? { 'data-cliquable': true } : { 'data-saisissable': true, 'data-genre': 'producteur' }
+          const saisissable = estFixe(p) ? { 'data-cliquable': true } : { 'data-saisissable': true, 'data-genre': 'producteur' }
           return (
             <div
               key={p.id}
@@ -616,12 +645,12 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
             >
               <svg
                 className="producteur-forme"
-                viewBox={`${BOITE_PRODUCTEUR.x} ${BOITE_PRODUCTEUR.y} ${BOITE_PRODUCTEUR.largeur} ${BOITE_PRODUCTEUR.hauteur}`}
+                viewBox={`${bo.x} ${bo.y} ${bo.largeur} ${bo.hauteur}`}
                 style={{
-                  left: BOITE_PRODUCTEUR.x + PRODUCTEUR.largeur / 2,
-                  top: BOITE_PRODUCTEUR.y + PRODUCTEUR.hauteur / 2,
-                  width: BOITE_PRODUCTEUR.largeur,
-                  height: BOITE_PRODUCTEUR.hauteur,
+                  left: bo.x + ta.largeur / 2,
+                  top: bo.y + ta.hauteur / 2,
+                  width: bo.largeur,
+                  height: bo.hauteur,
                 }}
                 aria-hidden
               >
@@ -629,19 +658,22 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
               </svg>
               <div className="producteur-texte">
                 <TexteProducteur j={j} p={p} b={b} actif={actif} />
-                <button
-                  type="button"
-                  className="atelier-reglage"
-                  data-hud
-                  aria-label={`Régler ${nomProducteur(p)}`}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setBulle((bu) => (bu?.genre === 'producteur' && bu.id === p.id ? null : { genre: 'producteur', id: p.id }))
-                    vibrer(6)
-                  }}
-                >
-                  ⚙
-                </button>
+                {/* La roue d'un générateur : sa feuille. La mine n'a rien à régler pour l'instant. */}
+                {genre !== 'mine' && (
+                  <button
+                    type="button"
+                    className="atelier-reglage"
+                    data-hud
+                    aria-label={`Régler ${nomProducteur(p)}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setBulle((bu) => (bu?.genre === 'producteur' && bu.id === p.id ? null : { genre: 'producteur', id: p.id }))
+                      vibrer(6)
+                    }}
+                  >
+                    ⚙
+                  </button>
+                )}
               </div>
             </div>
           )
@@ -651,7 +683,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
         {j.modules.map((mo) => {
           let place = dispo.get(mo.id)
           if (t !== null && t.genre === 'module' && t.id === mo.id) place = t.prise !== null ? t.prise.place : { x: t.x, y: t.y, sens: t.sens }
-          else if (t !== null && t.genre === 'producteur' && mo.parent === t.id) place = placeSurProducteur({ x: t.x, y: t.y }, mo.emplacement)
+          else if (t !== null && t.genre === 'producteur' && mo.parent === t.id) place = placeSurProducteur({ x: t.x, y: t.y, type: producteurDe(j, t.id)?.type }, mo.emplacement)
           if (place === undefined) return null
           const branche = branchees.has(mo.id)
           const vers = DIRECTIONS[(place.sens + 2) % 4]!
@@ -742,7 +774,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
         <span className="carte-zoom" ref={zoomVu}>
           ×1,0
         </span>
-        {(rondes >= 10 || !rien) && (
+        {(rondes >= 10 || j.matiere.some((q) => q >= 1)) && (
           <div className="stocks">
             {stocksVus.map((s) => (
               <button key={s} type="button" className={`stock${s % FORMES === 0 && couleurDe(s) < PRIMAIRES ? ' stock-mienne' : ''}`} onClick={versMarche} title={nomSortePluriel(s)}>
@@ -832,8 +864,47 @@ function manquesDe(j: Joueur, p: Producteur): { sorte: number; quantite: number 
     .filter((a) => a.quantite > 0)
 }
 
+/** L'image de la mine : celle de Keko (`public/mine.webp`, servie avec la date du build) quand elle est là ; sinon, le pictogramme d'attente dessiné en code. */
+function ImageMine(): ReactElement {
+  const [absente, setAbsente] = useState(false)
+  if (absente) return <PictoMine />
+  return <img className="mine-image" src={`${import.meta.env.BASE_URL}mine.webp?v=${encodeURIComponent(__DATE_DU_BUILD__)}`} alt="" draggable={false} onError={() => setAbsente(true)} />
+}
+
+/** Le pictogramme d'attente de la mine, à remplacer par l'image de Keko : l'entrée d'une galerie étayée de bois, deux rails, trois pépites. */
+function PictoMine(): ReactElement {
+  return (
+    <svg className="mine-picto" viewBox="0 0 100 100" aria-hidden>
+      <path d="M25 90 V58 Q25 46 37 46 H63 Q75 46 75 58 V90 Z" fill="#160d20" />
+      <path d="M40 90 L45 62 M60 90 L55 62" stroke="#4a3560" strokeWidth="2.5" strokeLinecap="round" />
+      <rect x="16" y="48" width="9" height="42" rx="2" fill="#8a5a2b" />
+      <rect x="75" y="48" width="9" height="42" rx="2" fill="#8a5a2b" />
+      <rect x="12" y="40" width="76" height="9" rx="2" fill="#a06a33" />
+      <rect x="8" y="88" width="84" height="6" rx="2" fill="#5a3d22" />
+      <circle cx="43" cy="84" r="4" fill="#ffc61f" />
+      <circle cx="53" cy="86" r="3" fill="#ffc61f" />
+      <circle cx="60" cy="82" r="3.5" fill="#ffd95a" />
+    </svg>
+  )
+}
+
 /** Le texte sur la pièce d'un générateur : ce qu'il est, ce qu'il fait, ce qui le bloque. */
 function TexteProducteur({ j, p, b, actif }: { j: Joueur; p: Producteur; b: ReturnType<typeof bilanProducteur>; actif: boolean }): ReactElement {
+  if (estMine(p)) {
+    // LA MINE D'OR : son image, son nom, ce qu'une tape rend.
+    return (
+      <span className="mine">
+        <ImageMine />
+        <span className="mine-legende">
+          <b className="mine-nom">{NOM_MINE}</b>
+          {b.frequence > 0 && <small className="gain">{parSeconde(b.debit)} d’{NOM_OR}</small>}
+          <small className="sourd">
+            +{abregeFin(b.tapeMoyenne)} {NOM_OR} par tape
+          </small>
+        </span>
+      </span>
+    )
+  }
   if (estSource(p)) {
     return (
       <>

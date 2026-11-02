@@ -34,6 +34,14 @@
  *
  * Les chiffres de ce fichier sont des valeurs de départ réglées par
  * `simulation/clic.ts`, pas des décisions de Keko.
+ *
+ * LE THÈME, posé par Keko le 02/11 : les générateurs sont des DONJONS, les
+ * modules des HÉROS, les transformateurs des ATELIERS. Il se pose brique par
+ * brique, et la première est LE DÉPART : « on commence avec une mine d'or :
+ * +1 or au clic. Forme carré avec une image de mine dedans ». La partie
+ * s'ouvre donc sur la MINE seule (`MINE`), qui rend de l'or, pas de la
+ * matière ; les trois sources de couleur ne sont plus offertes, et rien
+ * d'autre ne se dévoile tant que Keko n'a pas posé la brique suivante.
  */
 
 export const SAISON_H = 168
@@ -91,20 +99,22 @@ export interface Cout {
   quantite: number
 }
 
-export const GENRES = ['source', 'raffinerie', 'melangeur'] as const
+export const GENRES = ['source', 'raffinerie', 'melangeur', 'mine'] as const
 export type Genre = (typeof GENRES)[number]
 
 /** UN TYPE DE GÉNÉRATEUR : ce qu'il fait à chaque déclenchement, ce qu'il coûte, et les creux qu'il offre. */
 export interface TypeProducteur {
   id: string
-  /** Source : produit une matière ronde. Raffinerie : donne une forme à une ronde. Mélangeur : deux rondes de base font une ronde mélangée. */
+  /** Source : produit une matière ronde. Raffinerie : donne une forme à une ronde. Mélangeur : deux rondes de base font une ronde mélangée. Mine : rend de l'or. */
   genre: Genre
-  /** Le coût du premier exemplaire (les trois sources de départ sont offertes). Pour une source, la couleur est celle qu'on achète. */
+  /** Le coût du premier exemplaire (la mine de départ est offerte). Pour une source, la couleur est celle qu'on achète. */
   cout: Cout
-  /** Source : la matière d'un déclenchement, avant les modules. Raffinerie, mélangeur : la matière convertie par déclenchement. */
+  /** Source : la matière d'un déclenchement, avant les modules. Mine : l'or d'un déclenchement. Raffinerie, mélangeur : la matière convertie par déclenchement. */
   lot: number
   /** La forme du creux de chaque emplacement (voir `EMPLACEMENTS`), ou null quand le bord est plein. Un creux prend n'importe quelle couleur de sa forme. */
   creux: readonly (number | null)[]
+  /** Sa taille sur le plan, en pixels-monde, quand ce n'est pas celle de `PRODUCTEUR` (le rectangle de trois cases sur une). */
+  taille?: { largeur: number; hauteur: number }
 }
 
 /**
@@ -181,13 +191,24 @@ export const FABRICATION = {
   ] as readonly Qualite[],
 }
 
+/**
+ * LA MINE D'OR, le départ (Keko, 02/11 : « on commence avec une mine d'or :
+ * +1 or au clic. Forme carré avec une image de mine dedans ») : offerte, un
+ * carré de trois cases de côté, une tape rend `lot` or. Pas de creux pour
+ * l'instant : les héros viendront avec la brique suivante.
+ */
+export const MINE: TypeProducteur = { id: 'mine', genre: 'mine', cout: { forme: 0, couleur: null, quantite: 0 }, lot: 1, creux: [_, _, _, _, _, _, _, _], taille: { largeur: 450, hauteur: 450 } }
+
 /** Tous les types de générateurs, par famille. `type` d'un producteur est un indice ici. */
-export const PRODUCTEURS: readonly TypeProducteur[] = [...SOURCES, ...RAFFINERIES, ...MELANGEURS]
+export const PRODUCTEURS: readonly TypeProducteur[] = [...SOURCES, ...RAFFINERIES, ...MELANGEURS, MINE]
+/** L'indice de la mine dans `PRODUCTEURS`. */
+export const TYPE_MINE = PRODUCTEURS.length - 1
 /** Les types d'une famille, dans l'ordre de `PRODUCTEURS`, et l'indice du premier. */
 export const FAMILLES: Record<Genre, { types: readonly TypeProducteur[]; premier: number }> = {
   source: { types: SOURCES, premier: 0 },
   raffinerie: { types: RAFFINERIES, premier: SOURCES.length },
   melangeur: { types: MELANGEURS, premier: SOURCES.length + RAFFINERIES.length },
+  mine: { types: [MINE], premier: TYPE_MINE },
 }
 
 /** Ce que vaut, en or, un module commun de niveau 1 de chaque forme (le rond n'est pas un module) : la base de sa fabrication et de ses niveaux. */
@@ -322,6 +343,7 @@ export const PIECE = {
   encoche: { largeur: 56, profondeur: 30 },
 }
 export const CASE = PIECE.taille
+/** La taille d'un générateur qui n'en dit pas d'autre (`TypeProducteur.taille`). */
 export const PRODUCTEUR = { largeur: 450, hauteur: 150 }
 export const MODULE = { largeur: 150, profondeur: 100 }
 

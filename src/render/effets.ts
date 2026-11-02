@@ -173,6 +173,16 @@ export function effetVente(bouton: DOMRect, gain: number): void {
   flotter(x, bouton.top - 16, `+${Math.round(gain).toLocaleString('fr-FR')} or`, 'flottant-or', 1.05)
 }
 
+/** L'or d'une tape sur la mine : le « +N or » flotte au point tapé, une pièce vole de là au compteur, qui ne bouge qu'à son arrivée et sursaute. */
+export function effetGainOr(x: number, y: number, gain: number, taille = 1): void {
+  if (gain <= 0) return
+  flotter(x, y - 10, `+${Math.round(gain).toLocaleString('fr-FR')} or`, 'flottant-or', taille)
+  const cible = cibleOr?.getBoundingClientRect()
+  if (cible === undefined) return
+  const arrivee = volerDesPieces(new DOMRect(x - 10, y - 10, 20, 20), cible, 1, () => secouerLOr())
+  retarderLeCompteur('or', arrivee)
+}
+
 /** Un débit sans bouton à viser (la feuille s'est fermée) : « −N or » sous le compteur, qui sursaute. */
 export function effetDebit(cout: number): void {
   const source = cibleOr?.getBoundingClientRect()

@@ -51,13 +51,18 @@ export function explicationModule(couleur: number, forme: number): string {
   return `deux effets à ${Math.round((parts[0]?.[1] ?? 0) * 100)} % : ${parts.map(([c]) => EXPLICATIONS[c]?.[forme] ?? '').join(' ; ')}`
 }
 
-export const NOM_GENRE: Record<Genre, string> = { source: 'source', raffinerie: 'raffinerie', melangeur: 'mélangeur' }
-const MAJUSCULE: Record<Genre, string> = { source: 'Source', raffinerie: 'Raffinerie', melangeur: 'Mélangeur' }
-const LETTRE: Record<Genre, string> = { source: 'S', raffinerie: 'R', melangeur: 'M' }
+/** La mine d'or du départ (Keko, 02/11). */
+export const NOM_MINE = 'Mine d’or'
 
-/** Chaque type de générateur : « Source », « Source 2 », « Raffinerie 1 », « Mélangeur 1 ». */
-export const NOM_TYPE: readonly string[] = PRODUCTEURS.map((t, i) => (t.genre === 'source' ? (i === 0 ? 'Source' : `Source ${rangDe(i) + 1}`) : `${MAJUSCULE[t.genre]} ${rangDe(i) + 1}`))
-export const LETTRE_PRODUCTEUR: readonly string[] = PRODUCTEURS.map((t, i) => (t.genre === 'source' && i === 0 ? 'S' : `${LETTRE[t.genre]}${rangDe(i) + 1}`))
+export const NOM_GENRE: Record<Genre, string> = { source: 'source', raffinerie: 'raffinerie', melangeur: 'mélangeur', mine: 'mine' }
+const MAJUSCULE: Record<Genre, string> = { source: 'Source', raffinerie: 'Raffinerie', melangeur: 'Mélangeur', mine: 'Mine' }
+const LETTRE: Record<Genre, string> = { source: 'S', raffinerie: 'R', melangeur: 'M', mine: 'Or' }
+
+/** Chaque type de générateur : « Mine d’or », « Source », « Source 2 », « Raffinerie 1 », « Mélangeur 1 ». */
+export const NOM_TYPE: readonly string[] = PRODUCTEURS.map((t, i) =>
+  t.genre === 'mine' ? NOM_MINE : t.genre === 'source' ? (i === 0 ? 'Source' : `Source ${rangDe(i) + 1}`) : `${MAJUSCULE[t.genre]} ${rangDe(i) + 1}`,
+)
+export const LETTRE_PRODUCTEUR: readonly string[] = PRODUCTEURS.map((t, i) => (t.genre === 'mine' ? LETTRE.mine : t.genre === 'source' && i === 0 ? 'S' : `${LETTRE[t.genre]}${rangDe(i) + 1}`))
 
 /** Le nom d'un générateur posé : une source porte sa couleur (« Source rouge », « Source 2 bleue »). */
 export function nomProducteur(p: { type: number; couleur: number }): string {

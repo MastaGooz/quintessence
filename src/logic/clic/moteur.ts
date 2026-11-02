@@ -23,10 +23,15 @@
  *
  * Tout se paie en matière ; LE MARCHÉ est commun, un prix par sorte, et l'or
  * n'y sert qu'à échanger.
+ *
+ * LE DÉPART (Keko, 02/11) : la partie s'ouvre sur LA MINE D'OR seule, un carré
+ * fixe au centre du plan, qui rend de l'or à chaque tape (`produireOr`). Les
+ * sources de couleur ne sont plus offertes ; le reste du moteur est là, et se
+ * dévoilera quand Keko posera les briques suivantes (donjons, héros, ateliers).
  */
 import {
   ACHAT, CASE, COULEURS, EFFETS, EMPLACEMENTS, FABRICATION, FAMILLES, FORMES, FUSION, MARCHE, MELANGE, MODULE, NIVEAU, NIVEAU_SOURCE, PIECE, PRESTIGE, PRIMAIRES, PRODUCTEUR, PRODUCTEURS,
-  RARETES, SORTES, TRAITS, VALEUR_MODULE, aDuBleu, couleurDe, formeDe, partsDe, sorteDe,
+  RARETES, SORTES, TRAITS, TYPE_MINE, VALEUR_MODULE, aDuBleu, couleurDe, formeDe, partsDe, sorteDe,
   type Cout, type Genre, type Qualite, type Trait, type TypeProducteur,
 } from './donnees.ts'
 import { graineDe, rngDe } from '../rng.ts'
@@ -66,8 +71,10 @@ export interface Module {
 export interface Joueur {
   id: number
   nom: string
-  /** L'or : ce qu'on gagne et dépense au marché. */
+  /** L'or : ce que la mine rend, ce qu'on gagne et dépense au marché. */
   or: number
+  /** L'or extrait de la mine depuis le début de la saison : le score. */
+  orProduit: number
   /** La matière en stock, par sorte (voir `sorteDe`). */
   matiere: number[]
   producteurs: Producteur[]
@@ -113,11 +120,12 @@ export interface Monde {
   marche: Marche
 }
 
-/** Les trois sources de départ, offertes, l'une sous l'autre au centre du plan : rouge, vert, bleu. */
+/** Le pas vertical des places d'apparition des générateurs. */
 const PAS_Y = 3 * CASE
 
-function sourcesDeDepart(): Producteur[] {
-  return Array.from({ length: PRIMAIRES }, (_, c) => ({ id: c + 1, type: 0, x: 0, y: (c - 1) * PAS_Y, couleur: c, forme: 0, niveau: 1 }))
+/** Ce qu'un joueur a au départ (et après un prestige) : la mine d'or seule, au centre du plan. */
+function depart(): Producteur[] {
+  return [{ id: 1, type: TYPE_MINE, x: 0, y: 0, couleur: 0, forme: 0, niveau: 1 }]
 }
 
 export function nouveauJoueur(id: number, nom: string): Joueur {
@@ -125,13 +133,15 @@ export function nouveauJoueur(id: number, nom: string): Joueur {
     id,
     nom,
     or: 0,
+    orProduit: 0,
     matiere: Array.from({ length: SORTES }, () => 0),
-    producteurs: sourcesDeDepart(),
+    producteurs: depart(),
     modules: [],
-    prochainId: PRIMAIRES + 1,
+    prochainId: 2,
     achetes: PRODUCTEURS.map(() => 0),
     fabriques: Array.from({ length: SORTES }, () => 0),
-    connus: [1, 1, 0],
+    // Rien n'est dévoilé au départ : la brique suivante de Keko dira ce que l'or ouvre.
+    connus: [0, 0, 0, 0],
     connusQualites: 1,
     points: 0,
     prestiges: 0,
@@ -175,6 +185,21 @@ export function genreDe(p: { type: number }): Genre {
 
 export function estSource(p: { type: number }): boolean {
   return genreDe(p) === 'source'
+}
+
+/** La mine d'or : elle rend de l'or, pas de la matière. */
+export function estMine(p: { type: number }): boolean {
+  return genreDe(p) === 'mine'
+}
+
+/** Un générateur de départ : offert, ni saisissable ni achetable, il reste au centre. */
+export function estFixe(p: { type: number }): boolean {
+  return p.type === 0 || estMine(p)
+}
+
+/** La taille d'un générateur sur le plan : celle de son type, ou le rectangle commun. */
+export function tailleDe(p: { type?: number }): { largeur: number; hauteur: number } {
+  return (p.type === undefined ? undefined : PRODUCTEURS[p.type]?.taille) ?? PRODUCTEUR
 }
 
 /** Le rang d'un type dans sa famille (0 : le premier modèle). */
@@ -283,11 +308,12 @@ export function surLesCases(x: number, y: number): { x: number; y: number } {
 }
 
 /** Où s'emboîte un module à l'emplacement `e` d'un générateur centré en (x, y) : collé au bord, sa face vers l'extérieur. */
-export function placeSurProducteur(p: { x: number; y: number }, e: number): Place {
+export function placeSurProducteur(p: { x: number; y: number; type?: number }, e: number): Place {
   const em = EMPLACEMENTS[e] ?? EMPLACEMENTS[0]!
   const d = DIRECTIONS[em.cote]!
   const horizontal = em.cote % 2 === 0
-  const distance = (horizontal ? PRODUCTEUR.hauteur : PRODUCTEUR.largeur) / 2 + MODULE.profondeur / 2
+  const taille = tailleDe(p)
+  const distance = (horizontal ? taille.hauteur : taille.largeur) / 2 + MODULE.profondeur / 2
   return {
     x: p.x + d.x * distance + (horizontal ? em.decalage * PIECE.taille : 0),
     y: p.y + d.y * distance + (horizontal ? 0 : em.decalage * PIECE.taille),
@@ -301,13 +327,15 @@ export function boiteModule(p: Place): Boite {
   return { x: p.x, y: p.y, largeur: droit ? MODULE.largeur : MODULE.profondeur, hauteur: droit ? MODULE.profondeur : MODULE.largeur }
 }
 
-export function boiteProducteur(p: { x: number; y: number }): Boite {
-  return { x: p.x, y: p.y, largeur: PRODUCTEUR.largeur, hauteur: PRODUCTEUR.hauteur }
+export function boiteProducteur(p: { x: number; y: number; type?: number }): Boite {
+  const taille = tailleDe(p)
+  return { x: p.x, y: p.y, largeur: taille.largeur, hauteur: taille.hauteur }
 }
 
 /** L'empreinte d'un générateur avec la place de tous ses modules possibles, tout autour. */
-export function empreinte(p: { x: number; y: number }): Boite {
-  return { x: p.x, y: p.y, largeur: PRODUCTEUR.largeur + 2 * MODULE.profondeur, hauteur: PRODUCTEUR.hauteur + 2 * MODULE.profondeur }
+export function empreinte(p: { x: number; y: number; type?: number }): Boite {
+  const taille = tailleDe(p)
+  return { x: p.x, y: p.y, largeur: taille.largeur + 2 * MODULE.profondeur, hauteur: taille.hauteur + 2 * MODULE.profondeur }
 }
 
 function seChevauchent(a: Boite, b: Boite): boolean {
@@ -476,9 +504,9 @@ export function bilan(lot0: number, mods: readonly ModuleAgissant[], prestige: n
   return { lot, lotMoyen, tape, tapeMoyenne, chanceCritique, chanceGrosLot, frequence, debit: lotMoyen * frequence }
 }
 
-/** Le lot de base d'un générateur : celui de son type, fois le niveau d'une source. */
+/** Le lot de base d'un générateur : celui de son type, fois le niveau d'une source ou de la mine. */
 export function lotDeBase(p: Producteur): number {
-  return typeDe(p).lot * (estSource(p) ? p.niveau : 1)
+  return typeDe(p).lot * (estSource(p) || estMine(p) ? p.niveau : 1)
 }
 
 /** Le bilan d'un générateur tel qu'il est équipé. */
@@ -496,27 +524,27 @@ export function debitTotal(j: Joueur): number {
 /** Une tape par minute : ce qu'on compte à un générateur sans horloge, et au flux d'une sorte que rien ne produit. */
 const TAPE_NOMINALE = 1 / 60
 
-/** Ce que le joueur produit d'une sorte, en unités par seconde, par ses horloges. */
+/** Ce que le joueur produit d'une sorte, en unités par seconde, par ses horloges (la mine rend de l'or, pas une sorte). */
 export function production(j: Joueur, sorte: number): number {
   let d = 0
-  for (const p of j.producteurs) if (sortie(p) === sorte) d += bilanProducteur(j, p).debit
+  for (const p of j.producteurs) if (!estMine(p) && sortie(p) === sorte) d += bilanProducteur(j, p).debit
   return d
 }
 
 /** Le flux d'une sorte chez le joueur : sa production, plus une tape par minute sur le meilleur générateur qui la fait (au moins une unité par minute : on peut toujours l'acheter). */
 export function flux(j: Joueur, sorte: number): number {
   let meilleure = 0
-  for (const p of j.producteurs) if (sortie(p) === sorte) meilleure = Math.max(meilleure, bilanProducteur(j, p).tapeMoyenne)
+  for (const p of j.producteurs) if (!estMine(p) && sortie(p) === sorte) meilleure = Math.max(meilleure, bilanProducteur(j, p).tapeMoyenne)
   return production(j, sorte) + Math.max(1, meilleure) * TAPE_NOMINALE
 }
 
-/** La source dont une tape rapporte le plus au prix du marché : celle qu'un bot tape. */
+/** Le générateur dont une tape rapporte le plus, au prix du marché (la mine : son or, tel quel) : celui qu'un bot tape. */
 export function meilleureSource(m: Monde, j: Joueur): Producteur {
   let meilleur = j.producteurs[0]!
   let max = -1
   for (const p of j.producteurs) {
-    if (!estSource(p)) continue
-    const v = bilanProducteur(j, p).tapeMoyenne * prixCourant(m, sortie(p))
+    if (!estSource(p) && !estMine(p)) continue
+    const v = bilanProducteur(j, p).tapeMoyenne * (estMine(p) ? 1 : prixCourant(m, sortie(p)))
     if (v > max) {
       max = v
       meilleur = p
@@ -537,6 +565,13 @@ function produire(j: Joueur, sorte: number, q: number): void {
   }
 }
 
+/** L'or de la mine entre dans la bourse du joueur, et compte à son score. */
+function produireOr(j: Joueur, q: number): void {
+  if (q <= 0) return
+  j.or += q
+  j.orProduit += q
+}
+
 /** Ce que la matière en stock permet de convertir d'un coup sur ce générateur, par unité de lot : le plus petit de ses stocks d'entrée. */
 export function disponible(j: Joueur, p: Producteur): number {
   const e = entrees(p)
@@ -553,33 +588,37 @@ function convertir(j: Joueur, p: Producteur, q: number): number {
   return fait
 }
 
-/** Ce qu'une tape a fait : la matière gagnée (ou convertie), et si le coup fut critique ou gros. */
+/** Ce qu'une tape a fait : la matière gagnée (ou convertie), ou l'or de la mine (`or`), et si le coup fut critique ou gros. */
 export interface Coup {
   gain: number
   critique: boolean
   grosLot: boolean
+  /** La sorte gagnée ; sans sens quand `or` est vrai. */
   sorte: number
+  or: boolean
 }
 
 /**
- * Déclenche un générateur (une tape) : une source produit sa tape, une
- * raffinerie ou un mélangeur convertit ce qu'il peut. `alea` (de 0 à 1) décide
- * du critique et du gros lot ; sans lui, la moyenne (les bots, qui ne tirent
- * rien). Une tape sans matière à convertir ne fait rien.
+ * Déclenche un générateur (une tape) : la mine rend son or, une source produit
+ * sa tape, une raffinerie ou un mélangeur convertit ce qu'il peut. `alea` (de
+ * 0 à 1) décide du critique et du gros lot ; sans lui, la moyenne (les bots,
+ * qui ne tirent rien). Une tape sans matière à convertir ne fait rien.
  */
 export function declencher(m: Monde, j: Joueur, p: Producteur, alea?: number): Coup {
   const b = bilanProducteur(j, p)
-  const rien: Coup = { gain: 0, critique: false, grosLot: false, sorte: sortie(p) }
+  const or = estMine(p)
+  const rien: Coup = { gain: 0, critique: false, grosLot: false, sorte: sortie(p), or }
   const critique = alea !== undefined && alea < b.chanceCritique
   const grosLot = alea !== undefined && (alea * 7919) % 1 < b.chanceGrosLot
   const q = alea === undefined ? b.tapeMoyenne : b.tape * (critique ? EFFETS.coup : 1) * (grosLot ? EFFETS.grosLot : 1)
   let gain = q
-  if (estSource(p)) produire(j, sortie(p), q)
+  if (or) produireOr(j, q)
+  else if (estSource(p)) produire(j, sortie(p), q)
   else gain = convertir(j, p, q)
   if (gain <= 0) return rien
   j.journal.tapes += 1
   void m
-  return { gain, critique, grosLot, sorte: sortie(p) }
+  return { gain, critique, grosLot, sorte: sortie(p), or }
 }
 
 /** Une tape sur la meilleure source. */
@@ -652,26 +691,26 @@ export function valeurCout(m: Monde, j: Joueur, c: Cout): number {
   return c.quantite * prixCourant(m, sortePourPayer(j, c))
 }
 
-/** Le coût du prochain générateur d'un type ; pour une source, dans cette couleur (les sources de départ ne s'achètent pas). */
+/** Le coût du prochain générateur d'un type ; pour une source, dans cette couleur (les générateurs de départ ne s'achètent pas). */
 export function coutProducteur(j: Joueur, i: number, couleur = 0): Cout {
   const t = PRODUCTEURS[i]
-  if (t === undefined || i === 0) return { forme: 0, couleur: 0, quantite: Infinity }
+  if (t === undefined || estFixe({ type: i })) return { forme: 0, couleur: 0, quantite: Infinity }
   const quantite = Math.ceil(t.cout.quantite * Math.pow(ACHAT.croissance, j.achetes[i] ?? 0))
   return { forme: t.cout.forme, couleur: t.genre === 'source' ? couleur : t.cout.couleur, quantite }
 }
 
 /** L'indice de la famille d'un genre dans `connus`. */
-const FAMILLE_INDEX: Record<Genre, number> = { source: 0, raffinerie: 1, melangeur: 2 }
+const FAMILLE_INDEX: Record<Genre, number> = { source: 0, raffinerie: 1, melangeur: 2, mine: 3 }
 
 /**
  * Un modèle est visible dès qu'on l'a dévoilé — le suivant en possédant le
- * précédent ; la première raffinerie toujours ; le mélangeur et la seconde
- * source avec le premier module fabriqué — ou, sauf les sources, dès qu'on
- * peut le payer.
+ * précédent ; le mélangeur et la seconde source avec le premier module
+ * fabriqué — ou, sauf les sources, dès qu'on peut le payer. Les générateurs de
+ * départ, jamais : on ne les achète pas.
  */
 export function visibleProducteur(j: Joueur, i: number): boolean {
   const t = PRODUCTEURS[i]
-  if (t === undefined || i === 0) return false
+  if (t === undefined || estFixe({ type: i })) return false
   const k = rangDe(i)
   if (k < (j.connus[FAMILLE_INDEX[t.genre]] ?? 0)) return true
   if (t.genre === 'source') return false
@@ -909,6 +948,8 @@ export function cadenceReelle(j: Joueur, p: Producteur, frequence: number, lot: 
  */
 export function valeurDe(m: Monde, j: Joueur, p: Producteur, mods: readonly ModuleAgissant[]): number {
   const b = bilan(lotDeBase(p), mods, multiplicateurPrestige(j))
+  // La mine rend de l'or : sa valeur est son or, tel quel.
+  if (estMine(p)) return b.lotMoyen * b.frequence + b.tapeMoyenne * TAPE_NOMINALE
   const prixSortie = prixCourant(m, sortie(p))
   if (estSource(p)) return (b.lotMoyen * b.frequence + b.tapeMoyenne * TAPE_NOMINALE) * prixSortie
   const parSeconde = b.lotMoyen * b.frequence + b.tapeMoyenne * TAPE_NOMINALE
@@ -958,15 +999,15 @@ export function brancherAuMieux(m: Monde, j: Joueur, mo: Module): Prise | null {
 
 /** Un générateur tiendrait-il là (au centre d'une case), avec ses modules, sans chevaucher un autre générateur ni ses modules ? */
 export function producteurTient(j: Joueur, p: Producteur, x: number, y: number): boolean {
-  const c = surLesCases(x, y)
+  const c = { ...surLesCases(x, y), type: p.type }
   const autres = occupation(j, undefined, p.id)
   const boites = [boiteProducteur(c), ...modulesDe(j, p).map((mo) => boiteModule(placeSurProducteur(c, mo.emplacement)))]
   return !boites.some((b) => autres.some((o) => seChevauchent(o, b)))
 }
 
-/** Déplace un générateur (ses modules suivent) là où il tient, au centre d'une case. Les sources de départ ne bougent pas. Rend faux sinon. */
+/** Déplace un générateur (ses modules suivent) là où il tient, au centre d'une case. Les générateurs de départ ne bougent pas. Rend faux sinon. */
 export function deplacerProducteur(j: Joueur, p: Producteur, x: number, y: number): boolean {
-  if (p.type === 0 || !producteurTient(j, p, x, y)) return false
+  if (estFixe(p) || !producteurTient(j, p, x, y)) return false
   const c = surLesCases(x, y)
   p.x = c.x
   p.y = c.y
@@ -1133,7 +1174,7 @@ export function peutPrestiger(j: Joueur): boolean {
   return pointsSi(j) >= 1
 }
 
-/** Tout remettre à zéro contre des points : les trois sources nues, la soute vide, pas d'or ni de matière. Ce qu'on connaît reste connu. */
+/** Tout remettre à zéro contre des points : la mine seule, la soute vide, pas d'or ni de matière. Ce qu'on connaît reste connu. */
 export function prestiger(j: Joueur): boolean {
   const gain = pointsSi(j)
   if (gain < 1) return false
@@ -1143,8 +1184,8 @@ export function prestiger(j: Joueur): boolean {
   j.matiere = Array.from({ length: SORTES }, () => 0)
   j.achetes = PRODUCTEURS.map(() => 0)
   j.fabriques = Array.from({ length: SORTES }, () => 0)
-  j.producteurs = sourcesDeDepart()
-  j.prochainId = Math.max(j.prochainId, PRIMAIRES + 1)
+  j.producteurs = depart()
+  j.prochainId = Math.max(j.prochainId, 2)
   j.modules = []
   j.produit = Array.from({ length: PRIMAIRES }, () => 0)
   j.produitRun = 0
@@ -1154,9 +1195,9 @@ export function prestiger(j: Joueur): boolean {
 // ---------------------------------------------------------------------------
 // LE TEMPS
 
-const ORDRE: Record<Genre, number> = { source: 0, melangeur: 1, raffinerie: 2 }
+const ORDRE: Record<Genre, number> = { mine: 0, source: 0, melangeur: 1, raffinerie: 2 }
 
-/** Fait vivre le monde `dt` heures : les sources produisent par leurs horloges, les mélangeurs puis les raffineries convertissent, le marché respire. */
+/** Fait vivre le monde `dt` heures : la mine et les sources produisent par leurs horloges, les mélangeurs puis les raffineries convertissent, le marché respire. */
 export function avancer(m: Monde, dt: number): void {
   if (dt <= 0) return
   for (const j of m.joueurs) {
@@ -1164,7 +1205,8 @@ export function avancer(m: Monde, dt: number): void {
     for (const p of ordonnes) {
       const b = bilanProducteur(j, p)
       if (b.frequence <= 0) continue
-      if (estSource(p)) produire(j, sortie(p), b.debit * 3600 * dt)
+      if (estMine(p)) produireOr(j, b.debit * 3600 * dt)
+      else if (estSource(p)) produire(j, sortie(p), b.debit * 3600 * dt)
       else convertir(j, p, b.debit * 3600 * dt)
     }
   }

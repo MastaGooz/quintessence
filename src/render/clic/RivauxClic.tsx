@@ -1,9 +1,9 @@
-/** LES RIVAUX : le classement par matière produite depuis le début, avec la couleur dominante, la production et les points de chacun. */
+/** LES RIVAUX : le classement par or extrait depuis le début, avec la couleur dominante, la production et les points de chacun. */
 import type { ReactElement } from 'react'
 import { couleurDominanteDe, debitTotal } from '../../logic/clic/moteur.ts'
 import { classement, joueur } from '../../logic/clic/partie.ts'
 import { abrege, parSeconde } from '../../ui/format.ts'
-import { NOM_POINT } from '../../ui/noms-clic.ts'
+import { NOM_OR, NOM_POINT } from '../../ui/noms-clic.ts'
 import { Symbole } from './Glyphe.tsx'
 import type { PagePropsClic } from './props.ts'
 
@@ -13,7 +13,7 @@ export function RivauxClic({ partie }: PagePropsClic): ReactElement {
   return (
     <div className="page">
       <h1>Rivaux</h1>
-      <p className="sourd">Sept autres joueurs, tous au même marché ; le rond dit la couleur que chacun produit le plus. Le classement compte les ronds produits depuis le début de la saison.</p>
+      <p className="sourd">Sept autres joueurs, tous au même marché ; le rond dit la couleur que chacun produit le plus. Le classement compte l’{NOM_OR} extrait depuis le début de la saison.</p>
       <section>
         {rangs.map((r, i) => (
           <div key={r.id} className={`ligne${r === moi ? ' ligne-moi' : ''}`}>
@@ -34,7 +34,7 @@ export function RivauxClic({ partie }: PagePropsClic): ReactElement {
               </span>
             </span>
             <span>
-              <b>{abrege(r.total)}</b> <span className="sourd petit">ronds</span>
+              <b>{abrege(r.orProduit)}</b> <span className="sourd petit">{NOM_OR}</span>
             </span>
           </div>
         ))}
