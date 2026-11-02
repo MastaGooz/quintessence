@@ -2,8 +2,8 @@
  * LE MENU DE CONSTRUCTION (Keko, 02/11 : « l'étape deux : l'onglet
  * construction ; un bouton sur l'UI qui ouvre le menu de construction ;
  * dedans, le choix entre plusieurs producteurs : scierie, mine… ») : une carte
- * par producteur, son prix en face (le premier de chaque sorte en or, les
- * suivants en or, bois et pierre), ce qu'il fait ; une tape le construit.
+ * par producteur, son prix en face (le même pour toutes : le tout premier en
+ * or seul, ensuite or, bois et pierre), ce qu'il fait ; une tape le construit.
  * Éteintes quand le prix manque.
  */
 import type { ReactElement } from 'react'
@@ -21,7 +21,7 @@ export function MenuConstruction({ j, onConstruire, onFermer }: { j: Joueur; onC
       <div className="choix-ameliorations">
         {TYPES_CONSTRUCTION.map((type, k) => {
           const r = PRODUCTEURS[type]?.ressource ?? 'bois'
-          const prix = prixConstruction(j, type)
+          const prix = prixConstruction(j)
           const payable = peutPayerPrix(j, prix)
           return (
             <button key={type} type="button" className="amelioration-carte construction-carte" style={{ animationDelay: `${120 + k * 110}ms` }} disabled={!payable} onClick={() => onConstruire(type)}>

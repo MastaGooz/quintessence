@@ -1122,9 +1122,9 @@ function payerPrix(j: Joueur, c: Prix): void {
   for (const r of RESSOURCES) j.ressources[r] -= c[r]
 }
 
-/** Le prix de la prochaine construction de ce type : le premier de chaque sorte en or seul, les suivants en or, bois et pierre, plus chers à chaque exemplaire (voir `CONSTRUCTION`). */
-export function prixConstruction(j: Joueur, type: number): Prix {
-  const k = j.producteurs.filter((p) => p.type === type).length
+/** Le prix de la prochaine construction, le même pour toutes les sortes : le tout premier producteur en or seul, ensuite or, bois et pierre, plus chers à chaque construction (voir `CONSTRUCTION`). */
+export function prixConstruction(j: Joueur): Prix {
+  const k = j.producteurs.filter(estConstruit).length
   if (k === 0) return { or: CONSTRUCTION.premier, bois: 0, pierre: 0 }
   const f = Math.pow(CONSTRUCTION.croissance, k - 1)
   return { or: Math.round(CONSTRUCTION.autres.or * f), bois: Math.round(CONSTRUCTION.autres.bois * f), pierre: Math.round(CONSTRUCTION.autres.pierre * f) }
@@ -1166,7 +1166,7 @@ function placeDeConstruction(j: Joueur, type: number): { x: number; y: number } 
 /** CONSTRUIRE un producteur (un indice de `TYPES_CONSTRUCTION`) : payé en or, posé à côté de la banque. Rend le producteur, ou null. */
 export function construire(j: Joueur, type: number): Producteur | null {
   const t = PRODUCTEURS[type]
-  const prix = prixConstruction(j, type)
+  const prix = prixConstruction(j)
   if (t?.genre !== 'ressource' || !constructionOuverte(j) || !peutPayerPrix(j, prix)) return null
   payerPrix(j, prix)
   const place = placeDeConstruction(j, type)

@@ -583,7 +583,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
   const construireIci = (type: number): void => {
     const queteAvant = j.quete
     const carteAvant = objectifEl.current?.getBoundingClientRect()
-    const prix = prixConstruction(j, type)
+    const prix = prixConstruction(j)
     const fait: { p: Producteur | null } = { p: null }
     agir(() => {
       fait.p = construire(j, type)

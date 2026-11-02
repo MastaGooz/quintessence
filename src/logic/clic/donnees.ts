@@ -220,10 +220,9 @@ export const MINE_DE_PIERRE: TypeProducteur = { id: 'minePierre', genre: 'ressou
 /**
  * Ce que coûte la construction (Keko, 02/11 : « le premier producteur coûte
  * uniquement de l'or, mais ensuite, si le joueur en veut d'autres, ils coûtent
- * pierre, bois et or ») : le PREMIER DE CHAQUE SORTE, `premier` or — sinon le
- * joueur qui commence par la scierie n'aurait jamais la pierre de sa mine —,
- * les suivants `autres`, `croissance` fois plus à chaque exemplaire. Chiffres
- * de moi.
+ * pierre, bois et or », puis « on permet un seul producteur en or seulement »)
+ * : le TOUT PREMIER, quelle que soit sa sorte, `premier` or ; ensuite tous
+ * `autres`, `croissance` fois plus à chaque construction. Chiffres de moi.
  */
 export const CONSTRUCTION = { premier: 50, autres: { or: 100, bois: 20, pierre: 20 }, croissance: 2 }
 
