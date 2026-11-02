@@ -83,7 +83,7 @@ export interface Joueur {
   /** La quête en cours (son rang), et l'or extrait quand elle a commencé. */
   quete: number
   queteDepuis: number
-  /** L'automatique de la mine (0 ou 1), acheté sur le bouton que la première quête fait apparaître : il remplit la barre, et la réserve. */
+  /** L'automatique de la mine (0 ou 1), acheté dans le menu des améliorations que la première quête ouvre : il remplit la barre, et la réserve. */
   automatisation: number
   /** Le niveau de chaque amélioration de la mine (voir `AMELIORATIONS`). */
   ameliorations: Record<IdAmelioration, number>
@@ -996,7 +996,7 @@ export function ameliorerSource(j: Joueur, p: Producteur): boolean {
 // ---------------------------------------------------------------------------
 // LES QUÊTES ET CE QU'ELLES DÉBLOQUENT
 
-/** La quête en cours : la première fait apparaître le bouton de l'automatique, les suivantes donnent un choix, sans fin, l'objectif doublant. */
+/** La quête en cours : la première ouvre le menu des améliorations, les suivantes donnent un choix, sans fin, l'objectif doublant. */
 export function queteEnCours(j: Joueur): Quete | null {
   if (j.quete === 0) return { id: 'bouton', or: QUETE_CHOIX.bouton, recompense: 'bouton' }
   const k = j.quete - 1
@@ -1026,19 +1026,24 @@ export function queteAccomplie(j: Joueur): boolean {
 export function reclamerQuete(m: Monde, j: Joueur): Quete | null {
   const q = queteEnCours(j)
   if (q === null || !queteAccomplie(j) || j.offre !== null) return null
-  // Le bouton de l'automatique n'a rien à poser : il est là dès que la première quête est réclamée (`automatiqueEnVente`).
+  // Le menu des améliorations n'a rien à poser : il est là dès que la première quête est réclamée (`ameliorationsOuvertes`).
   if (q.recompense === 'choix') j.offre = tirerOffre(m, j)
   j.quete += 1
   j.queteDepuis = j.orProduit
   return q
 }
 
-/** Le bouton de l'automatique est sur la mine : la première quête est réclamée, l'automatique pas encore acheté. */
-export function automatiqueEnVente(j: Joueur): boolean {
-  return j.quete >= 1 && j.automatisation === 0
+/** Le bouton des améliorations est là : la première quête est réclamée. */
+export function ameliorationsOuvertes(j: Joueur): boolean {
+  return j.quete >= 1
 }
 
-/** ACHETER L'AUTOMATIQUE sur le bouton de la mine, `PRIX_AUTOMATIQUE` or. Rend vrai s'il est acheté. */
+/** L'automatique est dans le menu des améliorations : ouvert, pas encore acheté. */
+export function automatiqueEnVente(j: Joueur): boolean {
+  return ameliorationsOuvertes(j) && j.automatisation === 0
+}
+
+/** ACHETER L'AUTOMATIQUE dans le menu des améliorations, `PRIX_AUTOMATIQUE` or. Rend vrai s'il est acheté. */
 export function acheterAutomatique(j: Joueur): boolean {
   if (!automatiqueEnVente(j) || j.or + 1e-9 < PRIX_AUTOMATIQUE) return false
   j.or -= PRIX_AUTOMATIQUE

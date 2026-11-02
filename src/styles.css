@@ -1305,72 +1305,6 @@ select {
   text-shadow: 1.5px 0 0 rgba(20, 8, 28, 0.85), -1.5px 0 0 rgba(20, 8, 28, 0.85), 0 1.5px 0 rgba(20, 8, 28, 0.85), 0 -1.5px 0 rgba(20, 8, 28, 0.85), 0 3px 0 rgba(20, 8, 28, 0.9);
 }
 
-/* LE BOUTON DE L'AUTOMATIQUE : à la place de la réserve à venir, de sa taille. Éteint tant que l'or manque, doré et battant quand il suffit. */
-.mine-acheter {
-  position: relative;
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  width: 320px;
-  height: 84px;
-  border-radius: 42px;
-  background: rgba(20, 8, 28, 0.65);
-  border: 3px solid rgba(255, 246, 226, 0.25);
-  color: rgba(255, 246, 226, 0.6);
-  cursor: pointer;
-  transition: transform 0.08s ease-out;
-}
-
-.mine-acheter-payable {
-  background: linear-gradient(180deg, #ffe27a, #e0a812);
-  border-color: #fff3c4;
-  color: #3a2408;
-  animation: mine-acheter 1.3s ease-in-out infinite;
-}
-
-@keyframes mine-acheter {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(255, 198, 31, 0);
-  }
-  50% {
-    box-shadow: 0 0 26px 6px rgba(255, 198, 31, 0.6);
-  }
-}
-
-.mine-acheter.enfonce {
-  transform: scale(0.95);
-}
-
-.mine-acheter-fleche {
-  flex: none;
-  width: 42px;
-  height: 42px;
-  fill: currentColor;
-}
-
-.mine-acheter-texte {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  line-height: 1;
-}
-
-/* Plus précis que `.producteur b` (le grand nombre d'or des générateurs). */
-.producteur .mine-acheter-texte b {
-  font-size: 30px;
-  font-weight: 800;
-  color: inherit;
-}
-
-.mine-acheter-prix {
-  font-size: 24px;
-  font-weight: 700;
-}
-
 .reserve.enfonce {
   transform: scale(0.95);
 }
@@ -1965,6 +1899,51 @@ span.rarete-4,
   pointer-events: auto;
 }
 
+/* LE BOUTON DES AMÉLIORATIONS, en haut à droite ; doré et battant quand quelque chose s'achète. Les stocks passent dessous. */
+.carte-ameliorer {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  min-height: 3rem;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(20, 8, 28, 0.75);
+  border: 2px solid rgba(255, 198, 31, 0.55);
+  color: var(--or);
+}
+
+.carte-ameliorer svg {
+  width: 1.6rem;
+  height: 1.6rem;
+  fill: currentColor;
+}
+
+.carte-ameliorer-pret {
+  background: linear-gradient(180deg, #ffe27a, #e0a812);
+  border-color: #fff3c4;
+  color: #3a2408;
+  animation: carte-ameliorer 1.3s ease-in-out infinite;
+}
+
+@keyframes carte-ameliorer {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 198, 31, 0);
+  }
+  50% {
+    box-shadow: 0 0 20px 5px rgba(255, 198, 31, 0.6);
+  }
+}
+
+.carte-ameliorer ~ .stocks {
+  top: 4.3rem;
+}
+
 .carte-zoom {
   position: absolute;
   top: 0.7rem;
@@ -2120,6 +2099,25 @@ span.rarete-4,
 
 .amelioration-effet {
   font-size: 0.95rem;
+}
+
+/* Dans le menu : le prix, en face du nom ; ce qui manque, quand l'or ne suffit pas. */
+.amelioration-prix {
+  font-size: 1.1rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.amelioration-manque {
+  font-size: 0.85rem;
+  color: var(--rouge);
+}
+
+/* Éteinte : son arrivée (`both`) fige l'opacité, l'éteinte passe par le filtre. */
+.amelioration-carte:disabled {
+  filter: grayscale(0.7) brightness(0.75);
+  border-color: rgba(255, 246, 226, 0.2);
+  cursor: default;
 }
 
 @keyframes carte-arrive {

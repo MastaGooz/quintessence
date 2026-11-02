@@ -203,10 +203,10 @@ export const MINE: TypeProducteur = { id: 'mine', genre: 'mine', cout: { forme: 
  * LES QUÊTES : GAGNER de l'or, une à la fois, sans fin ; l'or compte depuis
  * le début de la quête ; remplie, une quête se RÉCLAME d'une tape. La
  * première demande `bouton` or (à la tape : il n'y a encore rien d'autre) et
- * fait apparaître sur la mine LE BOUTON qui vend l'automatique
- * `PRIX_AUTOMATIQUE` or (Keko, 02/11 : « plutôt que donner l'auto
- * directement, la première quête ouvre le bouton upgrade sur la mine, et pour
- * 10 on achète l'upgrade »). Les suivantes demandent `premier × croissance^k` or et donnent le
+ * fait apparaître LE BOUTON DES AMÉLIORATIONS, dont le menu vend
+ * l'automatique `PRIX_AUTOMATIQUE` or (Keko, 02/11 : « un bouton générique
+ * d'upgrade en haut à droite, qui ouvre le menu upgrade ; on l'utilisera
+ * ensuite à la place des quêtes »). Les suivantes demandent `premier × croissance^k` or et donnent le
  * CHOIX d'une amélioration parmi `offre` tirées au hasard (Keko : « X or pour
  * obtenir une amélioration au choix »). Chiffres de moi, validés par Keko.
  */
@@ -219,7 +219,7 @@ export interface Quete {
 }
 export const QUETE_CHOIX = { bouton: 10, premier: 20, croissance: 2, offre: 3 }
 
-/** Le prix de l'automatique, sur le bouton de la mine. */
+/** Le prix de l'automatique, dans le menu des améliorations. */
 export const PRIX_AUTOMATIQUE = 10
 
 /**

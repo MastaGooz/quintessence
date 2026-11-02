@@ -1,12 +1,12 @@
 /**
  * LES AMÉLIORATIONS DE LA MINE à l'écran (Keko, 02/11 : « X or pour obtenir
  * une amélioration au choix ») : ce que chacune fait, du niveau qu'on a au
- * suivant, et LE CHOIX qu'ouvre une quête — trois cartes tirées, on en prend
- * une.
+ * suivant, LE CHOIX qu'ouvre une quête — trois cartes tirées, on en prend
+ * une —, et LE MENU de ce qui s'achète.
  */
 import type { ReactElement, ReactNode } from 'react'
-import { EFFETS_MINE, type IdAmelioration } from '../../logic/clic/donnees.ts'
-import { avanceTape, bilanMine, capaciteReserve, chancePepite, estMine, partTropPlein, valeurPepite, type Joueur } from '../../logic/clic/moteur.ts'
+import { EFFETS_MINE, PRIX_AUTOMATIQUE, type IdAmelioration } from '../../logic/clic/donnees.ts'
+import { automatiqueEnVente, avanceTape, bilanMine, capaciteReserve, chancePepite, estMine, partTropPlein, valeurPepite, type Joueur } from '../../logic/clic/moteur.ts'
 import { NOM_AMELIORATION } from '../../ui/noms-clic.ts'
 import { Feuille } from '../Feuille.tsx'
 import { SymbolePiece } from './Glyphe.tsx'
@@ -91,6 +91,44 @@ export function effetAmelioration(j: Joueur, id: IdAmelioration): ReactNode {
         </>
       )
   }
+}
+
+/**
+ * LE MENU DES AMÉLIORATIONS (Keko, 02/11 : « un bouton générique d'upgrade en haut à droite, qui ouvre le menu upgrade qu'on a déjà ;
+ * on l'utilisera ensuite à la place des quêtes ») : ce qui s'achète, une carte chacun, comme celles du choix ; une tape achète. Pour
+ * l'instant, l'automatique.
+ */
+export function MenuAmeliorations({ j, onAcheterAutomatique, onFermer }: { j: Joueur; onAcheterAutomatique: () => void; onFermer: () => void }): ReactElement {
+  const mine = j.producteurs.find(estMine)
+  const payable = j.or + 1e-9 >= PRIX_AUTOMATIQUE
+  // Ce que l'automatique rapportera, une fois acheté.
+  const parHeure = mine === undefined ? 0 : bilanMine({ ...j, automatisation: 1 }, mine).debit * 3600
+  return (
+    <Feuille titre="Améliorations" onFermer={onFermer}>
+      <div className="choix-ameliorations">
+        {automatiqueEnVente(j) ? (
+          <button type="button" className="amelioration-carte" style={{ animationDelay: '120ms' }} disabled={!payable} onClick={onAcheterAutomatique}>
+            <span className="amelioration-tete">
+              <b className="amelioration-nom">Automatique</b>
+              <span className="amelioration-prix">
+                {PRIX_AUTOMATIQUE} <SymbolePiece />
+              </span>
+            </span>
+            <span className="amelioration-effet">
+              La barre de la mine se remplit seule, même sans vous : <b className="gain">{abregeFin(parHeure)}</b> <SymbolePiece /> par heure, dans la réserve
+            </span>
+            {!payable && (
+              <span className="amelioration-manque">
+                Il manque {Math.ceil(PRIX_AUTOMATIQUE - j.or - 1e-9)} <SymbolePiece />
+              </span>
+            )}
+          </button>
+        ) : (
+          <p className="sourd">Rien à acheter pour l’instant.</p>
+        )}
+      </div>
+    </Feuille>
+  )
 }
 
 /** LE CHOIX d'une quête : les cartes de l'offre, qui arrivent l'une après l'autre ; une tape en prend une. */

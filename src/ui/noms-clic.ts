@@ -54,7 +54,7 @@ export function explicationModule(couleur: number, forme: number): string {
 /** La mine d'or du départ (Keko, 02/11). */
 export const NOM_MINE = 'Mine d’or'
 /** Ce qu'une quête débloque, tel qu'on l'annonce sur sa carte. */
-export const NOM_RECOMPENSE: Record<Recompense, string> = { bouton: 'l’amélioration de la mine', choix: 'une amélioration au choix' }
+export const NOM_RECOMPENSE: Record<Recompense, string> = { bouton: 'le menu des améliorations', choix: 'une amélioration au choix' }
 /** Les améliorations de la mine (Keko, 02/11). */
 export const NOM_AMELIORATION: Record<IdAmelioration, string> = {
   pioche: 'Pioche',
