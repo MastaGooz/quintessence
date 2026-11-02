@@ -96,6 +96,16 @@ export function sonPiece(rang: number): void {
   jouer((c, t) => note(c, t, 1320 * Math.pow(1.06, rang % 8), 0.07, 'sine', 0.28))
 }
 
+/** Une tape sur la mine : une note qui monte d'une octave à mesure que la barre se remplit — dix tapes, une gamme, puis le tintement de la pièce. Un critique sonne plus haut et plus fort. */
+export function sonBarre(remplissage: number, critique: boolean): void {
+  jouer((c, t) => {
+    const f = 523 * Math.pow(2, Math.min(1, Math.max(0, remplissage))) * (critique ? 1.5 : 1)
+    note(c, t, f, 0.1, 'triangle', critique ? 0.6 : 0.45)
+    note(c, t, f * 2, 0.06, 'sine', 0.12)
+    if (critique) note(c, t + 0.05, f * 1.5, 0.16, 'triangle', 0.3)
+  })
+}
+
 /** Une pièce tombe dans la réserve de la mine : un tintement qui monte d'une octave à mesure qu'elle se remplit ; pleine, un petit accord qui s'ouvre. */
 export function sonReserve(remplissage: number, pleine: boolean): void {
   jouer((c, t) => {

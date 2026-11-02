@@ -1185,6 +1185,37 @@ select {
   will-change: transform;
 }
 
+/* La tête de la barre : une lueur au bord de l'or, qui flashe à chaque tape (Keko, 02/11 : « ça manque de juice, le remplissage »). */
+.mine-barre-tete {
+  position: absolute;
+  top: -6px;
+  bottom: -6px;
+  left: 0;
+  width: 22px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(255, 252, 230, 1) 0%, rgba(255, 226, 122, 0.7) 40%, rgba(255, 198, 31, 0) 75%);
+  transform: translateX(-50%);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* Presque pleine : elle pulse, la pièce arrive. */
+.mine-barre-presque {
+  animation: barre-presque 0.6s ease-in-out infinite;
+}
+
+@keyframes barre-presque {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 198, 31, 0);
+    border-color: rgba(255, 246, 226, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 18px 4px rgba(255, 198, 31, 0.6);
+    border-color: rgba(255, 226, 122, 0.9);
+  }
+}
+
 .producteur .mine-barre-texte {
   position: absolute;
   inset: 0;

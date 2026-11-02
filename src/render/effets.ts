@@ -182,7 +182,8 @@ export function piecesPour(somme: number): number {
 export function effetVente(bouton: DOMRect, gain: number): void {
   const cible = cibleOr?.getBoundingClientRect()
   if (cible === undefined || gain <= 0) return
-  const arrivee = volerDesPieces(bouton, cible, piecesPour(gain), (rang) => {
+  // UNE PIÈCE QUI VOLE PAR PIÈCE GAGNÉE (Keko, 02/11 : « c'est bizarre que plusieurs pièces volent alors qu'on en génère une ») ; au-delà de douze, chacune en porte plusieurs.
+  const arrivee = volerDesPieces(bouton, cible, Math.max(1, Math.min(12, Math.round(gain))), (rang) => {
     sonPiece(rang)
     secouerLOr()
   })

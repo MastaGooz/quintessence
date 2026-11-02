@@ -33,7 +33,7 @@ import { vibrer } from '../../ui/haptique.ts'
 import {
   EXPLICATION_TRAIT, LETTRE_PRODUCTEUR, NOM_AMELIORATION, NOM_COULEUR, NOM_MATIERE, NOM_MINE, NOM_OR, NOM_RECOMPENSE, NOM_RARETE, NOM_SOUTE, NOM_TRAIT, NOMS_FORMES, explicationModule, nomProducteur, nomSorte, nomSortePluriel,
 } from '../../ui/noms-clic.ts'
-import { sonBatir, sonEtape, sonReserve, sonTape } from '../../ui/sons.ts'
+import { sonBarre, sonBatir, sonEtape, sonReserve, sonTape } from '../../ui/sons.ts'
 import { Compteur } from '../Compteur.tsx'
 import { DUREE_GLISSE, monterCarte, type Carte, type Point } from '../carte/carte.ts'
 import { SERIE_MS, eclater, effetDepense, effetVente, flotter, mouvementReduit, onde } from '../effets.ts'
@@ -192,12 +192,31 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     if (coup.or) {
       // LA MINE : la tape fait bondir la barre ; une barre pleine paie la bourse — sa pièce vole du « +1 » au compteur (Keko, 02/11 : la tape est le gain actif, la réserve le gain d'absence).
       const el = producteursEl.current.get(p.id)
+      // LA BARRE RÉAGIT À CHAQUE TAPE (Keko, 02/11 : « ça manque de juice, le remplissage ») : elle s'écrase et s'allume, sa tête flashe, des étincelles partent de son bord ; la note monte avec elle.
+      const remplissage = coup.gain > 0 ? 1 : Math.min(1, p.progres)
+      sonBarre(remplissage, coup.critique)
       if (coup.gain > 0) lacherLaPiece(el, coup.gain)
       if (!mouvementReduit()) {
         el?.animate(ECRASER, { duration: 170, easing: 'ease-out' })
-        el?.querySelector('.mine-barre')?.animate([{ filter: 'brightness(1.8)' }, { filter: 'brightness(1)' }], { duration: 220, easing: 'ease-out' })
+        const barre = el?.querySelector<HTMLElement>('.mine-barre')
+        barre?.animate(
+          [
+            { transform: 'scaleY(1)', filter: 'brightness(1)' },
+            { transform: `scaleY(${coup.critique ? 1.45 : 1.25})`, filter: `brightness(${coup.critique ? 2.2 : 1.7})`, offset: 0.3 },
+            { transform: 'scaleY(1)', filter: 'brightness(1)' },
+          ],
+          { duration: coup.critique ? 260 : 170, easing: 'ease-out' },
+        )
+        el?.querySelector('.mine-barre-tete')?.animate(
+          [
+            { opacity: 1, transform: 'translateX(-50%) scale(2.2)' },
+            { opacity: 0.45, transform: 'translateX(-50%) scale(1)' },
+          ],
+          { duration: 260, easing: 'ease-out' },
+        )
+        const r = barre?.getBoundingClientRect()
+        if (r !== undefined) eclater(r.left + r.width * Math.min(1, coup.gain > 0 ? 1 : p.progres), r.top + r.height / 2, coup.critique ? 14 : 5, '#ffe27a')
       }
-      sonTape(coup.critique ? n + 6 : n)
       vibrer(coup.critique ? [10, 30, 25] : 8)
       if (coup.critique) {
         eclater(x, y, 26, '#ff8a5c')
@@ -683,13 +702,23 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     const pas = (maintenant: number): void => {
       const mine = j.producteurs.find(estMine)
       const el = mine === undefined ? undefined : producteursEl.current.get(mine.id)
+      const dt = Math.min(0.05, (maintenant - avant) / 1000)
+      avant = maintenant
       if (mine !== undefined && el !== undefined) {
-        const montre = maintenant < barrePleineJusqua.current ? 1 : Math.min(1, mine.progres)
+        const cible = maintenant < barrePleineJusqua.current ? 1 : Math.min(1, mine.progres)
+        // Elle MONTE en glissant (vite, sans rebond), et redescend d'un coup quand elle a payé.
+        montre = cible < montre - 0.001 ? cible : montre + (cible - montre) * (1 - Math.exp(-dt * 24))
         const remplie = el.querySelector<HTMLElement>('.mine-barre-remplie')
         if (remplie !== null) remplie.style.transform = `scaleX(${montre})`
+        const tete = el.querySelector<HTMLElement>('.mine-barre-tete')
+        if (tete !== null) tete.style.left = `${montre * 100}%`
+        // 8 tapes de 10 % font 0,7999… : le seuil a sa marge.
+        el.querySelector('.mine-barre')?.classList.toggle('mine-barre-presque', cible >= 0.795 && cible < 1)
       }
       image = requestAnimationFrame(pas)
     }
+    let montre = 0
+    let avant = performance.now()
     image = requestAnimationFrame(pas)
     return () => cancelAnimationFrame(image)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1266,6 +1295,7 @@ function TexteProducteur({ j, p, b, actif }: { j: Joueur; p: Producteur; b: Retu
         <span className="mine-production">
           <span className="mine-barre">
             <span className="mine-barre-remplie" />
+            <span className="mine-barre-tete" />
           </span>
           <span className="mine-barre-gain">
             +{abregeFin(b.lot)} <SymbolePiece />
