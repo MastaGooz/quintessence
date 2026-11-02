@@ -36,7 +36,7 @@ import {
 import { sonBarre, sonBatir, sonEtape, sonReserve, sonTape } from '../../ui/sons.ts'
 import { Compteur } from '../Compteur.tsx'
 import { DUREE_GLISSE, monterCarte, type Carte, type Point } from '../carte/carte.ts'
-import { DUREE_VOL, SERIE_MS, eclater, effetDepense, effetVente, flotter, impact, mouvementReduit, onde, retarderLeCompteur, volerDesPieces } from '../effets.ts'
+import { DUREE_VOL, SERIE_MS, eclater, effetDepense, effetRecolte, effetVente, flotter, impact, intensiteRecolte, mouvementReduit, onde, retarderLeCompteur, volerDesPieces } from '../effets.ts'
 import { Feuille } from '../Feuille.tsx'
 import { ChoixAmelioration } from './Ameliorations.tsx'
 import { BoutonCout, Boutique, COULEURS_RARETE } from './Boutique.tsx'
@@ -499,9 +499,14 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     versLaSoute(s, `→ ${NOM_SOUTE.toLowerCase()}`)
   }
 
-  /** RÉCOLTER la réserve de la mine d'une tape : ses pièces volent au compteur, qui ne bouge qu'à leur arrivée. */
+  /**
+   * RÉCOLTER la réserve de la mine d'une tape : ses pièces volent au compteur, qui ne bouge qu'à leur arrivée. Plus la récolte est grosse,
+   * plus tout est fort (Keko, 02/11) : la réserve bondit et flashe, sa jauge se vide d'un trait, la carte tremble, le téléphone vibre plus
+   * longtemps (le reste : `effetRecolte`).
+   */
   const recolterIci = (p: Producteur, cible: HTMLElement): void => {
     const r = cible.getBoundingClientRect()
+    const capacite = capaciteReserve(j, p)
     const fait = { or: 0 }
     agirRef.current(() => {
       fait.or = recolter(j, p)
@@ -510,11 +515,42 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
       vibrer([10, 30, 10])
       return
     }
-    // Les mêmes pièces qu'une vente : elles partent de la réserve, le nombre flotte au-dessus.
-    effetVente(r, fait.or)
-    vibrer([15, 30, 40])
-    eclater(r.left + r.width / 2, r.top + r.height / 2, 14)
-    if (!mouvementReduit()) cible.animate(ECRASER, { duration: 200, easing: 'ease-out' })
+    const k = intensiteRecolte(fait.or, capacite)
+    effetRecolte(r, fait.or, k)
+    vibrer(k < 0.35 ? [15, 30, 40] : [20, 30, 40, 30, Math.round(60 + 140 * k)])
+    if (mouvementReduit()) return
+    cible.animate(
+      [
+        { transform: 'scale(1)', filter: 'brightness(1)' },
+        { transform: `scale(${0.9 - 0.06 * k}, ${0.86 - 0.08 * k})`, filter: `brightness(${1.3 + 1.2 * k})`, offset: 0.18 },
+        { transform: `scale(${1.08 + 0.16 * k}, ${1.12 + 0.2 * k})`, filter: `brightness(${1.6 + 1.6 * k})`, offset: 0.42 },
+        { transform: 'scale(0.97)', offset: 0.7 },
+        { transform: 'scale(1)', filter: 'brightness(1)' },
+      ],
+      { duration: 380 + 260 * k, easing: 'ease-out' },
+    )
+    // La jauge se vide d'un trait, sans attendre (elle attend d'ordinaire la pièce qui arrive). En style posé à la main : React ne touche
+    // que la largeur, alors que la classe de la réserve, elle, est réécrite quand la réserve cesse d'être pleine.
+    const jauge = cible.querySelector<HTMLElement>('.reserve-jauge')
+    if (jauge !== null) {
+      jauge.style.transition = 'width 0.32s cubic-bezier(0.6, 0, 0.8, 0.4)'
+      window.setTimeout(() => (jauge.style.transition = ''), 700)
+    }
+    // La carte tremble, d'autant plus que la récolte est grosse.
+    if (k > 0.25) {
+      const a = 3 + 9 * k
+      cadre.current?.animate(
+        [
+          { transform: 'translate(0, 0)' },
+          { transform: `translate(${-a}px, ${a * 0.5}px)` },
+          { transform: `translate(${a * 0.8}px, ${-a * 0.6}px)` },
+          { transform: `translate(${-a * 0.5}px, ${-a * 0.3}px)` },
+          { transform: `translate(${a * 0.3}px, ${a * 0.4}px)` },
+          { transform: 'translate(0, 0)' },
+        ],
+        { duration: 220 + 260 * k, easing: 'ease-out' },
+      )
+    }
   }
 
   /** Une pépite quitte l'écran (tapée ou perdue) : son minuteur s'arrête. */

@@ -106,6 +106,20 @@ export function sonBarre(remplissage: number, critique: boolean): void {
   })
 }
 
+/**
+ * La réserve se vide d'un coup : un souffle qui monte, puis une cascade de tintements. Tout grandit avec `intensite` (0 à 1) : la
+ * hauteur du souffle, le nombre de tintements, et, pour une grosse récolte, un coup sourd dessous.
+ */
+export function sonRecolte(intensite: number): void {
+  const k = Math.min(1, Math.max(0, intensite))
+  jouer((c, t) => {
+    note(c, t, 330, 0.22 + 0.2 * k, 'triangle', 0.3 + 0.2 * k, 660 + 660 * k)
+    if (k > 0.4) note(c, t, 110, 0.3, 'sine', 0.6 * k, 55)
+    const tintements = 2 + Math.round(6 * k)
+    for (let i = 0; i < tintements; i++) note(c, t + 0.06 + i * 0.045, 1320 * Math.pow(1.07, i), 0.09, 'sine', 0.22 + 0.1 * k)
+  })
+}
+
 /** Une pièce tombe dans la réserve de la mine : un tintement qui monte d'une octave à mesure qu'elle se remplit ; pleine, un petit accord qui s'ouvre. */
 export function sonReserve(remplissage: number, pleine: boolean): void {
   jouer((c, t) => {

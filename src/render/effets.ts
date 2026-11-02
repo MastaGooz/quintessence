@@ -7,11 +7,12 @@
  * ne sait rien de tout ça ; ce sont les pages qui appellent ces fonctions
  * après avoir joué l'action.
  */
-import { sonDepense, sonPiece } from '../ui/sons.ts'
+import { sonDepense, sonPiece, sonRecolte } from '../ui/sons.ts'
 
 let couche: HTMLElement | null = null
 let cibleOr: HTMLElement | null = null
 const retards: Record<string, number> = {}
+const glisses: Record<string, number> = {}
 
 /** La couche où l'on dessine (posée par `Jeu`). */
 export function monterCouche(el: HTMLElement | null): void {
@@ -31,9 +32,17 @@ export function mouvementReduit(): boolean {
   }
 }
 
-/** Un compteur attend ce délai avant de bouger : les pièces arrivent d'abord. */
-export function retarderLeCompteur(cle: string, ms: number): void {
+/** Un compteur attend ce délai avant de bouger : les pièces arrivent d'abord. `glisse` : il monte ensuite pendant ce temps, à vitesse égale, au rythme d'un flot de pièces. */
+export function retarderLeCompteur(cle: string, ms: number, glisse?: number): void {
   retards[cle] = Math.max(retards[cle] ?? 0, ms)
+  if (glisse !== undefined) glisses[cle] = Math.max(glisses[cle] ?? 0, glisse)
+}
+
+export function prendreLaGlisse(cle: string | undefined): number | undefined {
+  if (cle === undefined) return undefined
+  const g = glisses[cle]
+  delete glisses[cle]
+  return g
 }
 
 export function prendreLeRetard(cle: string | undefined): number {
@@ -139,9 +148,9 @@ export function onde(x: number, y: number, rayon = 40, couleur = 'rgba(255, 214,
   )
 }
 
-/** Un petit sursaut du compteur d'or, à chaque pièce qui arrive. */
-export function secouerLOr(): void {
-  cibleOr?.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.18)', offset: 0.35 }, { transform: 'scale(1)' }], { duration: 220, easing: 'ease-out' })
+/** Un petit sursaut du compteur d'or, à chaque pièce qui arrive ; `force` l'agrandit (la dernière pièce d'une grosse récolte). */
+export function secouerLOr(force = 1): void {
+  cibleOr?.animate([{ transform: 'scale(1)' }, { transform: `scale(${1 + 0.18 * force})`, offset: 0.35 }, { transform: 'scale(1)' }], { duration: 220 + 80 * (force - 1), easing: 'ease-out' })
 }
 
 function centre(r: DOMRect): [number, number] {
@@ -156,7 +165,7 @@ export const DUREE_VOL = 560
  * l'autre. `onArrivee` est appelé à chaque atterrissage. Rend l'instant (ms)
  * où la première pièce arrive.
  */
-export function volerDesPieces(depuis: DOMRect, vers: DOMRect, n: number, onArrivee?: (rang: number) => void): number {
+export function volerDesPieces(depuis: DOMRect, vers: DOMRect, n: number, onArrivee?: (rang: number) => void, ecart = 55): number {
   if (couche === null || mouvementReduit()) {
     onArrivee?.(0)
     return 0
@@ -164,7 +173,7 @@ export function volerDesPieces(depuis: DOMRect, vers: DOMRect, n: number, onArri
   const [x0, y0] = centre(depuis)
   const [x1, y1] = centre(vers)
   const DUREE = DUREE_VOL
-  const ECART = 55
+  const ECART = ecart
   for (let i = 0; i < n; i++) {
     const px = x0 + (Math.random() - 0.5) * Math.min(depuis.width, 120) * 0.6
     const py = y0 + (Math.random() - 0.5) * 12
@@ -211,6 +220,47 @@ export function effetVente(bouton: DOMRect, gain: number): void {
   retarderLeCompteur('or', arrivee)
   const [x] = centre(bouton)
   flotterOr(x, bouton.top - 16, gain, 1.05)
+}
+
+/** L'intensité d'une récolte, de 0 à 1 : à l'échelle du logarithme, une pièce y est déjà sensible, une réserve pleine la porte au maximum. */
+export function intensiteRecolte(gain: number, capacite: number): number {
+  return Math.min(1, Math.max(0, Math.log(1 + gain) / Math.log(1 + Math.max(1, capacite))))
+}
+
+/**
+ * LA RÉCOLTE DE LA RÉSERVE (Keko, 02/11 : « quand on vide la réserve, ce
+ * n'est pas assez juicy ; un effet dont l'intensité augmente avec la
+ * quantité ») : un éclair, des ondes, une gerbe d'étincelles, un nombre qui
+ * flotte, un flot de pièces vers le compteur — une par pièce, jusqu'à trente
+ * — qui monte au rythme de leur arrivée et sursaute fort à la dernière, et
+ * un son qui monte. Tout grandit avec `intensite` (`intensiteRecolte`).
+ */
+export function effetRecolte(source: DOMRect, gain: number, intensite: number): void {
+  const cible = cibleOr?.getBoundingClientRect()
+  if (cible === undefined || gain <= 0) return
+  const k = Math.min(1, Math.max(0, intensite))
+  sonRecolte(k)
+  const n = Math.max(1, Math.min(Math.round(gain), 6 + Math.round(24 * k)))
+  const ecart = n > 12 ? 32 : 55
+  const arrivee = volerDesPieces(
+    source,
+    cible,
+    n,
+    (rang) => {
+      sonPiece(rang)
+      secouerLOr(rang === n - 1 ? 1 + 2.2 * k : 1)
+    },
+    ecart,
+  )
+  retarderLeCompteur('or', arrivee, (n - 1) * ecart + 160)
+  const [x, y] = centre(source)
+  flotterOr(x, source.top - 16, gain, 1.1 + 1.3 * k)
+  impact(x, y, 90 + 260 * k)
+  onde(x, y, 50 + 170 * k)
+  if (k > 0.45) window.setTimeout(() => onde(x, y, 80 + 240 * k, 'rgba(255, 250, 225, 0.9)'), 110)
+  if (k > 0.8) window.setTimeout(() => onde(x, y, 120 + 300 * k), 230)
+  eclater(x, y, Math.round(10 + 50 * k), '#ffe27a')
+  if (k > 0.5) eclater(x, y, Math.round(30 * k), '#fff6d0')
 }
 
 /** Deux tapes à moins de ce délai forment une série : leurs gains s'additionnent dans un seul nombre, le son monte. */

@@ -18,7 +18,7 @@
  */
 import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { possede } from '../ui/format.ts'
-import { mouvementReduit, prendreLeRetard } from './effets.ts'
+import { mouvementReduit, prendreLaGlisse, prendreLeRetard } from './effets.ts'
 
 const HAUT: Keyframe[] = [{ transform: 'scale(1)' }, { transform: 'scale(1.3)', color: '#ffffff', offset: 0.3 }, { transform: 'scale(1)' }]
 const BAS: Keyframe[] = [{ transform: 'scale(1)' }, { transform: 'scale(0.82)', color: 'var(--rouge)', offset: 0.3 }, { transform: 'scale(1)' }]
@@ -53,20 +53,20 @@ export function Compteur({
   const enBaisseRef = useRef(sursautEnBaisse)
   enBaisseRef.current = sursautEnBaisse
 
-  /** Glisse de ce qui est montré vers la valeur reçue moins ce qui vole encore. */
-  const allerVers = (): void => {
+  /** Glisse de ce qui est montré vers la valeur reçue moins ce qui vole encore ; une `glisse` donnée (un flot de pièces) monte à vitesse égale pendant ce temps. */
+  const allerVers = (glisse?: number): void => {
     const depuis = affiche.current
     const vers = cible.current - enVol.current
     if (vers === depuis) return
     cancelAnimationFrame(image.current)
     const t0 = performance.now()
-    const d = mouvementReduit() || Math.abs(vers - depuis) <= 2 ? 0 : dureeRef.current
+    const d = mouvementReduit() || Math.abs(vers - depuis) <= 2 ? 0 : (glisse ?? dureeRef.current)
     if (formatRef.current(vers) !== formatRef.current(depuis) && (vers > depuis || enBaisseRef.current)) {
       ref.current?.animate(vers > depuis ? HAUT : BAS, { duration: 340, easing: 'cubic-bezier(.2,1.4,.4,1)' })
     }
     const pas = (t: number): void => {
       const u = d === 0 ? 1 : Math.min(1, (t - t0) / d)
-      const e = 1 - Math.pow(1 - u, 3)
+      const e = glisse !== undefined ? u : 1 - Math.pow(1 - u, 3)
       affiche.current = depuis + (vers - depuis) * e
       setMontre(affiche.current)
       if (u < 1) image.current = requestAnimationFrame(pas)
@@ -79,8 +79,9 @@ export function Compteur({
     const ecart = valeur - cible.current
     cible.current = valeur
     const retard = prendreLeRetard(cle)
+    const glisse = prendreLaGlisse(cle)
     if (retard <= 0) {
-      allerVers()
+      allerVers(glisse)
       return
     }
     // Ce gain vole : il n'apparaîtra qu'à l'arrivée de sa pièce.
@@ -88,7 +89,7 @@ export function Compteur({
     const id = window.setTimeout(() => {
       minuteurs.current.delete(id)
       enVol.current -= ecart
-      allerVers()
+      allerVers(glisse)
     }, retard)
     minuteurs.current.add(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
