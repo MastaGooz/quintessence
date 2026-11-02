@@ -30,9 +30,9 @@
  * dévoilera quand Keko posera les briques suivantes (donjons, héros, ateliers).
  */
 import {
-  ACHAT, CASE, COULEURS, EFFETS, EMPLACEMENTS, FABRICATION, FAMILLES, FORMES, FUSION, MARCHE, MELANGE, MODULE, NIVEAU, NIVEAU_SOURCE, PIECE, PRESTIGE, PRIMAIRES, PRODUCTEUR, PRODUCTEURS,
-  RARETES, SORTES, TRAITS, TYPE_MINE, VALEUR_MODULE, aDuBleu, couleurDe, formeDe, partsDe, sorteDe,
-  type Cout, type Genre, type Qualite, type Trait, type TypeProducteur,
+  ACHAT, AUTOMATISATION, CASE, COULEURS, EFFETS, EMPLACEMENTS, FABRICATION, FAMILLES, FORMES, FUSION, MARCHE, MELANGE, MODULE, NIVEAU, NIVEAU_SOURCE, PIECE, PRESTIGE, PRIMAIRES, PRODUCTEUR,
+  PRODUCTEURS, QUETES, RARETES, SORTES, TRAITS, TYPE_MINE, VALEUR_MODULE, aDuBleu, couleurDe, formeDe, partsDe, sorteDe,
+  type Cout, type Genre, type Qualite, type Quete, type Recompense, type Trait, type TypeProducteur,
 } from './donnees.ts'
 import { graineDe, rngDe } from '../rng.ts'
 
@@ -75,6 +75,13 @@ export interface Joueur {
   or: number
   /** L'or extrait de la mine depuis le début de la saison : le score. */
   orProduit: number
+  /** La quête en cours (un indice dans `QUETES` ; au-delà, toutes sont faites), et l'or extrait quand elle a commencé. */
+  quete: number
+  queteDepuis: number
+  /** Ce que les quêtes ont débloqué : ça survit au prestige. */
+  debloques: Recompense[]
+  /** L'automatisation de la mine achetée (0 ou 1) : elle se tape seule. */
+  automatisation: number
   /** La matière en stock, par sorte (voir `sorteDe`). */
   matiere: number[]
   producteurs: Producteur[]
@@ -134,6 +141,10 @@ export function nouveauJoueur(id: number, nom: string): Joueur {
     nom,
     or: 0,
     orProduit: 0,
+    quete: 0,
+    queteDepuis: 0,
+    debloques: [],
+    automatisation: 0,
     matiere: Array.from({ length: SORTES }, () => 0),
     producteurs: depart(),
     modules: [],
@@ -476,11 +487,12 @@ export interface Bilan {
  * chances des losanges se composent. Le lot vaut pour tout déclenchement ; la
  * tape y ajoute le rouge ; le temps fait la fréquence des horloges.
  */
-export function bilan(lot0: number, mods: readonly ModuleAgissant[], prestige: number): Bilan {
+export function bilan(lot0: number, mods: readonly ModuleAgissant[], prestige: number, horloge0 = 0): Bilan {
   const ajout = [0, 0, 0]
   const mult = [1, 1, 1]
   const sans = [1, 1, 1]
-  let horloge = 0
+  // `horloge0` : les déclenchements par seconde que le générateur a de lui-même (la mine automatisée), avant les modules.
+  let horloge = horloge0
   for (const mo of mods) {
     const f = forceEnPlace(mo, mods)
     for (const [cible, part] of partsDe(mo.couleur)) {
@@ -509,9 +521,21 @@ export function lotDeBase(p: Producteur): number {
   return typeDe(p).lot * (estSource(p) || estMine(p) ? p.niveau : 1)
 }
 
+/** Les déclenchements par seconde qu'un générateur a de lui-même : la mine, quand elle est automatisée. */
+export function horlogeDeBase(j: Joueur, p: Producteur): number {
+  return estMine(p) ? j.automatisation * AUTOMATISATION.tics : 0
+}
+
 /** Le bilan d'un générateur tel qu'il est équipé. */
 export function bilanProducteur(j: Joueur, p: Producteur): Bilan {
-  return bilan(lotDeBase(p), modulesDe(j, p), multiplicateurPrestige(j))
+  return bilan(lotDeBase(p), modulesDe(j, p), multiplicateurPrestige(j), horlogeDeBase(j, p))
+}
+
+/** L'or par seconde du joueur : ses mines, par leurs horloges. */
+export function debitOr(j: Joueur): number {
+  let d = 0
+  for (const p of j.producteurs) if (estMine(p)) d += bilanProducteur(j, p).debit
+  return d
 }
 
 /** La production du joueur, en matière ronde par seconde : ses sources, par leurs horloges. */
@@ -802,6 +826,52 @@ export function ameliorerSource(j: Joueur, p: Producteur): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// LES QUÊTES ET CE QU'ELLES DÉBLOQUENT
+
+/** La quête en cours, ou null quand toutes sont faites. */
+export function queteEnCours(j: Joueur): Quete | null {
+  return QUETES[j.quete] ?? null
+}
+
+/** L'or gagné pour la quête en cours, borné à son objectif. */
+export function progresQuete(j: Joueur): number {
+  const q = queteEnCours(j)
+  return q === null ? 0 : Math.min(q.or, Math.max(0, j.orProduit - j.queteDepuis))
+}
+
+export function queteAccomplie(j: Joueur): boolean {
+  const q = queteEnCours(j)
+  return q !== null && j.orProduit - j.queteDepuis + 1e-9 >= q.or
+}
+
+/** Réclame la quête accomplie : sa récompense est débloquée, la suivante commence. Rend la quête réclamée, ou null. */
+export function reclamerQuete(j: Joueur): Quete | null {
+  const q = queteEnCours(j)
+  if (q === null || !queteAccomplie(j)) return null
+  if (!j.debloques.includes(q.recompense)) j.debloques.push(q.recompense)
+  j.quete += 1
+  j.queteDepuis = j.orProduit
+  return q
+}
+
+/** L'automatisation se propose quand une quête l'a débloquée et qu'on ne l'a pas encore. */
+export function automatisationVisible(j: Joueur): boolean {
+  return j.debloques.includes('automatisation') && j.automatisation === 0
+}
+
+export function peutAutomatiser(j: Joueur): boolean {
+  return automatisationVisible(j) && j.or + 1e-9 >= AUTOMATISATION.cout
+}
+
+/** Achète l'automatisation de la mine : elle se tape seule dès maintenant. */
+export function automatiser(j: Joueur): boolean {
+  if (!peutAutomatiser(j)) return false
+  j.or -= AUTOMATISATION.cout
+  j.automatisation = 1
+  return true
+}
+
+// ---------------------------------------------------------------------------
 // LA FABRICATION DES MODULES : dans la boutique, comme le reste
 
 /** Ce que vaut en or un module de cette forme et de cette rareté au niveau 1 : la base de sa fabrication et de ses niveaux. */
@@ -947,7 +1017,7 @@ export function cadenceReelle(j: Joueur, p: Producteur, frequence: number, lot: 
  * nourrissent.
  */
 export function valeurDe(m: Monde, j: Joueur, p: Producteur, mods: readonly ModuleAgissant[]): number {
-  const b = bilan(lotDeBase(p), mods, multiplicateurPrestige(j))
+  const b = bilan(lotDeBase(p), mods, multiplicateurPrestige(j), horlogeDeBase(j, p))
   // La mine rend de l'or : sa valeur est son or, tel quel.
   if (estMine(p)) return b.lotMoyen * b.frequence + b.tapeMoyenne * TAPE_NOMINALE
   const prixSortie = prixCourant(m, sortie(p))
@@ -1174,13 +1244,14 @@ export function peutPrestiger(j: Joueur): boolean {
   return pointsSi(j) >= 1
 }
 
-/** Tout remettre à zéro contre des points : la mine seule, la soute vide, pas d'or ni de matière. Ce qu'on connaît reste connu. */
+/** Tout remettre à zéro contre des points : la mine seule, non automatisée, la soute vide, pas d'or ni de matière. Ce qu'on connaît reste connu, ce que les quêtes ont débloqué aussi. */
 export function prestiger(j: Joueur): boolean {
   const gain = pointsSi(j)
   if (gain < 1) return false
   j.points += gain
   j.prestiges += 1
   j.or = 0
+  j.automatisation = 0
   j.matiere = Array.from({ length: SORTES }, () => 0)
   j.achetes = PRODUCTEURS.map(() => 0)
   j.fabriques = Array.from({ length: SORTES }, () => 0)

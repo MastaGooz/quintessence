@@ -170,26 +170,26 @@ export function effetVente(bouton: DOMRect, gain: number): void {
   })
   retarderLeCompteur('or', arrivee)
   const [x] = centre(bouton)
-  flotter(x, bouton.top - 16, `+${Math.round(gain).toLocaleString('fr-FR')} or`, 'flottant-or', 1.05)
+  flotterOr(x, bouton.top - 16, gain, 1.05)
 }
 
 /** Deux tapes à moins de ce délai forment une série : leurs gains s'additionnent dans un seul nombre, le son monte. */
 export const SERIE_MS = 450
 
-/** Un nombre d'or : le nombre, puis la pièce (Keko, 02/11 : « à la place du texte or, un symbole de pièce ; pas de + avant »). */
-function nombreOr(el: HTMLElement, n: number): void {
-  el.textContent = `${Math.round(n).toLocaleString('fr-FR')} `
+/** Un nombre d'or : le nombre, puis la pièce (Keko, 02/11 : « à la place du texte or, un symbole de pièce ; pas de + avant »). Une dépense garde son « − ». */
+function nombreOr(el: HTMLElement, n: number, signe = ''): void {
+  el.textContent = `${signe}${Math.round(n).toLocaleString('fr-FR')} `
   const piece = document.createElement('span')
   piece.className = 'symbole-piece'
   el.appendChild(piece)
 }
 
-/** Un nombre d'or qui flotte et s'efface, comme `flotter`. */
-export function flotterOr(x: number, y: number, n: number, taille = 1): void {
+/** Un nombre d'or qui flotte et s'efface, comme `flotter` ; une dépense en rouge, avec son « − ». */
+export function flotterOr(x: number, y: number, n: number, taille = 1, depense = false): void {
   if (mouvementReduit()) return
-  const el = poser('flottant flottant-or', x, y)
+  const el = poser(`flottant ${depense ? 'flottant-rouge' : 'flottant-or'}`, x, y)
   if (el === null) return
-  nombreOr(el, n)
+  nombreOr(el, n, depense ? '−' : '')
   const dx = (Math.random() - 0.5) * 40
   animer(
     el,
@@ -263,7 +263,7 @@ export function effetDebit(cout: number): void {
   if (source === undefined || cout <= 0) return
   sonDepense()
   const [x] = centre(source)
-  flotter(x + 16, source.bottom + 8, `−${Math.round(cout).toLocaleString('fr-FR')} or`, 'flottant-rouge', 0.95, 1)
+  flotterOr(x + 16, source.bottom + 8, cout, 0.95, true)
 }
 
 /** Une dépense vers un bouton : les pièces partent du compteur. */
@@ -273,5 +273,5 @@ export function effetDepense(bouton: DOMRect, cout: number): void {
   sonDepense()
   volerDesPieces(source, bouton, Math.min(6, piecesPour(cout)))
   const [x] = centre(bouton)
-  flotter(x, bouton.top - 16, `−${Math.round(cout).toLocaleString('fr-FR')} or`, 'flottant-rouge', 0.95)
+  flotterOr(x, bouton.top - 16, cout, 0.95, true)
 }

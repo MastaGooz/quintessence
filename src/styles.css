@@ -1750,6 +1750,80 @@ span.rarete-4,
   pointer-events: auto;
 }
 
+/* L'OBJECTIF du moment, au-dessus des commandes : la quête (sa jauge d'or, « Réclamer » quand elle est remplie), puis l'amélioration qu'elle a débloquée. */
+.objectif {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  width: min(21rem, calc(100vw - 2rem));
+  box-sizing: border-box;
+  padding: 0.55rem 0.8rem 0.65rem;
+  border-radius: 0.8rem;
+  background: rgba(20, 8, 28, 0.85);
+  border: 1px solid rgba(255, 198, 31, 0.4);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  animation: objectif-nait 0.4s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+
+.objectif-titre {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--or);
+}
+
+.objectif-texte {
+  font-size: 1.15rem;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.objectif-jauge {
+  height: 0.55rem;
+  border-radius: 1rem;
+  background: rgba(255, 246, 226, 0.12);
+  overflow: hidden;
+}
+
+.objectif-jauge > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #b8860b, var(--or), #fff3b0);
+  transition: width 0.25s ease-out;
+}
+
+.objectif-ligne {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.objectif-ligne button {
+  flex: none;
+  min-height: 2.8rem;
+  min-width: 5.5rem;
+}
+
+/* Remplie : la carte s'allume d'or, le bouton respire. */
+.objectif-accompli {
+  border-color: var(--or);
+  box-shadow: 0 0 0 1px var(--or), 0 0 26px rgba(255, 198, 31, 0.35), 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+
+@keyframes objectif-nait {
+  from {
+    transform: scale(0.85);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
 .carte-actions-barre {
   bottom: calc(var(--barre-bas) + 0.9rem + env(safe-area-inset-bottom));
 }

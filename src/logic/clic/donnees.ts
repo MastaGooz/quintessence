@@ -199,6 +199,29 @@ export const FABRICATION = {
  */
 export const MINE: TypeProducteur = { id: 'mine', genre: 'mine', cout: { forme: 0, couleur: null, quantite: 0 }, lot: 1, creux: [_, _, _, _, _, _, _, _], taille: { largeur: 450, hauteur: 450 } }
 
+/**
+ * LES QUÊTES (Keko, 02/11 : « il faut commencer avec une quête : gagner X or,
+ * et qui en récompense débloque l'amélioration qui automatise »). Une à la
+ * fois, dans l'ordre : l'or compte depuis le début de la quête, et une quête
+ * remplie se RÉCLAME d'une tape, qui donne sa récompense. Les chiffres sont
+ * de moi, à rejuger.
+ */
+export type Recompense = 'automatisation'
+export interface Quete {
+  id: string
+  /** L'or à gagner depuis le début de la quête. */
+  or: number
+  recompense: Recompense
+}
+export const QUETES: readonly Quete[] = [{ id: 'premier-or', or: 50, recompense: 'automatisation' }]
+
+/**
+ * L'AUTOMATISATION de la mine : débloquée par la première quête, achetée
+ * `cout` or ; la mine se tape alors toute seule `tics` fois par seconde (une
+ * horloge, comme le carré bleu d'un module). Chiffres de moi, à rejuger.
+ */
+export const AUTOMATISATION = { cout: 50, tics: 1 }
+
 /** Tous les types de générateurs, par famille. `type` d'un producteur est un indice ici. */
 export const PRODUCTEURS: readonly TypeProducteur[] = [...SOURCES, ...RAFFINERIES, ...MELANGEURS, MINE]
 /** L'indice de la mine dans `PRODUCTEURS`. */

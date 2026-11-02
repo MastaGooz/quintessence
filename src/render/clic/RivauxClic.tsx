@@ -1,6 +1,6 @@
 /** LES RIVAUX : le classement par or extrait depuis le début, avec la couleur dominante, la production et les points de chacun. */
 import type { ReactElement } from 'react'
-import { couleurDominanteDe, debitTotal } from '../../logic/clic/moteur.ts'
+import { couleurDominanteDe, debitOr } from '../../logic/clic/moteur.ts'
 import { classement, joueur } from '../../logic/clic/partie.ts'
 import { abrege, parSeconde } from '../../ui/format.ts'
 import { NOM_OR, NOM_POINT } from '../../ui/noms-clic.ts'
@@ -29,7 +29,7 @@ export function RivauxClic({ partie }: PagePropsClic): ReactElement {
                 )}
               </span>
               <span className="petit sourd">
-                {parSeconde(debitTotal(r))} · {r.modules.length} module{r.modules.length > 1 ? 's' : ''}
+                {parSeconde(debitOr(r))} · {r.modules.length} module{r.modules.length > 1 ? 's' : ''}
                 {r.prestiges > 0 ? ` · ${r.prestiges} départ${r.prestiges > 1 ? 's' : ''}` : ''}
               </span>
             </span>

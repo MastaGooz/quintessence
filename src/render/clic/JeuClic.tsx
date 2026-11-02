@@ -7,7 +7,7 @@
  */
 import { useEffect, useReducer, useRef, useState, type ReactElement } from 'react'
 import { SAISON_H } from '../../logic/clic/donnees.ts'
-import { debitTotal } from '../../logic/clic/moteur.ts'
+import { debitOr } from '../../logic/clic/moteur.ts'
 import { classement, finie, joueur, nouvellePartie, rattraper, type Partie } from '../../logic/clic/partie.ts'
 import { ecrireSauvegardeClic, effacerSauvegardeClic, lireSauvegardeClic } from '../../ui/stockage-clic.ts'
 import { abrege, duree, horloge, parSeconde } from '../../ui/format.ts'
@@ -196,7 +196,7 @@ function Fin({ partie, onRecommencer }: { partie: Partie; onRecommencer: () => v
         {rangs.map((r, i) => (
           <div key={r.id} className={`ligne${r === moi ? ' ligne-moi' : ''}`}>
             <span>
-              {i + 1}. <b>{r.nom}</b> <span className="sourd petit">· {parSeconde(debitTotal(r))}</span>
+              {i + 1}. <b>{r.nom}</b> <span className="sourd petit">· {parSeconde(debitOr(r))}</span>
             </span>
             <span>
               {abrege(r.orProduit)} {NOM_OR}

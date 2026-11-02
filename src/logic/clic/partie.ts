@@ -24,8 +24,8 @@ export const BOTS: (Strategie & { visites: number })[] = [
 export const PAS = 0.25
 
 export interface Partie {
-  /** 9 : la partie commence avec la mine d'or seule (Keko, 02/11) ; une sauvegarde plus ancienne est abandonnée. */
-  version: 9
+  /** 10 : la première quête et l'automatisation de la mine (Keko, 02/11) ; une sauvegarde plus ancienne est abandonnée. */
+  version: 10
   graine: number
   monde: Monde
   /** Par bot, l'instant de sa dernière visite jouée. */
@@ -33,7 +33,7 @@ export interface Partie {
 }
 
 export function nouvellePartie(graine: number, nomDuJoueur: string): Partie {
-  return { version: 9, graine, monde: nouveauMonde([nomDuJoueur, ...BOTS.map((b) => b.nom)], graine), dernieresVisites: BOTS.map(() => -1) }
+  return { version: 10, graine, monde: nouveauMonde([nomDuJoueur, ...BOTS.map((b) => b.nom)], graine), dernieresVisites: BOTS.map(() => -1) }
 }
 
 export function joueur(p: Partie): Joueur {
@@ -89,7 +89,7 @@ export function serialiser(p: Partie): string {
 export function deserialiser(texte: string): Partie | null {
   try {
     const p = JSON.parse(texte) as Partie
-    if (p === null || typeof p !== 'object' || p.version !== 9) return null
+    if (p === null || typeof p !== 'object' || p.version !== 10) return null
     if (!Array.isArray(p.monde?.joueurs) || p.monde.joueurs.length !== BOTS.length + 1) return null
     if (!Array.isArray(p.dernieresVisites)) return null
     return p

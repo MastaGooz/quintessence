@@ -19,20 +19,21 @@
  * (la seconde qui passe) : il lit `traine` pour laisser la pièce sous le doigt.
  */
 import { useEffect, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from 'react'
-import { COULEURS, FAMILLES, FORMES, MELANGE, MODULE, PIECE, PRIMAIRES, PRODUCTEURS, TAPES_MAX_PAR_S, aDuBleu, couleurDe, sorteDe } from '../../logic/clic/donnees.ts'
+import { AUTOMATISATION, COULEURS, FAMILLES, FORMES, MELANGE, MODULE, PIECE, PRIMAIRES, PRODUCTEURS, TAPES_MAX_PAR_S, aDuBleu, couleurDe, sorteDe, type Quete } from '../../logic/clic/donnees.ts'
 import {
-  DIRECTIONS, acheter, ameliorer, ameliorerSource, bilan, bilanProducteur, boiteModule, branches, brancher, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, debitTotal,
+  DIRECTIONS, acheter, ameliorer, ameliorerSource, automatisationVisible, automatiser, bilan, bilanProducteur, boiteModule, branches, brancher, coutAchat, coutFabrication, coutNiveau, coutNiveauSource, coutProducteur, debitTotal,
   debrancher, declencher, deplacerProducteur, disponible, disposition, effetsDe, entrees, estFixe, estMine, estSource, etendue, force, fusibles, genreDe, lotDeBase, meilleurePrise, moduleDe,
-  modulesDe, multiplicateurPrestige, peutAmeliorer, peutAmeliorerSource, peutFabriquer, peutPayer, placeSurProducteur, pointsSi, prisesPour, producteurDe, producteurTient, regler, sortesFormees,
+  modulesDe, multiplicateurPrestige, peutAmeliorer, peutAmeliorerSource, peutAutomatiser, peutFabriquer, peutPayer, placeSurProducteur, pointsSi, prisesPour, producteurDe, producteurTient, progresQuete,
+  queteAccomplie, queteEnCours, reclamerQuete, regler, sortesFormees,
   sortie, soute, surLesCases, tailleDe, typeDe, visibleProducteur, type Coup, type Joueur, type Module, type Monde, type Place, type Prise, type Producteur,
 } from '../../logic/clic/moteur.ts'
 import { joueur } from '../../logic/clic/partie.ts'
-import { abrege, parSeconde } from '../../ui/format.ts'
+import { abrege, parSeconde, possede } from '../../ui/format.ts'
 import { vibrer } from '../../ui/haptique.ts'
 import {
-  EXPLICATION_TRAIT, LETTRE_PRODUCTEUR, NOM_COULEUR, NOM_MATIERE, NOM_MINE, NOM_OR, NOM_RARETE, NOM_SOUTE, NOM_TRAIT, NOMS_FORMES, explicationModule, nomProducteur, nomSorte, nomSortePluriel,
+  EXPLICATION_TRAIT, LETTRE_PRODUCTEUR, NOM_AUTOMATISATION, NOM_COULEUR, NOM_MATIERE, NOM_MINE, NOM_OR, NOM_RECOMPENSE, NOM_RARETE, NOM_SOUTE, NOM_TRAIT, NOMS_FORMES, explicationModule, nomProducteur, nomSorte, nomSortePluriel,
 } from '../../ui/noms-clic.ts'
-import { sonBatir, sonTape } from '../../ui/sons.ts'
+import { sonBatir, sonEtape, sonTape } from '../../ui/sons.ts'
 import { Compteur } from '../Compteur.tsx'
 import { DUREE_GLISSE, monterCarte, type Carte, type Point } from '../carte/carte.ts'
 import { SERIE_MS, eclater, effetDepense, effetGainOr, flotter, flotterOr, mouvementReduit } from '../effets.ts'
@@ -55,6 +56,8 @@ const DESSOUS_HUD = 320
 const ECRASER: Keyframe[] = [{ transform: 'scale(0.96)' }, { transform: 'scale(1.015)', offset: 0.6 }, { transform: 'scale(1)' }]
 /** Une horloge plus rapide que ça ne fait plus flotter ses lots : la pulsation suffit. */
 const FLOTTE_MIN_MS = 1500
+/** La mine automatisée fait flotter son or jusqu'à ce rythme-là : une pièce par seconde se lit encore. */
+const FLOTTE_MIN_MS_MINE = 900
 /** La couleur d'éclat de chaque couleur de matière. */
 const couleurEclat = (c: number): string => `hsl(${TEINTES[c] ?? 45} 80% 65%)`
 /** Au plus tant de stocks dans le coin de la carte. */
@@ -447,6 +450,39 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
     versLaSoute(s, `→ ${NOM_SOUTE.toLowerCase()}`)
   }
 
+  /** RÉCLAMER la quête remplie : sa récompense se débloque, la carte de la quête cède la place à ce qu'elle a débloqué. */
+  const objectifEl = useRef<HTMLDivElement>(null)
+  const reclamerIci = (): void => {
+    const r = objectifEl.current?.getBoundingClientRect()
+    const fait: { q: Quete | null } = { q: null }
+    agir(() => {
+      fait.q = reclamerQuete(j)
+    })
+    if (fait.q === null) return
+    sonEtape()
+    vibrer([20, 30, 60])
+    if (r !== undefined) {
+      eclater(r.left + r.width / 2, r.top + r.height / 2, 26)
+      flotter(r.left + r.width / 2, r.top - 6, `${NOM_AUTOMATISATION} débloquée`, 'flottant-or', 1.2)
+    }
+  }
+
+  /** ACHETER L'AUTOMATISATION : les pièces partent du compteur, la mine éclate et se met à battre toute seule. */
+  const automatiserIci = (bouton: HTMLElement): void => {
+    if (!peutAutomatiser(j)) return
+    effetDepense(bouton.getBoundingClientRect(), AUTOMATISATION.cout)
+    agir(() => {
+      automatiser(j)
+    })
+    sonBatir()
+    vibrer([15, 30, 50])
+    const mine = j.producteurs.find(estMine)
+    if (mine === undefined) return
+    const s = surLaPage({ x: mine.x, y: mine.y })
+    if (s !== null) eclater(s.x, s.y, 22)
+    if (!mouvementReduit()) producteursEl.current.get(mine.id)?.animate(ECRASER, { duration: 220, easing: 'ease-out' })
+  }
+
   /** ACHETER au marché, depuis la feuille d'un transformateur, la matière qui manque à son prochain coup. */
   const acheterPourIci = (p: Producteur, bouton: HTMLElement): void => {
     const achats = manquesDe(j, p)
@@ -507,7 +543,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
         if (!estSource(p) && !estMine(p)) continue
         const b = bilanProducteur(j, p)
         const periode = b.frequence > 0 ? 1000 / b.frequence : Infinity
-        if (periode < FLOTTE_MIN_MS || !Number.isFinite(periode)) {
+        if (periode < (estMine(p) ? FLOTTE_MIN_MS_MINE : FLOTTE_MIN_MS) || !Number.isFinite(periode)) {
           prochains.delete(p.id)
           continue
         }
@@ -518,7 +554,8 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
         }
         if (maintenant < prochain) continue
         prochains.set(p.id, Math.max(prochain + periode, maintenant + periode / 2))
-        const s = surLaPage({ x: p.x, y: p.y - tailleDe(p).hauteur / 2 })
+        // La mine fait flotter son or depuis le haut de son carré, dedans ; une source, depuis son bord.
+        const s = surLaPage({ x: p.x, y: p.y - tailleDe(p).hauteur / 2 + (estMine(p) ? 90 : 0) })
         if (s !== null && s.x > r.left && s.x < r.right && s.y > r.top && s.y < r.bottom) {
           if (estMine(p)) flotterOr(s.x, s.y, b.lotMoyen, 0.9)
           else flotter(s.x, s.y, `+${abregeFin(b.lotMoyen)}`, `flottant-couleur flottant-couleur-${p.couleur}`, 0.9)
@@ -788,6 +825,7 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
           </div>
         )}
         <div className={`carte-actions${avecBarre ? ' carte-actions-barre' : ''}`}>
+          <Objectif j={j} refCarte={objectifEl} onReclamer={reclamerIci} onAutomatiser={automatiserIci} />
           {indice !== null && <p className="carte-indice">{indice}</p>}
           <div className="carte-actions-ligne">
             {boutiqueVisible && (
@@ -867,6 +905,69 @@ function manquesDe(j: Joueur, p: Producteur): { sorte: number; quantite: number 
     .filter((a) => a.quantite > 0)
 }
 
+/**
+ * L'OBJECTIF du moment, au-dessus des commandes : la QUÊTE en cours (Keko,
+ * 02/11 : « commencer avec une quête : gagner X or, qui en récompense débloque
+ * l'amélioration qui automatise »), sa jauge et sa récompense, « Réclamer »
+ * quand elle est remplie ; puis l'amélioration qu'elle a débloquée, à acheter.
+ */
+function Objectif({
+  j,
+  refCarte,
+  onReclamer,
+  onAutomatiser,
+}: {
+  j: Joueur
+  refCarte: React.RefObject<HTMLDivElement | null>
+  onReclamer: () => void
+  onAutomatiser: (bouton: HTMLElement) => void
+}): ReactElement | null {
+  const q = queteEnCours(j)
+  if (q !== null) {
+    const fait = progresQuete(j)
+    const accomplie = queteAccomplie(j)
+    return (
+      <div key={`quete-${q.id}`} ref={refCarte} className={`objectif${accomplie ? ' objectif-accompli' : ''}`}>
+        <span className="objectif-titre">Quête</span>
+        <span className="objectif-texte">
+          Gagner {q.or} <SymbolePiece />
+        </span>
+        <span className="objectif-jauge">
+          <span style={{ width: `${(100 * fait) / q.or}%` }} />
+        </span>
+        <span className="objectif-ligne">
+          <span className="petit sourd">
+            {possede(fait)} / {q.or} · récompense : {NOM_RECOMPENSE[q.recompense]}
+          </span>
+          {accomplie && (
+            <button type="button" className="bouton-principal respire" onClick={onReclamer}>
+              Réclamer
+            </button>
+          )}
+        </span>
+      </div>
+    )
+  }
+  if (automatisationVisible(j)) {
+    const payable = peutAutomatiser(j)
+    return (
+      <div key="automatisation" ref={refCarte} className="objectif">
+        <span className="objectif-titre">Amélioration</span>
+        <span className="objectif-texte">{NOM_AUTOMATISATION}</span>
+        <span className="objectif-ligne">
+          <span className="petit sourd">
+            La mine se tape toute seule : +{AUTOMATISATION.tics} <SymbolePiece /> par seconde.
+          </span>
+          <button type="button" className={payable ? 'bouton-principal respire' : ''} disabled={!payable} onClick={(e) => onAutomatiser(e.currentTarget)}>
+            {AUTOMATISATION.cout} <SymbolePiece />
+          </button>
+        </span>
+      </div>
+    )
+  }
+  return null
+}
+
 /** L'image de la mine : celle de Keko (`public/mine.webp`, servie avec la date du build) quand elle est là ; sinon, le pictogramme d'attente dessiné en code. */
 function ImageMine(): ReactElement {
   const [absente, setAbsente] = useState(false)
@@ -902,7 +1003,7 @@ function TexteProducteur({ j, p, b, actif }: { j: Joueur; p: Producteur; b: Retu
           <b className="mine-nom">{NOM_MINE}</b>
           {b.frequence > 0 && (
             <small className="gain">
-              <SymbolePiece /> {parSeconde(b.debit)}
+              +{abregeFin(b.debit)} <SymbolePiece /> /s
             </small>
           )}
           <small className="sourd">
