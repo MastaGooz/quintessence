@@ -1252,6 +1252,10 @@ select {
   transform-style: preserve-3d;
 }
 
+.mine-barre-gain-pompe {
+  display: inline-block;
+}
+
 /* LA RÉSERVE de la mine (Keko, 02/11) : une jauge d'or qui se remplit par l'automatisation ; pleine, elle pulse ; une tape la récolte. */
 .reserve {
   position: relative;

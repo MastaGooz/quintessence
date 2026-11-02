@@ -197,6 +197,16 @@ export function Base({ partie, agir, avecBarre, versMarche }: PagePropsClic & { 
       sonBarre(remplissage, coup.critique)
       if (coup.gain > 0) lacherLaPiece(el, coup.gain)
       if (!mouvementReduit()) {
+        // LE CHIFFRE POMPE à chaque tape (Keko, 02/11 : « pump le chiffre au moment du remplissage »), de plus en plus fort à mesure que la barre se remplit.
+        el?.querySelector('.mine-barre-gain-pompe')?.animate(
+          [
+            { transform: 'scale(1)', filter: 'brightness(1)' },
+            { transform: `scale(${(1.25 + 0.35 * remplissage) * (coup.critique ? 1.25 : 1)})`, filter: 'brightness(1.9)', offset: 0.3 },
+            { transform: 'scale(0.94)', offset: 0.65 },
+            { transform: 'scale(1)', filter: 'brightness(1)' },
+          ],
+          { duration: 240, easing: 'ease-out' },
+        )
         el?.animate(ECRASER, { duration: 170, easing: 'ease-out' })
         const barre = el?.querySelector<HTMLElement>('.mine-barre')
         barre?.animate(
@@ -1319,7 +1329,10 @@ function TexteProducteur({ j, p, b, actif }: { j: Joueur; p: Producteur; b: Retu
             <span className="mine-barre-tete" />
           </span>
           <span className="mine-barre-gain">
-            +{abregeFin(b.lot)} <SymbolePiece />
+            {/* L'intérieur pompe à chaque tape ; l'extérieur grossit avec la barre et éclate quand la pièce part : les deux s'additionnent. */}
+            <span className="mine-barre-gain-pompe">
+              +{abregeFin(b.lot)} <SymbolePiece />
+            </span>
           </span>
         </span>
         {(j.automatisation > 0 || p.reserve >= 1) && <Reserve j={j} p={p} />}
